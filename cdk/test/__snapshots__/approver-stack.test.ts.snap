@@ -53,7 +53,7 @@ exports[`ApproverStack > Snapshot > matches CloudFormation template snapshot 1`]
         ],
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-123456789012-us-west-2",
-          "S3Key": "63b292ec01a38579940f81d2941591aac1e78a6ad9c1fdfca71763dee6d8899a.zip",
+          "S3Key": "1a6283729ff754dfb42f6a72ff6ab4d1f3981363cc65c0b84606b4a16a908cd2.zip",
         },
         "Environment": {
           "Variables": {
