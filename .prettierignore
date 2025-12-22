@@ -1,0 +1,6 @@
+dist/
+coverage/
+node_modules/
+cdk.out/
+*.md
+*.json
