@@ -1,0 +1,59 @@
+{
+  "workflow_version": "1.2.0",
+  "timestamps": {
+    "started": "2025-12-22T09:30:00Z",
+    "last_updated": "2025-12-22T10:15:00Z",
+    "completed": "2025-12-22T10:15:00Z"
+  },
+  "mode": "initial_scan",
+  "scan_level": "exhaustive",
+  "project_root": "/Users/cns/httpdocs/cddo/innovation-sandbox-on-aws-approver",
+  "output_folder": "/Users/cns/httpdocs/cddo/innovation-sandbox-on-aws-approver/_bmad-output",
+  "completed_steps": [
+    "step_1_project_classification",
+    "step_2_isb_integration_analysis",
+    "step_3_deployer_pattern_extraction",
+    "step_4_requirements_documentation",
+    "step_5_master_index_generation"
+  ],
+  "current_step": "completed",
+  "findings": {
+    "project_type": "backend_lambda",
+    "field_type": "brownfield_integration",
+    "integration_target": {
+      "name": "Innovation Sandbox on AWS",
+      "path": "../innovation-sandbox-on-aws",
+      "version": "1.1.4"
+    },
+    "pattern_reference": {
+      "name": "Innovation Sandbox Deployer",
+      "path": "../innovation-sandbox-on-aws-deployer",
+      "pattern": "eventbridge_triggered_lambda"
+    },
+    "technology_stack": {
+      "runtime": "nodejs20.x",
+      "language": "typescript",
+      "build_tool": "esbuild",
+      "test_framework": "vitest"
+    },
+    "integration_points": {
+      "events": {
+        "listen": ["LeaseRequested"],
+        "emit": ["LeaseApproved", "LeaseDenied"]
+      },
+      "data": {
+        "read": ["LeaseTable", "SandboxAccountTable"],
+        "write": ["LeaseTable.comments"]
+      },
+      "external": ["Bedrock", "Slack"]
+    }
+  },
+  "outputs_generated": [
+    "project-scan-report.json",
+    "index.md",
+    "isb-integration-reference.md",
+    "deployer-pattern-reference.md",
+    "approver-requirements.md"
+  ],
+  "resume_instructions": "Documentation complete. Run /bmad:bmm:workflows:workflow-status to continue with optional discovery or PRD creation."
+}

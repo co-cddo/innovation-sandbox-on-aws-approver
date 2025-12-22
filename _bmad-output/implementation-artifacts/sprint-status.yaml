@@ -50,8 +50,8 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2: Core Approval Flow
-  epic-2: backlog
-  2-1-minimal-vertical-slice-event-to-approval: backlog
+  epic-2: in-progress
+  2-1-minimal-vertical-slice-event-to-approval: done
   2-2-state-machine-with-decision-orchestration: backlog
   2-3-scoring-engine-with-16-configurable-rules: backlog
   2-4-idempotency-dlq-and-fail-closed-error-handling: backlog

@@ -1,13 +1,35 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handler } from '../src/handler.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { handler, setEventBridgeService, resetEventBridgeService } from '../src/handler.js';
 import type { EventBridgeEvent, Context } from 'aws-lambda';
+import type { EventBridgeService } from '../src/services/eventbridge.js';
 
 vi.mock('../src/lib/logger.ts', () => ({
   logger: {
     info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
     addContext: vi.fn(),
+    appendKeys: vi.fn(),
   },
 }));
+
+// Mock the EventBridge client to prevent real AWS calls
+vi.mock('@aws-sdk/client-eventbridge', () => ({
+  EventBridgeClient: vi.fn().mockImplementation(() => ({
+    send: vi.fn().mockResolvedValue({}),
+  })),
+  PutEventsCommand: vi.fn(),
+}));
+
+// Import the mocked logger for assertions
+import { logger as mockLogger } from '../src/lib/logger.js';
+
+// Mock EventBridge service for testing
+const mockEmitLeaseApproved = vi.fn().mockResolvedValue(undefined);
+const mockEventBridgeService: EventBridgeService = {
+  emitLeaseApproved: mockEmitLeaseApproved,
+};
 
 describe('handler', () => {
   const mockContext: Context = {
@@ -40,37 +62,199 @@ describe('handler', () => {
     detail,
   });
 
+  const createValidLeaseRequestedEvent = () =>
+    createMockEvent('LeaseRequested', {
+      leaseId: {
+        userEmail: 'user@example.gov.uk',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+      },
+      templateId: 'web-hosting',
+      budgetAmount: 50,
+      leaseDurationHours: 48,
+      requiresManualApproval: false,
+    });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // Inject mock EventBridge service for testing
+    setEventBridgeService(mockEventBridgeService);
   });
 
-  it('should return statusCode 200 and body OK', async () => {
-    const event = createMockEvent('LeaseRequested', { leaseId: 'test-lease' });
+  afterEach(() => {
+    // Reset to avoid affecting other tests
+    resetEventBridgeService();
+  });
 
-    const result = await handler(event, mockContext);
+  describe('LeaseRequested events', () => {
+    it('should process valid LeaseRequested event and return OK', async () => {
+      const event = createValidLeaseRequestedEvent();
 
-    expect(result).toEqual({
-      statusCode: 200,
-      body: 'OK',
+      const result = await handler(event, mockContext);
+
+      expect(result).toEqual({
+        statusCode: 200,
+        body: 'OK',
+      });
+    });
+
+    it('should extract leaseId, userEmail, and templateId from event', async () => {
+      const event = createValidLeaseRequestedEvent();
+
+      await handler(event, mockContext);
+
+      expect(mockLogger.appendKeys).toHaveBeenCalledWith({
+        leaseId: '123e4567-e89b-12d3-a456-426614174000',
+        userEmail: 'user@example.gov.uk',
+        templateId: 'web-hosting',
+      });
+    });
+
+    it('should log event received with structured data', async () => {
+      const event = createValidLeaseRequestedEvent();
+
+      await handler(event, mockContext);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'LeaseRequested event received',
+        expect.objectContaining({
+          detailType: 'LeaseRequested',
+          budgetAmount: 50,
+          leaseDurationHours: 48,
+          requiresManualApproval: false,
+        })
+      );
+    });
+
+    it('should reject invalid LeaseRequested event schema', async () => {
+      const invalidEvent = createMockEvent('LeaseRequested', {
+        leaseId: 'invalid-format', // Should be object with userEmail and uuid
+        templateId: 'web-hosting',
+      });
+
+      const result = await handler(invalidEvent, mockContext);
+
+      expect(result).toEqual({
+        statusCode: 400,
+        body: 'Invalid event schema',
+      });
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Invalid LeaseRequested event schema',
+        expect.objectContaining({ errors: expect.any(Array) })
+      );
+    });
+
+    it('should handle optional comments field', async () => {
+      const event = createMockEvent('LeaseRequested', {
+        leaseId: {
+          userEmail: 'user@example.gov.uk',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+        },
+        templateId: 'web-hosting',
+        budgetAmount: 50,
+        leaseDurationHours: 48,
+        comments: 'Testing Lambda + API Gateway',
+        requiresManualApproval: false,
+      });
+
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+    });
+
+    it('should emit LeaseApproved event with correct parameters', async () => {
+      const event = createValidLeaseRequestedEvent();
+
+      await handler(event, mockContext);
+
+      expect(mockEmitLeaseApproved).toHaveBeenCalledTimes(1);
+      expect(mockEmitLeaseApproved).toHaveBeenCalledWith({
+        leaseId: '123e4567-e89b-12d3-a456-426614174000',
+        userEmail: 'user@example.gov.uk',
+        approvedBy: 'approver-service@system',
+        score: 0,
+        reason: 'Stub approval - scoring not implemented',
+      });
+    });
+
+    it('should log approval with action approved and timestamp', async () => {
+      const event = createValidLeaseRequestedEvent();
+
+      await handler(event, mockContext);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Approval emitted',
+        expect.objectContaining({
+          action: 'approved',
+          timestamp: expect.any(String),
+          leaseId: '123e4567-e89b-12d3-a456-426614174000',
+          userEmail: 'user@example.gov.uk',
+          approvedBy: 'approver-service@system',
+          score: 0,
+        })
+      );
+    });
+
+    it('should return 500 when EventBridge emission fails', async () => {
+      const event = createValidLeaseRequestedEvent();
+      mockEmitLeaseApproved.mockRejectedValueOnce(new Error('EventBridge unavailable'));
+
+      const result = await handler(event, mockContext);
+
+      expect(result).toEqual({
+        statusCode: 500,
+        body: 'Failed to emit approval event',
+      });
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to emit LeaseApproved event',
+        expect.objectContaining({
+          error: 'EventBridge unavailable',
+          leaseId: '123e4567-e89b-12d3-a456-426614174000',
+          userEmail: 'user@example.gov.uk',
+        })
+      );
+    });
+
+    it('should handle non-Error exceptions in EventBridge emission', async () => {
+      const event = createValidLeaseRequestedEvent();
+      mockEmitLeaseApproved.mockRejectedValueOnce('String error');
+
+      const result = await handler(event, mockContext);
+
+      expect(result).toEqual({
+        statusCode: 500,
+        body: 'Failed to emit approval event',
+      });
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to emit LeaseApproved event',
+        expect.objectContaining({
+          error: 'String error',
+        })
+      );
     });
   });
 
-  it('should handle events with different detail types', async () => {
-    const event = createMockEvent('AccountCleanupSucceeded', {
-      accountId: 'test-account',
+  describe('non-LeaseRequested events', () => {
+    it('should ignore AccountCleanupSucceeded events', async () => {
+      const event = createMockEvent('AccountCleanupSucceeded', {
+        accountId: 'test-account',
+      });
+
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Ignored - not a LeaseRequested event');
+      expect(mockLogger.info).toHaveBeenCalledWith('Ignoring non-LeaseRequested event', {
+        detailType: 'AccountCleanupSucceeded',
+      });
     });
 
-    const result = await handler(event, mockContext);
+    it('should ignore ScheduledProcessing events', async () => {
+      const event = createMockEvent('ScheduledProcessing', {});
 
-    expect(result.statusCode).toBe(200);
-  });
+      const result = await handler(event, mockContext);
 
-  it('should handle events with empty detail', async () => {
-    const event = createMockEvent('ScheduledProcessing', {});
-
-    const result = await handler(event, mockContext);
-
-    expect(result.statusCode).toBe(200);
-    expect(result.body).toBe('OK');
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Ignored - not a LeaseRequested event');
+    });
   });
 });
