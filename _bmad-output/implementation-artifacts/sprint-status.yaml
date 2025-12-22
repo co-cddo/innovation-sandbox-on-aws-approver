@@ -1,0 +1,85 @@
+# generated: 2025-12-22
+# project: innovation-sandbox-on-aws-approver
+# project_key: isb-approver
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - E2E Milestone stories (1.4, 2.5, 3.5, 5.5) require <promise>STOP</promise> for interactive testing
+
+generated: 2025-12-22
+project: innovation-sandbox-on-aws-approver
+project_key: isb-approver
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # Epic 1: Project Foundation & Infrastructure
+  epic-1: done
+  1-1-project-initialization-with-typescript-and-testing-framework: done
+  1-2-cdk-infrastructure-stack: done
+  1-3-github-actions-ci-cd-with-oidc: done
+  1-4-e2e-milestone-infrastructure-verification: done
+  epic-1-retrospective: optional
+
+  # Epic 2: Core Approval Flow
+  epic-2: backlog
+  2-1-minimal-vertical-slice-event-to-approval: backlog
+  2-2-state-machine-with-decision-orchestration: backlog
+  2-3-scoring-engine-with-16-configurable-rules: backlog
+  2-4-idempotency-dlq-and-fail-closed-error-handling: backlog
+  2-5-e2e-milestone-core-flow-validation: backlog
+  epic-2-retrospective: optional
+
+  # Epic 3: Intelligent Scoring
+  epic-3: backlog
+  3-1-dynamodb-user-history-queries: backlog
+  3-2-organization-reputation-tracking: backlog
+  3-3-domain-verification-from-s3-cache: backlog
+  3-4-bedrock-ai-email-analysis-with-circuit-breaker: backlog
+  3-5-e2e-milestone-intelligent-scoring-validation: backlog
+  epic-3-retrospective: optional
+
+  # Epic 4: Timing & Queue Management
+  epic-4: backlog
+  4-1-business-hours-detection: backlog
+  4-2-delayed-processing-with-30-minute-schedule: backlog
+  4-3-rate-limiting-per-user-and-organization: backlog
+  4-4-queue-expiry-after-5-business-days: backlog
+  epic-4-retrospective: optional
+
+  # Epic 5: Communications & Operations
+  epic-5: backlog
+  5-1-lease-comments-updates-with-neutral-language: backlog
+  5-2-slack-workflow-webhook-notifications: backlog
+  5-3-cloudwatch-structured-logging-and-metrics: backlog
+  5-4-per-rule-trigger-tracking-and-audit-trail: backlog
+  5-5-e2e-milestone-full-system-validation: backlog
+  epic-5-retrospective: optional
