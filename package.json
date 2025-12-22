@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/handler.js",
   "scripts": {
-    "build": "esbuild src/handler.ts --bundle --platform=node --target=node20 --outdir=dist --format=cjs --external:@aws-sdk/* --external:@aws-lambda-powertools/*",
+    "build": "esbuild src/handler.ts --bundle --platform=node --target=node20 --outdir=dist --format=cjs '--external:@aws-sdk/*' '--external:@aws-lambda-powertools/*'",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -46,6 +46,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "@types/aws-lambda": "^8.10.147",
     "@types/node": "^20.17.0",
     "@typescript-eslint/eslint-plugin": "^8.18.0",

@@ -2,6 +2,15 @@ import { EventBridgeClient } from '@aws-sdk/client-eventbridge';
 import { logger } from './lib/logger.js';
 import { LeaseRequestedEventSchema, type LeaseRequestedEvent } from './lib/types.js';
 import { createEventBridgeService, type EventBridgeService } from './services/eventbridge.js';
+import {
+  ApprovalState,
+  createInitialContext,
+  createStateMachineOrchestrator,
+  type StateContext,
+  type StateMachineOrchestrator,
+  type StateMachineConfig,
+  type StateMachineLogger,
+} from './state-machine/index.js';
 import type { EventBridgeEvent, Context } from 'aws-lambda';
 
 export interface ApproverResponse {
@@ -26,6 +35,17 @@ let eventBridgeService: EventBridgeService = createEventBridgeService(
   eventBridgeConfig
 );
 
+// State machine configuration
+const stateMachineConfig: StateMachineConfig = {
+  autoApproveThreshold: parseInt(process.env.AUTO_APPROVE_THRESHOLD || '20', 10),
+};
+
+// Create orchestrator (can be overridden in tests via dependency injection)
+let orchestrator: StateMachineOrchestrator = createStateMachineOrchestrator({
+  stateMachineConfig,
+  logger: logger as StateMachineLogger,
+});
+
 /**
  * Allows overriding the EventBridge service for testing purposes.
  * Uses dependency injection pattern for testability.
@@ -42,8 +62,45 @@ export const resetEventBridgeService = (): void => {
 };
 
 /**
- * Processes LeaseRequested events and emits approvals.
- * Currently implements stub approval - all requests auto-approved.
+ * Allows overriding the state machine orchestrator for testing purposes.
+ */
+export const setOrchestrator = (newOrchestrator: StateMachineOrchestrator): void => {
+  orchestrator = newOrchestrator;
+};
+
+/**
+ * Resets to the default orchestrator (for test cleanup).
+ */
+export const resetOrchestrator = (): void => {
+  orchestrator = createStateMachineOrchestrator({
+    stateMachineConfig,
+    logger: logger as StateMachineLogger,
+  });
+};
+
+/**
+ * Prepares the initial state context from a validated event.
+ */
+const prepareContext = (event: LeaseRequestedEvent): StateContext => {
+  const { detail } = event;
+  const { leaseId, templateId, budgetAmount, leaseDurationHours, requiresManualApproval, comments } =
+    detail;
+
+  return {
+    ...createInitialContext(),
+    leaseId: leaseId.uuid,
+    userEmail: leaseId.userEmail,
+    templateId,
+    budgetAmount,
+    leaseDurationHours,
+    requiresManualApproval,
+    comments,
+  };
+};
+
+/**
+ * Processes LeaseRequested events using the state machine for decision orchestration.
+ * Side effects (EventBridge emission) are handled in this handler, not in the state machine.
  */
 export const handler = async (
   event: EventBridgeEvent<string, unknown>,
@@ -91,42 +148,139 @@ export const handler = async (
     requiresManualApproval: validatedEvent.detail.requiresManualApproval,
   });
 
-  // Stub approval - emit LeaseApproved event
-  const approvalParams = {
-    leaseId: leaseId.uuid,
-    userEmail: leaseId.userEmail,
-    approvedBy: 'approver-service@system',
-    score: 0,
-    reason: 'Stub approval - scoring not implemented',
-  };
+  // Prepare context and run state machine
+  const initialContext = prepareContext(validatedEvent);
+  const result = orchestrator.run(ApprovalState.RECEIVED, initialContext);
 
-  try {
-    await eventBridgeService.emitLeaseApproved(approvalParams);
-  } catch (error) {
-    // Fail-closed: If we can't emit the approval, fail the request
-    logger.error('Failed to emit LeaseApproved event', {
-      error: error instanceof Error ? error.message : String(error),
+  // Handle state machine result
+  if (!result.success) {
+    // State machine ended in ERROR state
+    logger.error('State machine failed', {
+      finalState: result.finalState,
+      error: result.context.error,
       leaseId: leaseId.uuid,
       userEmail: leaseId.userEmail,
     });
     return {
       statusCode: 500,
-      body: 'Failed to emit approval event',
+      body: 'Processing failed - request queued for manual review',
     };
   }
 
-  logger.info('Approval emitted', {
-    action: 'approved',
-    timestamp: new Date().toISOString(),
-    leaseId: leaseId.uuid,
-    userEmail: leaseId.userEmail,
-    approvedBy: approvalParams.approvedBy,
-    score: approvalParams.score,
-    reason: approvalParams.reason,
+  // Handle based on decision
+  const { decision, approvedBy, reason, score } = result.context;
+
+  if (decision === 'approved') {
+    // Emit LeaseApproved event (side effect - not in state machine)
+    const approvalParams = {
+      leaseId: leaseId.uuid,
+      userEmail: leaseId.userEmail,
+      approvedBy: approvedBy ?? 'approver-service@system',
+      score,
+      reason: reason ?? 'Stub approval - scoring not implemented',
+    };
+
+    try {
+      await eventBridgeService.emitLeaseApproved(approvalParams);
+    } catch (error) {
+      // Fail-closed: If we can't emit the approval, fail the request
+      logger.error('Failed to emit LeaseApproved event', {
+        error: error instanceof Error ? error.message : String(error),
+        leaseId: leaseId.uuid,
+        userEmail: leaseId.userEmail,
+      });
+      return {
+        statusCode: 500,
+        body: 'Failed to emit approval event',
+      };
+    }
+
+    logger.info('Approval emitted', {
+      action: 'approved',
+      timestamp: new Date().toISOString(),
+      leaseId: leaseId.uuid,
+      userEmail: leaseId.userEmail,
+      approvedBy: approvalParams.approvedBy,
+      score: approvalParams.score,
+      reason: approvalParams.reason,
+    });
+
+    return {
+      statusCode: 200,
+      body: 'OK',
+    };
+  }
+
+  if (decision === 'escalated') {
+    // For now, escalated requests are logged but still processed
+    // Full escalation handling comes in later stories
+    logger.info('Request escalated for manual review', {
+      action: 'escalated',
+      timestamp: new Date().toISOString(),
+      leaseId: leaseId.uuid,
+      userEmail: leaseId.userEmail,
+      score,
+      reason,
+    });
+
+    // TODO: In Story 5.2, this will send Slack notification
+    // For now, treat as approved for backward compatibility with Story 2.1
+    const approvalParams = {
+      leaseId: leaseId.uuid,
+      userEmail: leaseId.userEmail,
+      approvedBy: 'approver-service@system',
+      score,
+      reason: 'Escalated - manual review pending (stub: auto-approved)',
+    };
+
+    try {
+      await eventBridgeService.emitLeaseApproved(approvalParams);
+    } catch (error) {
+      logger.error('Failed to emit LeaseApproved event for escalated request', {
+        error: error instanceof Error ? error.message : String(error),
+        leaseId: leaseId.uuid,
+        userEmail: leaseId.userEmail,
+      });
+      return {
+        statusCode: 500,
+        body: 'Failed to emit approval event',
+      };
+    }
+
+    return {
+      statusCode: 200,
+      body: 'OK',
+    };
+  }
+
+  if (decision === 'denied') {
+    // Denied requests are logged for future implementation
+    // Full denial handling comes in Story 2.4
+    logger.info('Request denied', {
+      action: 'denied',
+      timestamp: new Date().toISOString(),
+      leaseId: leaseId.uuid,
+      userEmail: leaseId.userEmail,
+      score,
+      reason,
+    });
+
+    // TODO: In Story 2.4, this will emit LeaseDenied event
+    // For now, return error as denied is not fully implemented
+    return {
+      statusCode: 500,
+      body: 'Denied requests not yet implemented',
+    };
+  }
+
+  // Unexpected decision
+  logger.warn('Unexpected decision from state machine', {
+    decision,
+    finalState: result.finalState,
   });
 
   return {
-    statusCode: 200,
-    body: 'OK',
+    statusCode: 500,
+    body: 'Unexpected processing state',
   };
 };
