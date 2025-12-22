@@ -1,0 +1,711 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ApproverStack > Snapshot > matches CloudFormation template snapshot 1`] = `
+{
+  "Outputs": {
+    "DelayQueueDlqUrl": {
+      "Description": "Delay queue DLQ URL",
+      "Value": {
+        "Ref": "DelayQueueDLQ04933ADC",
+      },
+    },
+    "DelayQueueUrl": {
+      "Description": "Delay queue URL",
+      "Value": {
+        "Ref": "DelayQueue4EFBA2FA",
+      },
+    },
+    "DomainListBucketName": {
+      "Description": "Domain list S3 bucket name",
+      "Value": {
+        "Ref": "DomainListBucketCAC36051",
+      },
+    },
+    "IdempotencyTableName": {
+      "Description": "Idempotency DynamoDB table name",
+      "Value": {
+        "Ref": "IdempotencyTable22A5A209",
+      },
+    },
+    "LambdaFunctionName": {
+      "Description": "Approver Lambda function name",
+      "Value": {
+        "Ref": "ApproverLambdaFunction33A7CB39",
+      },
+    },
+  },
+  "Parameters": {
+    "BootstrapVersion": {
+      "Default": "/cdk-bootstrap/hnb659fds/version",
+      "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+    },
+  },
+  "Resources": {
+    "ApproverLambdaFunction33A7CB39": {
+      "DependsOn": [
+        "ApproverLambdaFunctionServiceRoleDefaultPolicyDC582E91",
+        "ApproverLambdaFunctionServiceRoleA611DF39",
+      ],
+      "Properties": {
+        "Architectures": [
+          "arm64",
+        ],
+        "Code": {
+          "S3Bucket": "cdk-hnb659fds-assets-123456789012-us-west-2",
+          "S3Key": "63b292ec01a38579940f81d2941591aac1e78a6ad9c1fdfca71763dee6d8899a.zip",
+        },
+        "Environment": {
+          "Variables": {
+            "AUTO_APPROVE_THRESHOLD": "20",
+            "BEDROCK_MODEL_ID": "amazon.nova-micro-v1:0",
+            "BUSINESS_HOURS_END": "19",
+            "BUSINESS_HOURS_START": "7",
+            "BUSINESS_HOURS_TZ": "Europe/London",
+            "DELAY_QUEUE_URL": {
+              "Ref": "DelayQueue4EFBA2FA",
+            },
+            "DOMAIN_LIST_BUCKET": {
+              "Ref": "DomainListBucketCAC36051",
+            },
+            "IDEMPOTENCY_TABLE_NAME": {
+              "Ref": "IdempotencyTable22A5A209",
+            },
+            "ISB_ACCOUNTS_TABLE_NAME": "InnovationSandboxData-SandboxAccounts",
+            "ISB_CONSOLE_URL": "https://isb-console.example.com",
+            "ISB_LEASES_TABLE_NAME": "InnovationSandboxData-Leases",
+            "LOG_LEVEL": "INFO",
+            "RULE_WEIGHTS": "{"expiredLeases":2,"budgetExceeded":5,"firstTimeUser":5,"firstTimeSuspicious":20,"verifiedGovDomain":-5,"familiarTemplate":-1,"templateHopper":2,"budgetRequested":1,"durationRequested":1,"endOfWindow":-2,"cooldownViolation":10,"outsideTargetAudience":10,"manualEarlyTermination":-2,"orgRecentNegative":3,"orgCleanRecord":-2,"groupMailboxDetected":20}",
+            "SLACK_WEBHOOK_SECRET_ARN": "arn:aws:secretsmanager:us-west-2:568672915267:secret:/approver/slack-webhook-url-FXJl1d",
+          },
+        },
+        "Handler": "handler.handler",
+        "MemorySize": 512,
+        "Role": {
+          "Fn::GetAtt": [
+            "ApproverLambdaFunctionServiceRoleA611DF39",
+            "Arn",
+          ],
+        },
+        "Runtime": "nodejs20.x",
+        "Timeout": 30,
+        "TracingConfig": {
+          "Mode": "Active",
+        },
+      },
+      "Type": "AWS::Lambda::Function",
+    },
+    "ApproverLambdaFunctionServiceRoleA611DF39": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+              ],
+            ],
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "ApproverLambdaFunctionServiceRoleDefaultPolicyDC582E91": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "xray:PutTraceSegments",
+                "xray:PutTelemetryRecords",
+              ],
+              "Effect": "Allow",
+              "Resource": "*",
+            },
+            {
+              "Action": "bedrock:InvokeModel",
+              "Effect": "Allow",
+              "Resource": "arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-micro-v1:0",
+            },
+            {
+              "Action": "secretsmanager:GetSecretValue",
+              "Effect": "Allow",
+              "Resource": "arn:aws:secretsmanager:us-west-2:123456789012:secret:/approver/*",
+            },
+            {
+              "Action": "events:PutEvents",
+              "Effect": "Allow",
+              "Resource": "arn:aws:events:us-west-2:123456789012:event-bus/default",
+            },
+            {
+              "Action": [
+                "dynamodb:GetItem",
+                "dynamodb:Query",
+                "dynamodb:UpdateItem",
+                "dynamodb:PutItem",
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                "arn:aws:dynamodb:us-west-2:123456789012:table/InnovationSandboxData-Leases",
+                "arn:aws:dynamodb:us-west-2:123456789012:table/InnovationSandboxData-Leases/index/*",
+              ],
+            },
+            {
+              "Action": [
+                "dynamodb:GetItem",
+                "dynamodb:Query",
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                "arn:aws:dynamodb:us-west-2:123456789012:table/InnovationSandboxData-SandboxAccounts",
+                "arn:aws:dynamodb:us-west-2:123456789012:table/InnovationSandboxData-SandboxAccounts/index/*",
+              ],
+            },
+            {
+              "Action": [
+                "appconfig:GetConfiguration",
+                "appconfig:GetLatestConfiguration",
+                "appconfig:StartConfigurationSession",
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                "arn:aws:appconfig:us-west-2:123456789012:application/*",
+                "arn:aws:appconfig:us-west-2:123456789012:application/*/environment/*",
+                "arn:aws:appconfig:us-west-2:123456789012:application/*/environment/*/configuration/*",
+              ],
+            },
+            {
+              "Action": [
+                "dynamodb:BatchGetItem",
+                "dynamodb:Query",
+                "dynamodb:GetItem",
+                "dynamodb:Scan",
+                "dynamodb:ConditionCheckItem",
+                "dynamodb:BatchWriteItem",
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:DescribeTable",
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "IdempotencyTable22A5A209",
+                  "Arn",
+                ],
+              },
+            },
+            {
+              "Action": [
+                "dynamodb:GetRecords",
+                "dynamodb:GetShardIterator",
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "IdempotencyTable22A5A209",
+                  "Arn",
+                ],
+              },
+            },
+            {
+              "Action": [
+                "s3:GetObject*",
+                "s3:GetBucket*",
+                "s3:List*",
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "DomainListBucketCAC36051",
+                    "Arn",
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "DomainListBucketCAC36051",
+                          "Arn",
+                        ],
+                      },
+                      "/*",
+                    ],
+                  ],
+                },
+              ],
+            },
+            {
+              "Action": [
+                "sqs:SendMessage",
+                "sqs:GetQueueAttributes",
+                "sqs:GetQueueUrl",
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "DelayQueue4EFBA2FA",
+                  "Arn",
+                ],
+              },
+            },
+            {
+              "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:ChangeMessageVisibility",
+                "sqs:GetQueueUrl",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes",
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "DelayQueue4EFBA2FA",
+                  "Arn",
+                ],
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "PolicyName": "ApproverLambdaFunctionServiceRoleDefaultPolicyDC582E91",
+        "Roles": [
+          {
+            "Ref": "ApproverLambdaFunctionServiceRoleA611DF39",
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Policy",
+    },
+    "CleanupSucceededRuleAllowEventRuleTestStackApproverLambdaFunctionCED8BA93C13E3512": {
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "ApproverLambdaFunction33A7CB39",
+            "Arn",
+          ],
+        },
+        "Principal": "events.amazonaws.com",
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "CleanupSucceededRuleCA931BEE",
+            "Arn",
+          ],
+        },
+      },
+      "Type": "AWS::Lambda::Permission",
+    },
+    "CleanupSucceededRuleCA931BEE": {
+      "Properties": {
+        "EventPattern": {
+          "detail-type": [
+            "AccountCleanupSucceeded",
+          ],
+          "source": [
+            "innovation-sandbox",
+          ],
+        },
+        "Name": "ApproverCleanupSucceeded",
+        "State": "ENABLED",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::GetAtt": [
+                "ApproverLambdaFunction33A7CB39",
+                "Arn",
+              ],
+            },
+            "Id": "Target0",
+          },
+        ],
+      },
+      "Type": "AWS::Events::Rule",
+    },
+    "CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F": {
+      "DependsOn": [
+        "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092",
+      ],
+      "Properties": {
+        "Code": {
+          "S3Bucket": "cdk-hnb659fds-assets-123456789012-us-west-2",
+          "S3Key": "faa95a81ae7d7373f3e1f242268f904eb748d8d0fdd306e8a6fe515a1905a7d6.zip",
+        },
+        "Description": {
+          "Fn::Join": [
+            "",
+            [
+              "Lambda function for auto-deleting objects in ",
+              {
+                "Ref": "DomainListBucketCAC36051",
+              },
+              " S3 bucket.",
+            ],
+          ],
+        },
+        "Handler": "index.handler",
+        "MemorySize": 128,
+        "Role": {
+          "Fn::GetAtt": [
+            "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092",
+            "Arn",
+          ],
+        },
+        "Runtime": "nodejs22.x",
+        "Timeout": 900,
+      },
+      "Type": "AWS::Lambda::Function",
+    },
+    "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:\${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "DelayQueue4EFBA2FA": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "DelaySeconds": 30,
+        "QueueName": "ApproverDelayQueue",
+        "RedrivePolicy": {
+          "deadLetterTargetArn": {
+            "Fn::GetAtt": [
+              "DelayQueueDLQ04933ADC",
+              "Arn",
+            ],
+          },
+          "maxReceiveCount": 3,
+        },
+        "VisibilityTimeout": 300,
+      },
+      "Type": "AWS::SQS::Queue",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "DelayQueueDLQ04933ADC": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "MessageRetentionPeriod": 1209600,
+        "QueueName": "ApproverDelayQueueDLQ",
+      },
+      "Type": "AWS::SQS::Queue",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "DomainListBucketAutoDeleteObjectsCustomResource53DB73BD": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "DomainListBucketPolicy14A295F7",
+      ],
+      "Properties": {
+        "BucketName": {
+          "Ref": "DomainListBucketCAC36051",
+        },
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F",
+            "Arn",
+          ],
+        },
+      },
+      "Type": "Custom::S3AutoDeleteObjects",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "DomainListBucketCAC36051": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256",
+              },
+            },
+          ],
+        },
+        "BucketName": "approver-domain-list-123456789012",
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true,
+        },
+        "Tags": [
+          {
+            "Key": "aws-cdk:auto-delete-objects",
+            "Value": "true",
+          },
+        ],
+      },
+      "Type": "AWS::S3::Bucket",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "DomainListBucketPolicy14A295F7": {
+      "Properties": {
+        "Bucket": {
+          "Ref": "DomainListBucketCAC36051",
+        },
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:PutBucketPolicy",
+                "s3:GetBucket*",
+                "s3:List*",
+                "s3:DeleteObject*",
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::GetAtt": [
+                    "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092",
+                    "Arn",
+                  ],
+                },
+              },
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "DomainListBucketCAC36051",
+                    "Arn",
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "DomainListBucketCAC36051",
+                          "Arn",
+                        ],
+                      },
+                      "/*",
+                    ],
+                  ],
+                },
+              ],
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+      },
+      "Type": "AWS::S3::BucketPolicy",
+    },
+    "IdempotencyTable22A5A209": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S",
+          },
+        ],
+        "BillingMode": "PAY_PER_REQUEST",
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH",
+          },
+        ],
+        "TableName": "ApproverIdempotency",
+        "TimeToLiveSpecification": {
+          "AttributeName": "expiration",
+          "Enabled": true,
+        },
+      },
+      "Type": "AWS::DynamoDB::Table",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "LeaseRequestedRule820A3E1C": {
+      "Properties": {
+        "EventPattern": {
+          "detail-type": [
+            "LeaseRequested",
+          ],
+          "source": [
+            "innovation-sandbox",
+          ],
+        },
+        "Name": "ApproverLeaseRequested",
+        "State": "ENABLED",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::GetAtt": [
+                "ApproverLambdaFunction33A7CB39",
+                "Arn",
+              ],
+            },
+            "Id": "Target0",
+          },
+        ],
+      },
+      "Type": "AWS::Events::Rule",
+    },
+    "LeaseRequestedRuleAllowEventRuleTestStackApproverLambdaFunctionCED8BA93696156F0": {
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "ApproverLambdaFunction33A7CB39",
+            "Arn",
+          ],
+        },
+        "Principal": "events.amazonaws.com",
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "LeaseRequestedRule820A3E1C",
+            "Arn",
+          ],
+        },
+      },
+      "Type": "AWS::Lambda::Permission",
+    },
+    "QueueCheckSchedule": {
+      "Properties": {
+        "FlexibleTimeWindow": {
+          "Mode": "OFF",
+        },
+        "Name": "ApproverQueueCheck",
+        "ScheduleExpression": "rate(30 minutes)",
+        "Target": {
+          "Arn": {
+            "Fn::GetAtt": [
+              "ApproverLambdaFunction33A7CB39",
+              "Arn",
+            ],
+          },
+          "Input": "{"source":"scheduled.queue-check","detail-type":"ScheduledQueueCheck","detail":{}}",
+          "RoleArn": {
+            "Fn::GetAtt": [
+              "SchedulerRole59E73443",
+              "Arn",
+            ],
+          },
+        },
+      },
+      "Type": "AWS::Scheduler::Schedule",
+    },
+    "SchedulerRole59E73443": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "scheduler.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "SchedulerRoleDefaultPolicy66F774B8": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "lambda:InvokeFunction",
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "ApproverLambdaFunction33A7CB39",
+                    "Arn",
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "ApproverLambdaFunction33A7CB39",
+                          "Arn",
+                        ],
+                      },
+                      ":*",
+                    ],
+                  ],
+                },
+              ],
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "PolicyName": "SchedulerRoleDefaultPolicy66F774B8",
+        "Roles": [
+          {
+            "Ref": "SchedulerRole59E73443",
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Policy",
+    },
+  },
+  "Rules": {
+    "CheckBootstrapVersion": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Not": [
+              {
+                "Fn::Contains": [
+                  [
+                    "1",
+                    "2",
+                    "3",
+                    "4",
+                    "5",
+                  ],
+                  {
+                    "Ref": "BootstrapVersion",
+                  },
+                ],
+              },
+            ],
+          },
+          "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI.",
+        },
+      ],
+    },
+  },
+}
+`;

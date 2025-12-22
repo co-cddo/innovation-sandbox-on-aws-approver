@@ -16,6 +16,6 @@
     "noFallthroughCasesInSwitch": true,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*", "test/**/*"],
-  "exclude": ["node_modules", "dist", "coverage", "cdk"]
+  "include": ["src/**/*", "test/**/*", "cdk/**/*"],
+  "exclude": ["node_modules", "dist", "coverage", "cdk.out"]
 }
