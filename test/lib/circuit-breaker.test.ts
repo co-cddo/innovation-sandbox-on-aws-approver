@@ -144,10 +144,11 @@ describe('CircuitBreaker', () => {
 
       const error = await circuitBreaker
         .execute(async () => 'test')
-        .catch((e) => e as CircuitOpenError);
+        .catch((e: unknown) => e);
       expect(error).toBeInstanceOf(CircuitOpenError);
-      expect(error.circuitName).toBe('test-circuit');
-      expect(error.timeUntilRecoveryMs).toBeGreaterThan(0);
+      const circuitError = error as CircuitOpenError;
+      expect(circuitError.circuitName).toBe('test-circuit');
+      expect(circuitError.timeUntilRecoveryMs).toBeGreaterThan(0);
     });
   });
 

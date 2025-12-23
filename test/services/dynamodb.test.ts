@@ -37,7 +37,7 @@ describe('DynamoDB Service', () => {
       await service.getUserLeaseHistory(userEmail);
 
       expect(mockSend).toHaveBeenCalledTimes(1);
-      const call = mockSend.mock.calls[0][0];
+      const call = mockSend.mock.calls[0]![0];
       expect(call).toBeInstanceOf(QueryCommand);
       expect(call.input).toEqual({
         TableName: tableName,
@@ -154,7 +154,7 @@ describe('DynamoDB Service', () => {
       await service.getOrgLeaseHistory(domain);
 
       expect(mockSend).toHaveBeenCalledTimes(1);
-      const call = mockSend.mock.calls[0][0];
+      const call = mockSend.mock.calls[0]![0];
       expect(call).toBeInstanceOf(ScanCommand);
       expect(call.input).toEqual({
         TableName: tableName,
@@ -188,8 +188,8 @@ describe('DynamoDB Service', () => {
       const result = await service.getOrgLeaseHistory('example.gov.uk');
 
       expect(result).toHaveLength(2);
-      expect(result[0].userEmail).toBe('alice@example.gov.uk');
-      expect(result[1].userEmail).toBe('bob@example.gov.uk');
+      expect(result[0]!.userEmail).toBe('alice@example.gov.uk');
+      expect(result[1]!.userEmail).toBe('bob@example.gov.uk');
     });
 
     it('should exclude current user when excludeEmail provided', async () => {
@@ -214,7 +214,7 @@ describe('DynamoDB Service', () => {
       const result = await service.getOrgLeaseHistory('example.gov.uk', 'alice@example.gov.uk');
 
       expect(result).toHaveLength(1);
-      expect(result[0].userEmail).toBe('bob@example.gov.uk');
+      expect(result[0]!.userEmail).toBe('bob@example.gov.uk');
     });
 
     it('should include all users when excludeEmail not provided', async () => {
@@ -290,8 +290,8 @@ describe('DynamoDB Service', () => {
 
       expect(mockSend).toHaveBeenCalledTimes(2);
       expect(result).toHaveLength(2);
-      expect(result[0].uuid).toBe('lease-1');
-      expect(result[1].uuid).toBe('lease-2');
+      expect(result[0]!.uuid).toBe('lease-1');
+      expect(result[1]!.uuid).toBe('lease-2');
     });
   });
 
@@ -322,8 +322,8 @@ describe('DynamoDB Service', () => {
       const result = filterByDays(leases, 30);
 
       expect(result).toHaveLength(2);
-      expect(result[0].created).toBe(yesterday.toISOString());
-      expect(result[1].created).toBe(lastWeek.toISOString());
+      expect(result[0]!.created).toBe(yesterday.toISOString());
+      expect(result[1]!.created).toBe(lastWeek.toISOString());
     });
 
     it('should return empty array when no leases match', () => {

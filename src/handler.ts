@@ -136,10 +136,11 @@ const bedrockConfig = {
 
 // Create Bedrock service (can be overridden in tests via dependency injection)
 // Service is always created - it handles circuit breaker and fallback internally
+// Cast logger to BedrockLogger - the logger methods are compatible at runtime
 let bedrockService: BedrockService | undefined = createBedrockService(
   bedrockClient,
   bedrockConfig,
-  logger
+  logger as unknown as import('./services/bedrock.js').BedrockLogger
 );
 
 // State machine configuration
@@ -256,7 +257,11 @@ export const setBedrockService = (service: BedrockService | undefined): void => 
  * Resets to the default Bedrock service (for test cleanup).
  */
 export const resetBedrockService = (): void => {
-  bedrockService = createBedrockService(bedrockClient, bedrockConfig, logger);
+  bedrockService = createBedrockService(
+    bedrockClient,
+    bedrockConfig,
+    logger as unknown as import('./services/bedrock.js').BedrockLogger
+  );
 };
 
 /**

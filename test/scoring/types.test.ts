@@ -170,11 +170,12 @@ describe('scoring types', () => {
         isVerifiedGovDomain: true,
         userLeaseHistory: [
           {
-            leaseId: 'old-lease',
-            status: 'Completed',
-            templateId: 'web-hosting',
-            endedAt: new Date('2025-01-01'),
-            terminatedEarly: false,
+            uuid: 'old-lease',
+            userEmail: 'user@example.gov.uk',
+            status: 'Expired',
+            originalLeaseTemplateUuid: 'web-hosting',
+            created: '2025-01-01T10:00:00Z',
+            endDate: '2025-01-02T10:00:00Z',
           },
         ],
       });

@@ -241,7 +241,8 @@ export const cooldownViolationRule: ScoringRuleFn = (context, weight) => {
   const sorted = [...history].sort(
     (a, b) => new Date(b.created).getTime() - new Date(a.created).getTime()
   );
-  const mostRecent = sorted[0];
+  // We know sorted[0] exists because history.length > 0 (checked above)
+  const mostRecent = sorted[0]!;
 
   // Calculate time since most recent lease creation
   const mostRecentTime = new Date(mostRecent.created).getTime();

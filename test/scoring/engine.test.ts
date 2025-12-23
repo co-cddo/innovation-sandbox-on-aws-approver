@@ -370,11 +370,11 @@ describe('scoring engine', () => {
         requestTimestamp: new Date('2025-01-15T17:30:00Z'), // End of window bonus
         isVerifiedGovDomain: true,
         userLeaseHistory: [
-          { leaseId: 'old', status: 'Terminated', templateId: 'web-hosting', terminatedEarly: true },
-          { leaseId: 'old2', status: 'Terminated', templateId: 'web-hosting', terminatedEarly: true },
+          { uuid: 'old', userEmail: 'user@example.gov.uk', status: 'ManuallyTerminated', originalLeaseTemplateUuid: 'web-hosting', created: '2025-01-01T10:00:00Z' },
+          { uuid: 'old2', userEmail: 'user@example.gov.uk', status: 'ManuallyTerminated', originalLeaseTemplateUuid: 'web-hosting', created: '2025-01-02T10:00:00Z' },
         ],
         orgLeaseHistory: [
-          { leaseId: 'old', status: 'Completed', templateId: 'web', terminatedEarly: false },
+          { uuid: 'old', userEmail: 'other@example.gov.uk', status: 'Expired', originalLeaseTemplateUuid: 'web', created: '2025-01-01T10:00:00Z' },
         ],
       });
 

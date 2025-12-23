@@ -187,6 +187,9 @@ describe('Type structures', () => {
       leaseDurationHours: 24,
       requiresManualApproval: false,
       comments: 'Test request',
+      userLeaseHistory: [],
+      orgLeaseHistory: [],
+      isVerifiedGovDomain: true,
       score: 15,
       scoreBreakdown: [
         { rule: 'first-time-user', points: 5, triggered: true },

@@ -66,7 +66,7 @@ describe('DomainAllowlistService', () => {
       const result = await service.getLocalAuthorityDomains();
 
       expect(mockSend).toHaveBeenCalledTimes(1);
-      const call = mockSend.mock.calls[0][0];
+      const call = mockSend.mock.calls[0]![0];
       expect(call).toBeInstanceOf(GetObjectCommand);
       expect(call.input).toEqual({
         Bucket: bucketName,
