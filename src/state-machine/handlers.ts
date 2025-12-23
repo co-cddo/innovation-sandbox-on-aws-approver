@@ -22,6 +22,7 @@ import {
   type ScoringEngine,
 } from '../scoring/index.js';
 import type { StateMachineLogger } from './orchestrator.js';
+import { isAllowListed } from '../lib/allow-list.js';
 
 /**
  * Default configuration - can be overridden via environment or DI
@@ -114,12 +115,45 @@ export const createStateHandlers = (
       };
     }
 
-    // All validation passed - move to scoring
+    // All validation passed - move to allow-list check
+    return {
+      nextState: ApprovalState.ALLOW_LIST_CHECK,
+      context: {
+        ...context,
+        // Context validated and ready for allow-list check
+      },
+    };
+  },
+
+  /**
+   * ALLOW_LIST_CHECK state handler.
+   * Checks if the user email is in the allow-list for auto-approval bypass.
+   * If allow-listed, skips scoring and goes directly to APPROVED.
+   */
+  [ApprovalState.ALLOW_LIST_CHECK]: (context: StateContext): StateHandlerResult => {
+    const { userEmail } = context;
+
+    if (isAllowListed(userEmail)) {
+      // Allow-listed user - bypass scoring and auto-approve
+      return {
+        nextState: ApprovalState.APPROVED,
+        context: {
+          ...context,
+          score: 0, // Score set to 0 for reference
+          decision: 'approved',
+          approvedBy: 'approver-service@system',
+          reason: 'ALLOW-LIST-OVERRIDE',
+          allowListOverride: true,
+        },
+      };
+    }
+
+    // Not allow-listed - proceed to scoring
     return {
       nextState: ApprovalState.SCORING,
       context: {
         ...context,
-        // Context validated and ready for scoring
+        allowListOverride: false,
       },
     };
   },

@@ -103,7 +103,7 @@ describe('RECEIVED handler', () => {
 describe('VALIDATING handler', () => {
   const handlers = createStateHandlers();
 
-  it('should transition to SCORING when valid', () => {
+  it('should transition to ALLOW_LIST_CHECK when valid', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
@@ -113,7 +113,7 @@ describe('VALIDATING handler', () => {
 
     const result = handlers[ApprovalState.VALIDATING](context);
 
-    expect(result.nextState).toBe(ApprovalState.SCORING);
+    expect(result.nextState).toBe(ApprovalState.ALLOW_LIST_CHECK);
   });
 
   it('should transition to ERROR when leaseId is missing', () => {
@@ -169,6 +169,69 @@ describe('VALIDATING handler', () => {
     const originalContext = JSON.parse(JSON.stringify(context));
 
     handlers[ApprovalState.VALIDATING](context);
+
+    expect(context).toEqual(originalContext);
+  });
+});
+
+describe('ALLOW_LIST_CHECK handler', () => {
+  const handlers = createStateHandlers();
+
+  it('should transition to APPROVED for allow-listed email', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'chris.nesbitt-smith@dsit.gov.uk',
+      templateId: 'web-hosting',
+    };
+
+    const result = handlers[ApprovalState.ALLOW_LIST_CHECK](context);
+
+    expect(result.nextState).toBe(ApprovalState.APPROVED);
+    expect(result.context.allowListOverride).toBe(true);
+    expect(result.context.decision).toBe('approved');
+    expect(result.context.reason).toBe('ALLOW-LIST-OVERRIDE');
+    expect(result.context.score).toBe(0);
+  });
+
+  it('should transition to SCORING for non-allow-listed email', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'regular-user@example.gov.uk',
+      templateId: 'web-hosting',
+    };
+
+    const result = handlers[ApprovalState.ALLOW_LIST_CHECK](context);
+
+    expect(result.nextState).toBe(ApprovalState.SCORING);
+    expect(result.context.allowListOverride).toBe(false);
+  });
+
+  it('should be case-insensitive for allow-list check', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'CHRIS.NESBITT-SMITH@DSIT.GOV.UK',
+      templateId: 'web-hosting',
+    };
+
+    const result = handlers[ApprovalState.ALLOW_LIST_CHECK](context);
+
+    expect(result.nextState).toBe(ApprovalState.APPROVED);
+    expect(result.context.allowListOverride).toBe(true);
+  });
+
+  it('should be a pure function (no mutation)', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+    };
+    const originalContext = JSON.parse(JSON.stringify(context));
+
+    handlers[ApprovalState.ALLOW_LIST_CHECK](context);
 
     expect(context).toEqual(originalContext);
   });

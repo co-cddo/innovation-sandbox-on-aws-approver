@@ -14,6 +14,7 @@ describe('ApprovalState enum', () => {
   it('should have all expected states', () => {
     expect(ApprovalState.RECEIVED).toBe('RECEIVED');
     expect(ApprovalState.VALIDATING).toBe('VALIDATING');
+    expect(ApprovalState.ALLOW_LIST_CHECK).toBe('ALLOW_LIST_CHECK');
     expect(ApprovalState.SCORING).toBe('SCORING');
     expect(ApprovalState.DECIDING).toBe('DECIDING');
     expect(ApprovalState.APPROVED).toBe('APPROVED');
@@ -22,9 +23,9 @@ describe('ApprovalState enum', () => {
     expect(ApprovalState.ERROR).toBe('ERROR');
   });
 
-  it('should have exactly 8 states', () => {
+  it('should have exactly 9 states', () => {
     const stateValues = Object.values(ApprovalState);
-    expect(stateValues).toHaveLength(8);
+    expect(stateValues).toHaveLength(9);
   });
 });
 
@@ -43,6 +44,7 @@ describe('TERMINAL_STATES', () => {
   it('should not include non-terminal states', () => {
     expect(TERMINAL_STATES).not.toContain(ApprovalState.RECEIVED);
     expect(TERMINAL_STATES).not.toContain(ApprovalState.VALIDATING);
+    expect(TERMINAL_STATES).not.toContain(ApprovalState.ALLOW_LIST_CHECK);
     expect(TERMINAL_STATES).not.toContain(ApprovalState.SCORING);
     expect(TERMINAL_STATES).not.toContain(ApprovalState.DECIDING);
   });
@@ -59,6 +61,7 @@ describe('isTerminalState', () => {
   it('should return false for non-terminal states', () => {
     expect(isTerminalState(ApprovalState.RECEIVED)).toBe(false);
     expect(isTerminalState(ApprovalState.VALIDATING)).toBe(false);
+    expect(isTerminalState(ApprovalState.ALLOW_LIST_CHECK)).toBe(false);
     expect(isTerminalState(ApprovalState.SCORING)).toBe(false);
     expect(isTerminalState(ApprovalState.DECIDING)).toBe(false);
   });

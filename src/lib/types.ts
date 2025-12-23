@@ -63,6 +63,7 @@ export const LeaseApprovedDetailSchema = z.object({
   approvedBy: z.string(),
   score: z.number(),
   reason: z.string(),
+  timestamp: z.string(),
 });
 
 export type LeaseApprovedDetail = z.infer<typeof LeaseApprovedDetailSchema>;
@@ -74,6 +75,30 @@ export interface LeaseApprovedEventEntry {
   Source: 'innovation-sandbox';
   DetailType: 'LeaseApproved';
   Detail: string; // JSON stringified LeaseApprovedDetail
+  EventBusName: string;
+}
+
+/**
+ * LeaseEscalated event detail for emission (fail-closed error handling)
+ */
+export const LeaseEscalatedDetailSchema = z.object({
+  leaseId: z.string().uuid(),
+  userEmail: z.string().email(),
+  reason: z.string(),
+  errorCode: z.string(),
+  score: z.number().optional(),
+  timestamp: z.string(),
+});
+
+export type LeaseEscalatedDetail = z.infer<typeof LeaseEscalatedDetailSchema>;
+
+/**
+ * EventBridge PutEvents entry for LeaseEscalated
+ */
+export interface LeaseEscalatedEventEntry {
+  Source: 'innovation-sandbox';
+  DetailType: 'LeaseEscalated';
+  Detail: string; // JSON stringified LeaseEscalatedDetail
   EventBusName: string;
 }
 

@@ -135,6 +135,7 @@ describe('LeaseApprovedDetailSchema', () => {
     approvedBy: 'approver-service@system',
     score: 0,
     reason: 'Stub approval - scoring not implemented',
+    timestamp: '2025-12-22T10:00:00.000Z',
   };
 
   it('validates a valid LeaseApproved detail', () => {
@@ -168,6 +169,20 @@ describe('LeaseApprovedDetailSchema', () => {
     const invalidDetail = {
       ...validDetail,
       userEmail: 'not-an-email',
+    };
+
+    const result = LeaseApprovedDetailSchema.safeParse(invalidDetail);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing timestamp', () => {
+    const invalidDetail = {
+      leaseId: '123e4567-e89b-12d3-a456-426614174000',
+      userEmail: 'user@example.gov.uk',
+      approvedBy: 'approver-service@system',
+      score: 0,
+      reason: 'Missing timestamp',
+      // No timestamp
     };
 
     const result = LeaseApprovedDetailSchema.safeParse(invalidDetail);

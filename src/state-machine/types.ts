@@ -12,6 +12,8 @@ export enum ApprovalState {
   RECEIVED = 'RECEIVED',
   /** Validating event schema and extracting data */
   VALIDATING = 'VALIDATING',
+  /** Checking if user is on the allow-list for auto-approval bypass */
+  ALLOW_LIST_CHECK = 'ALLOW_LIST_CHECK',
   /** Running scoring rules */
   SCORING = 'SCORING',
   /** Making approval/denial/escalation decision */
@@ -116,6 +118,8 @@ export interface StateContext {
   approvedBy?: string;
   /** Reason for the decision */
   reason?: string;
+  /** Whether the allow-list bypass was used */
+  allowListOverride?: boolean;
 
   // Error tracking
   /** Error details if ERROR state reached */

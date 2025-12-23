@@ -35,8 +35,10 @@ import { logger as mockLogger } from '../src/lib/logger.js';
 
 // Mock EventBridge service for testing
 const mockEmitLeaseApproved = vi.fn().mockResolvedValue(undefined);
+const mockEmitLeaseEscalated = vi.fn().mockResolvedValue(undefined);
 const mockEventBridgeService: EventBridgeService = {
   emitLeaseApproved: mockEmitLeaseApproved,
+  emitLeaseEscalated: mockEmitLeaseEscalated,
 };
 
 describe('handler', () => {
@@ -115,6 +117,8 @@ describe('handler', () => {
         leaseId: '123e4567-e89b-12d3-a456-426614174000',
         userEmail: 'user@example.gov.uk',
         templateId: 'web-hosting',
+        eventId: 'test-event-id',
+        idempotencyKey: '123e4567-e89b-12d3-a456-426614174000:test-event-id',
       });
     });
 
@@ -203,42 +207,37 @@ describe('handler', () => {
       );
     });
 
-    it('should return 500 when EventBridge emission fails', async () => {
+    it('should throw ProcessingError when EventBridge emission fails (fail-closed)', async () => {
       const event = createValidLeaseRequestedEvent();
       mockEmitLeaseApproved.mockRejectedValueOnce(new Error('EventBridge unavailable'));
 
-      const result = await handler(event, mockContext);
+      await expect(handler(event, mockContext)).rejects.toThrow('EventBridge unavailable');
 
-      expect(result).toEqual({
-        statusCode: 500,
-        body: 'Failed to emit approval event',
-      });
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'Failed to emit LeaseApproved event',
+        'Unexpected error - triggering fail-closed escalation',
         expect.objectContaining({
           error: 'EventBridge unavailable',
           leaseId: '123e4567-e89b-12d3-a456-426614174000',
           userEmail: 'user@example.gov.uk',
         })
       );
+      // Should emit LeaseEscalated for fail-closed behavior with score from state machine
+      expect(mockEmitLeaseEscalated).toHaveBeenCalledWith({
+        leaseId: '123e4567-e89b-12d3-a456-426614174000',
+        userEmail: 'user@example.gov.uk',
+        reason: 'Unexpected error: EventBridge unavailable',
+        errorCode: 'UNEXPECTED_ERROR',
+        score: expect.any(Number), // Score is now captured from state machine for error reporting
+      });
     });
 
-    it('should handle non-Error exceptions in EventBridge emission', async () => {
+    it('should throw ProcessingError for non-Error exceptions in EventBridge emission', async () => {
       const event = createValidLeaseRequestedEvent();
       mockEmitLeaseApproved.mockRejectedValueOnce('String error');
 
-      const result = await handler(event, mockContext);
+      await expect(handler(event, mockContext)).rejects.toThrow('String error');
 
-      expect(result).toEqual({
-        statusCode: 500,
-        body: 'Failed to emit approval event',
-      });
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'Failed to emit LeaseApproved event',
-        expect.objectContaining({
-          error: 'String error',
-        })
-      );
+      expect(mockEmitLeaseEscalated).toHaveBeenCalled();
     });
   });
 
@@ -268,7 +267,7 @@ describe('handler', () => {
   });
 
   describe('state machine integration', () => {
-    it('should return 500 when state machine fails', async () => {
+    it('should throw ProcessingError when state machine fails (fail-closed)', async () => {
       const mockOrchestrator: StateMachineOrchestrator = {
         run: vi.fn().mockReturnValue({
           finalState: ApprovalState.ERROR,
@@ -288,16 +287,22 @@ describe('handler', () => {
       setOrchestrator(mockOrchestrator);
 
       const event = createValidLeaseRequestedEvent();
-      const result = await handler(event, mockContext);
+      await expect(handler(event, mockContext)).rejects.toThrow('Validation failed');
 
-      expect(result.statusCode).toBe(500);
-      expect(result.body).toBe('Processing failed - request queued for manual review');
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'State machine failed',
+        'State machine failed - triggering fail-closed escalation',
         expect.objectContaining({
           finalState: ApprovalState.ERROR,
         })
       );
+      // Should emit LeaseEscalated for fail-closed behavior
+      expect(mockEmitLeaseEscalated).toHaveBeenCalledWith({
+        leaseId: '123e4567-e89b-12d3-a456-426614174000',
+        userEmail: 'user@example.gov.uk',
+        reason: 'State machine error: Validation failed',
+        errorCode: 'VALIDATION_ERROR',
+        score: 0,
+      });
     });
 
     it('should handle escalated decision', async () => {
@@ -334,7 +339,7 @@ describe('handler', () => {
       expect(mockEmitLeaseApproved).toHaveBeenCalled();
     });
 
-    it('should return 500 when EventBridge emission fails for escalated request', async () => {
+    it('should throw ProcessingError when EventBridge emission fails for escalated request (fail-closed)', async () => {
       const mockOrchestrator: StateMachineOrchestrator = {
         run: vi.fn().mockReturnValue({
           finalState: ApprovalState.ESCALATED,
@@ -354,19 +359,18 @@ describe('handler', () => {
       mockEmitLeaseApproved.mockRejectedValueOnce(new Error('EventBridge unavailable'));
 
       const event = createValidLeaseRequestedEvent();
-      const result = await handler(event, mockContext);
+      await expect(handler(event, mockContext)).rejects.toThrow('EventBridge unavailable');
 
-      expect(result.statusCode).toBe(500);
-      expect(result.body).toBe('Failed to emit approval event');
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'Failed to emit LeaseApproved event for escalated request',
+        'Unexpected error - triggering fail-closed escalation',
         expect.objectContaining({
           error: 'EventBridge unavailable',
         })
       );
+      expect(mockEmitLeaseEscalated).toHaveBeenCalled();
     });
 
-    it('should handle non-Error exceptions in escalated EventBridge emission', async () => {
+    it('should throw ProcessingError for non-Error exceptions in escalated EventBridge emission', async () => {
       const mockOrchestrator: StateMachineOrchestrator = {
         run: vi.fn().mockReturnValue({
           finalState: ApprovalState.ESCALATED,
@@ -386,15 +390,9 @@ describe('handler', () => {
       mockEmitLeaseApproved.mockRejectedValueOnce('String error');
 
       const event = createValidLeaseRequestedEvent();
-      const result = await handler(event, mockContext);
+      await expect(handler(event, mockContext)).rejects.toThrow('String error');
 
-      expect(result.statusCode).toBe(500);
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'Failed to emit LeaseApproved event for escalated request',
-        expect.objectContaining({
-          error: 'String error',
-        })
-      );
+      expect(mockEmitLeaseEscalated).toHaveBeenCalled();
     });
 
     it('should return 500 for denied decision (not yet implemented)', async () => {
@@ -511,7 +509,150 @@ describe('handler', () => {
       expect(mockEmitLeaseApproved).toHaveBeenCalledWith(
         expect.objectContaining({
           approvedBy: 'approver-service@system',
-          reason: 'Stub approval - scoring not implemented',
+          reason: 'Auto-approved',
+        })
+      );
+    });
+
+    it('should still throw when emitLeaseEscalated fails', async () => {
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.ERROR,
+          success: false,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            error: {
+              message: 'Validation failed',
+              code: 'VALIDATION_ERROR',
+              state: ApprovalState.VALIDATING,
+            },
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+      // Mock emitLeaseEscalated to fail
+      mockEmitLeaseEscalated.mockRejectedValueOnce(new Error('Escalation failed'));
+
+      const event = createValidLeaseRequestedEvent();
+      await expect(handler(event, mockContext)).rejects.toThrow('Validation failed');
+
+      // Should log the failure to emit LeaseEscalated
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to emit LeaseEscalated event',
+        expect.objectContaining({
+          error: 'Escalation failed',
+          leaseId: '123e4567-e89b-12d3-a456-426614174000',
+          userEmail: 'user@example.gov.uk',
+        })
+      );
+    });
+
+    it('should handle non-Error exceptions when emitLeaseEscalated fails', async () => {
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.ERROR,
+          success: false,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            error: {
+              message: 'Validation failed',
+              code: 'VALIDATION_ERROR',
+              state: ApprovalState.VALIDATING,
+            },
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+      // Mock emitLeaseEscalated to fail with a non-Error value
+      mockEmitLeaseEscalated.mockRejectedValueOnce('String error from EventBridge');
+
+      const event = createValidLeaseRequestedEvent();
+      await expect(handler(event, mockContext)).rejects.toThrow('Validation failed');
+
+      // Should log the failure to emit LeaseEscalated with stringified error
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to emit LeaseEscalated event',
+        expect.objectContaining({
+          error: 'String error from EventBridge',
+          leaseId: '123e4567-e89b-12d3-a456-426614174000',
+          userEmail: 'user@example.gov.uk',
+        })
+      );
+    });
+
+    it('should handle state machine error with missing message and code', async () => {
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.ERROR,
+          success: false,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            error: {
+              // Missing message and code - tests null coalescing on lines 221-222
+              state: ApprovalState.VALIDATING,
+            },
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      await expect(handler(event, mockContext)).rejects.toThrow('Unknown error');
+
+      // Should emit LeaseEscalated with default error code
+      expect(mockEmitLeaseEscalated).toHaveBeenCalledWith({
+        leaseId: '123e4567-e89b-12d3-a456-426614174000',
+        userEmail: 'user@example.gov.uk',
+        reason: 'State machine error: Unknown error',
+        errorCode: 'UNKNOWN_ERROR',
+        score: 0,
+      });
+    });
+
+    it('should log ALLOW-LIST-OVERRIDE when allow-listed user is approved', async () => {
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'chris.nesbitt-smith@dsit.gov.uk',
+            templateId: 'web-hosting',
+            score: 0,
+            decision: 'approved',
+            approvedBy: 'approver-service@system',
+            reason: 'ALLOW-LIST-OVERRIDE',
+            allowListOverride: true,
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createMockEvent('LeaseRequested', {
+        leaseId: {
+          userEmail: 'chris.nesbitt-smith@dsit.gov.uk',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+        },
+        templateId: 'web-hosting',
+        budgetAmount: 50,
+        leaseDurationHours: 48,
+        requiresManualApproval: false,
+      });
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'ALLOW-LIST-OVERRIDE applied',
+        expect.objectContaining({
+          action: 'approved',
+          allowListOverride: true,
         })
       );
     });
