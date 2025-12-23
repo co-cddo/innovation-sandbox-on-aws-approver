@@ -10,7 +10,6 @@
 export const ALLOW_LIST_EMAILS: ReadonlyArray<string> = [
   'chris.nesbitt-smith@digital.cabinet-office.gov.uk',
   'chris.nesbitt-smith@dsit.gov.uk',
-  'ndx+test@dsit.gov.uk',
   'benjamin.bennett@dsit.gov.uk',
   'dimitris.perdikou@dsit.gov.uk',
   'edward.mccutcheon@dsit.gov.uk',
