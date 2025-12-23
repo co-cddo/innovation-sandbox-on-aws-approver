@@ -35,12 +35,12 @@ export const DEFAULT_CONFIG: ApproverConfig = {
   businessHoursEnd: 19,
   businessHoursTz: 'Europe/London',
   isbConsoleUrl: 'https://isb-console.example.com', // Will be updated from AppConfig
-  isbLeasesTableName: 'InnovationSandboxData-Leases', // Cross-stack reference
-  isbAccountsTableName: 'InnovationSandboxData-SandboxAccounts', // Cross-stack reference
+  isbLeasesTableName: 'ndx-try-isb-data-LeaseTable473C6DF2-1RC3238PVASE1',
+  isbAccountsTableName: 'ndx-try-isb-data-SandboxAccountTableEFB9C069-198TPLJI6Z9KV',
   isbLeasesLambdaName: 'ISB-LeasesLambdaFunction-ndx', // Cross-stack reference
   slackWebhookSecretArn:
     'arn:aws:secretsmanager:us-west-2:568672915267:secret:/approver/slack-webhook-url-FXJl1d',
-  bedrockModelId: 'amazon.nova-micro-v1:0',
+  bedrockModelId: 'us.amazon.nova-micro-v1:0', // Inference profile for on-demand throughput
   logLevel: 'INFO',
   ruleWeights: JSON.stringify({
     expiredLeases: 2,

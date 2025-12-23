@@ -36,7 +36,7 @@ export class ApproverLambda extends Construct {
         ISB_ACCOUNTS_TABLE_NAME: config.isbAccountsTableName,
         IDEMPOTENCY_TABLE_NAME: idempotencyTableName,
         DELAY_QUEUE_URL: delayQueueUrl,
-        DOMAIN_LIST_BUCKET: domainListBucketName,
+        DOMAIN_ALLOWLIST_BUCKET: domainListBucketName,
         SLACK_WEBHOOK_SECRET_ARN: config.slackWebhookSecretArn,
         BEDROCK_MODEL_ID: config.bedrockModelId,
         LOG_LEVEL: config.logLevel,
@@ -49,12 +49,17 @@ export class ApproverLambda extends Construct {
       tracing: lambda.Tracing.ACTIVE,
     });
 
-    // Grant Bedrock invoke permissions for Nova Micro
+    // Grant Bedrock invoke permissions for Nova Micro (via inference profile)
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['bedrock:InvokeModel'],
-        resources: [`arn:aws:bedrock:us-west-2::foundation-model/${config.bedrockModelId}`],
+        resources: [
+          // Foundation model ARN
+          'arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-micro-v1:0',
+          // Inference profile ARN (required for on-demand throughput)
+          `arn:aws:bedrock:us-west-2:${cdk.Stack.of(this).account}:inference-profile/${config.bedrockModelId}`,
+        ],
       })
     );
 
@@ -91,11 +96,11 @@ export class ApproverLambda extends Construct {
       })
     );
 
-    // Grant ISB Leases table read/write
+    // Grant ISB Leases table read/write (Scan needed for org history queries)
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:UpdateItem', 'dynamodb:PutItem'],
+        actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan', 'dynamodb:UpdateItem', 'dynamodb:PutItem'],
         resources: [
           `arn:aws:dynamodb:us-west-2:${cdk.Stack.of(this).account}:table/${config.isbLeasesTableName}`,
           `arn:aws:dynamodb:us-west-2:${cdk.Stack.of(this).account}:table/${config.isbLeasesTableName}/index/*`,

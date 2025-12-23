@@ -26,24 +26,27 @@ export type LeaseId = z.infer<typeof LeaseIdSchema>;
 export const LeaseRequestedDetailSchema = z.object({
   // ISB sends leaseId as composite object with userEmail and uuid
   leaseId: LeaseIdSchema,
-  // ISB uses leaseTemplateId, we also accept templateId for flexibility
+  // ISB uses leaseTemplateId or originalLeaseTemplateUuid, we also accept templateId
   leaseTemplateId: z.string().optional(),
+  originalLeaseTemplateUuid: z.string().optional(),
   templateId: z.string().optional(),
-  // Budget and duration may not be in the event - use defaults
-  budgetAmount: z.number().optional().default(100),
-  leaseDurationHours: z.number().optional().default(24),
-  maxSpend: z.number().optional(), // ISB may send maxSpend instead
-  expiresInHours: z.number().optional(), // ISB may send expiresInHours instead
+  // Budget: ISB uses maxSpend
+  budgetAmount: z.number().optional(),
+  maxSpend: z.number().optional(),
+  // Duration: ISB uses leaseDurationInHours (note the "In")
+  leaseDurationHours: z.number().optional(),
+  leaseDurationInHours: z.number().optional(),
+  expiresInHours: z.number().optional(),
   comments: z.string().optional(),
   requiresManualApproval: z.boolean().optional().default(false),
 }).transform((data) => ({
   ...data,
-  // Normalize: prefer leaseTemplateId over templateId, default to 'unknown'
-  templateId: data.leaseTemplateId ?? data.templateId ?? 'unknown',
-  // Normalize: prefer maxSpend over budgetAmount
+  // Normalize template: prefer leaseTemplateId > originalLeaseTemplateUuid > templateId
+  templateId: data.leaseTemplateId ?? data.originalLeaseTemplateUuid ?? data.templateId ?? 'unknown',
+  // Normalize budget: prefer maxSpend over budgetAmount (default 100)
   budgetAmount: data.maxSpend ?? data.budgetAmount ?? 100,
-  // Normalize: prefer expiresInHours over leaseDurationHours
-  leaseDurationHours: data.expiresInHours ?? data.leaseDurationHours ?? 24,
+  // Normalize duration: prefer leaseDurationInHours > expiresInHours > leaseDurationHours (default 24)
+  leaseDurationHours: data.leaseDurationInHours ?? data.expiresInHours ?? data.leaseDurationHours ?? 24,
 }));
 
 export type LeaseRequestedDetail = z.infer<typeof LeaseRequestedDetailSchema>;

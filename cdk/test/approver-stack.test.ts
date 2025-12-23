@@ -49,7 +49,7 @@ describe('ApproverStack', () => {
             BUSINESS_HOURS_START: '7',
             BUSINESS_HOURS_END: '19',
             BUSINESS_HOURS_TZ: 'Europe/London',
-            BEDROCK_MODEL_ID: 'amazon.nova-micro-v1:0',
+            BEDROCK_MODEL_ID: 'us.amazon.nova-micro-v1:0',
             LOG_LEVEL: 'INFO',
           }),
         },
@@ -161,14 +161,19 @@ describe('ApproverStack', () => {
   });
 
   describe('IAM Policies - Least Privilege', () => {
-    it('grants Bedrock invoke for Nova Micro model', () => {
+    it('grants Bedrock invoke for Nova Micro model with inference profile', () => {
       template.hasResourceProperties('AWS::IAM::Policy', {
         PolicyDocument: {
           Statement: Match.arrayWith([
             Match.objectLike({
               Action: 'bedrock:InvokeModel',
               Effect: 'Allow',
-              Resource: Match.stringLikeRegexp('.*foundation-model/amazon.nova-micro.*'),
+              Resource: Match.arrayWith([
+                // Foundation model ARN
+                Match.stringLikeRegexp('.*foundation-model/amazon.nova-micro.*'),
+                // Inference profile ARN (required for on-demand throughput)
+                Match.stringLikeRegexp('.*inference-profile/us.amazon.nova-micro.*'),
+              ]),
             }),
           ]),
         },
