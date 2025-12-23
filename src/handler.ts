@@ -177,9 +177,7 @@ let sqsService: SQSService | undefined = sqsConfig.queueUrl
   : undefined;
 
 // Bank holiday service for business hours checking
-let bankHolidayService: BankHolidayService = createBankHolidayService(
-  logger as unknown as import('./services/bank-holidays.js').BankHolidayLogger
-);
+let bankHolidayService: BankHolidayService = createBankHolidayService();
 
 // Business hours checker (uses bank holiday service)
 let businessHoursChecker = createBusinessHoursChecker(bankHolidayService);
@@ -354,9 +352,7 @@ export const setBankHolidayService = (service: BankHolidayService): void => {
  * Resets to the default bank holiday service (for test cleanup).
  */
 export const resetBankHolidayService = (): void => {
-  bankHolidayService = createBankHolidayService(
-    logger as unknown as import('./services/bank-holidays.js').BankHolidayLogger
-  );
+  bankHolidayService = createBankHolidayService();
   businessHoursChecker = createBusinessHoursChecker(bankHolidayService);
 };
 

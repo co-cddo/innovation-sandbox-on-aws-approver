@@ -40,7 +40,7 @@ function parseICS(icsContent: string): Set<string> {
   for (const line of lines) {
     // Match DTSTART with VALUE=DATE format
     const match = line.match(/^DTSTART(?:;VALUE=DATE)?:(\d{8})/);
-    if (match) {
+    if (match?.[1]) {
       const dateStr = match[1];
       // Convert YYYYMMDD to YYYY-MM-DD
       const formatted = `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`;

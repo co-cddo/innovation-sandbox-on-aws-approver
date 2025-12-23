@@ -33,6 +33,8 @@ export interface BusinessHoursResult {
   isBankHoliday: boolean;
   /** If outside business hours, next processing time */
   nextProcessingTime?: string;
+  /** Date string in YYYY-MM-DD format (for holiday checking) */
+  dateString?: string;
 }
 
 const DEFAULT_CONFIG: BusinessHoursConfig = {
@@ -124,7 +126,10 @@ export function getNextBusinessHoursStart(
     if (isWeekday(nextTime.dayOfWeek) && !bankHolidays.has(nextTime.dateString)) {
       // Found a business day - set to start hour
       // Create a new date at the start hour in London time
-      const [year, month, day] = nextTime.dateString.split('-').map(Number);
+      const dateParts = nextTime.dateString.split('-').map(Number);
+      const year = dateParts[0] ?? 2025;
+      const month = dateParts[1] ?? 1;
+      const day = dateParts[2] ?? 1;
       const nextStart = new Date(Date.UTC(year, month - 1, day, config.startHour, 0, 0, 0));
       return nextStart;
     }
@@ -173,6 +178,7 @@ export async function checkBusinessHours(
     dayOfWeek,
     isBankHoliday,
     nextProcessingTime,
+    dateString,
   };
 }
 
