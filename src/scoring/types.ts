@@ -6,6 +6,21 @@
  */
 
 /**
+ * ISB Lease Status values from the ISB integration reference.
+ * These are the actual values stored in the ISB DynamoDB Leases table.
+ */
+export type LeaseStatus =
+  | 'PendingApproval'
+  | 'ApprovalDenied'
+  | 'Active'
+  | 'Frozen'
+  | 'Expired'
+  | 'BudgetExceeded'
+  | 'ManuallyTerminated'
+  | 'AccountQuarantined'
+  | 'Ejected';
+
+/**
  * All 16 rule identifiers as a const array for iteration and validation.
  */
 export const RULE_IDS = [
@@ -69,18 +84,21 @@ export const DEFAULT_RULE_WEIGHTS: RuleWeights = {
 
 /**
  * Historical lease record for scoring context.
+ * Matches the ISB DynamoDB Leases table schema.
  */
 export interface LeaseHistoryRecord {
-  /** Lease UUID */
-  leaseId: string;
-  /** Lease status */
-  status: 'Completed' | 'Expired' | 'BudgetExceeded' | 'Active' | 'Terminated';
-  /** Template used for this lease */
-  templateId: string;
-  /** When the lease ended (if ended) */
-  endedAt?: Date;
-  /** Whether user terminated early */
-  terminatedEarly: boolean;
+  /** Lease UUID (sort key in DynamoDB) */
+  uuid: string;
+  /** User email (partition key in DynamoDB) */
+  userEmail: string;
+  /** Lease status (ISB status values) */
+  status: LeaseStatus;
+  /** Template UUID used for this lease */
+  originalLeaseTemplateUuid: string;
+  /** When the lease was created (ISO datetime string) */
+  created: string;
+  /** When the lease ended (ISO datetime string, for terminal states) */
+  endDate?: string;
 }
 
 /**
@@ -114,19 +132,19 @@ export interface ScoringContext {
   /** Timestamp of the request */
   requestTimestamp: Date;
 
-  // From user history (may be empty - stub in Story 2.3)
+  // From user history (populated in Story 3.1 via DynamoDB query)
   /** User's lease history for last 30-90 days */
   userLeaseHistory: LeaseHistoryRecord[];
 
-  // From org history (may be empty - stub in Story 2.3)
+  // From org history (populated in Story 3.2 via domain-based query)
   /** Organization (domain) lease history */
   orgLeaseHistory: LeaseHistoryRecord[];
 
-  // From domain verification (always false in Story 2.3)
+  // From domain verification (populated in Story 3.3 via S3 cache)
   /** Whether domain is in verified gov domains list */
   isVerifiedGovDomain: boolean;
 
-  // From AI analysis (undefined in Story 2.3)
+  // From AI analysis (populated in Story 3.4 via Bedrock)
   /** AI analysis of email/domain - only available in Epic 3+ */
   aiAnalysis?: AIAnalysisResult;
 }

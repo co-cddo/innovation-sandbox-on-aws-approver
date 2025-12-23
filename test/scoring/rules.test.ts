@@ -1,6 +1,8 @@
 /**
  * Tests for individual scoring rules.
  * Each rule is a pure function tested in isolation.
+ *
+ * Uses ISB DynamoDB schema format for lease history records.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -22,7 +24,7 @@ import {
   groupMailboxDetectedRule,
   ALL_RULES,
 } from '../../src/scoring/rules.js';
-import { createScoringContext, type ScoringContext } from '../../src/scoring/types.js';
+import { createScoringContext, type ScoringContext, type LeaseHistoryRecord } from '../../src/scoring/types.js';
 
 // Helper to create a base context
 const createBaseContext = (overrides: Partial<ScoringContext> = {}): ScoringContext =>
@@ -35,6 +37,19 @@ const createBaseContext = (overrides: Partial<ScoringContext> = {}): ScoringCont
     requestTimestamp: new Date('2025-01-15T14:00:00Z'),
     ...overrides,
   });
+
+/**
+ * Helper to create a lease history record matching ISB schema.
+ * Defaults to a recent lease (within 30 days of the default requestTimestamp).
+ */
+const createLease = (overrides: Partial<LeaseHistoryRecord> = {}): LeaseHistoryRecord => ({
+  uuid: 'test-lease-uuid',
+  userEmail: 'user@example.gov.uk',
+  status: 'Active',
+  originalLeaseTemplateUuid: 'web-hosting',
+  created: '2025-01-10T10:00:00Z', // Recent (within 30 days of Jan 15)
+  ...overrides,
+});
 
 describe('scoring rules', () => {
   describe('ALL_RULES array', () => {
@@ -52,7 +67,7 @@ describe('scoring rules', () => {
     it('should return 0 points when no expired leases', () => {
       const context = createBaseContext({
         userLeaseHistory: [
-          { leaseId: 'old-1', status: 'Completed', templateId: 'web', terminatedEarly: false },
+          createLease({ uuid: 'old-1', status: 'Active' }),
         ],
       });
       const result = expiredLeasesRule(context, 2);
@@ -60,15 +75,28 @@ describe('scoring rules', () => {
       expect(result.triggered).toBe(false);
     });
 
-    it('should return weight * count for expired leases', () => {
+    it('should return weight * count for expired leases in last 30 days', () => {
       const context = createBaseContext({
         userLeaseHistory: [
-          { leaseId: 'exp-1', status: 'Expired', templateId: 'web', terminatedEarly: false },
-          { leaseId: 'exp-2', status: 'Expired', templateId: 'data', terminatedEarly: false },
+          createLease({ uuid: 'exp-1', status: 'Expired', created: '2025-01-05T10:00:00Z' }),
+          createLease({ uuid: 'exp-2', status: 'Expired', created: '2025-01-08T10:00:00Z' }),
         ],
       });
       const result = expiredLeasesRule(context, 2);
       expect(result.points).toBe(4); // 2 * 2
+      expect(result.triggered).toBe(true);
+    });
+
+    it('should exclude expired leases older than 30 days', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        userLeaseHistory: [
+          createLease({ uuid: 'exp-old', status: 'Expired', created: '2024-12-01T10:00:00Z' }), // 45 days ago
+          createLease({ uuid: 'exp-recent', status: 'Expired', created: '2025-01-05T10:00:00Z' }), // 10 days ago
+        ],
+      });
+      const result = expiredLeasesRule(context, 2);
+      expect(result.points).toBe(2); // Only 1 recent expired lease
       expect(result.triggered).toBe(true);
     });
 
@@ -84,7 +112,7 @@ describe('scoring rules', () => {
     it('should return 0 points when no budget exceeded leases', () => {
       const context = createBaseContext({
         userLeaseHistory: [
-          { leaseId: 'old-1', status: 'Completed', templateId: 'web', terminatedEarly: false },
+          createLease({ uuid: 'old-1', status: 'Active' }),
         ],
       });
       const result = budgetExceededRule(context, 5);
@@ -92,15 +120,27 @@ describe('scoring rules', () => {
       expect(result.triggered).toBe(false);
     });
 
-    it('should return weight * count for budget exceeded leases', () => {
+    it('should return weight * count for budget exceeded leases in last 30 days', () => {
       const context = createBaseContext({
         userLeaseHistory: [
-          { leaseId: 'be-1', status: 'BudgetExceeded', templateId: 'web', terminatedEarly: false },
+          createLease({ uuid: 'be-1', status: 'BudgetExceeded', created: '2025-01-10T10:00:00Z' }),
         ],
       });
       const result = budgetExceededRule(context, 5);
       expect(result.points).toBe(5);
       expect(result.triggered).toBe(true);
+    });
+
+    it('should exclude budget exceeded leases older than 30 days', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        userLeaseHistory: [
+          createLease({ uuid: 'be-old', status: 'BudgetExceeded', created: '2024-12-01T10:00:00Z' }), // 45 days ago
+        ],
+      });
+      const result = budgetExceededRule(context, 5);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
     });
   });
 
@@ -115,7 +155,7 @@ describe('scoring rules', () => {
     it('should return 0 for user with history', () => {
       const context = createBaseContext({
         userLeaseHistory: [
-          { leaseId: 'old-1', status: 'Completed', templateId: 'web', terminatedEarly: false },
+          createLease({ uuid: 'old-1', status: 'Active' }),
         ],
       });
       const result = firstTimeUserRule(context, 5);
@@ -146,7 +186,7 @@ describe('scoring rules', () => {
     it('should return 0 for returning user even with group mailbox', () => {
       const context = createBaseContext({
         userLeaseHistory: [
-          { leaseId: 'old', status: 'Completed', templateId: 'web', terminatedEarly: false },
+          createLease({ uuid: 'old', status: 'Active' }),
         ],
         aiAnalysis: { isGroupMailbox: true, isOutsideTargetAudience: false, confidence: 0.9 },
       });
@@ -177,7 +217,20 @@ describe('scoring rules', () => {
       const context = createBaseContext({
         templateId: 'web-hosting',
         userLeaseHistory: [
-          { leaseId: 'old', status: 'Completed', templateId: 'web-hosting', terminatedEarly: false },
+          // Successful statuses: Active, Expired, ManuallyTerminated
+          createLease({ uuid: 'old', status: 'Expired', originalLeaseTemplateUuid: 'web-hosting' }),
+        ],
+      });
+      const result = familiarTemplateRule(context, -1);
+      expect(result.points).toBe(-1);
+      expect(result.triggered).toBe(true);
+    });
+
+    it('should return bonus for ManuallyTerminated lease with same template', () => {
+      const context = createBaseContext({
+        templateId: 'web-hosting',
+        userLeaseHistory: [
+          createLease({ uuid: 'old', status: 'ManuallyTerminated', originalLeaseTemplateUuid: 'web-hosting' }),
         ],
       });
       const result = familiarTemplateRule(context, -1);
@@ -189,7 +242,7 @@ describe('scoring rules', () => {
       const context = createBaseContext({
         templateId: 'web-hosting',
         userLeaseHistory: [
-          { leaseId: 'old', status: 'Completed', templateId: 'data-science', terminatedEarly: false },
+          createLease({ uuid: 'old', status: 'Expired', originalLeaseTemplateUuid: 'data-science' }),
         ],
       });
       const result = familiarTemplateRule(context, -1);
@@ -203,6 +256,18 @@ describe('scoring rules', () => {
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
     });
+
+    it('should not count BudgetExceeded as successful template use', () => {
+      const context = createBaseContext({
+        templateId: 'web-hosting',
+        userLeaseHistory: [
+          createLease({ uuid: 'old', status: 'BudgetExceeded', originalLeaseTemplateUuid: 'web-hosting' }),
+        ],
+      });
+      const result = familiarTemplateRule(context, -1);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
+    });
   });
 
   describe('Rule 7: template_hopper', () => {
@@ -210,9 +275,9 @@ describe('scoring rules', () => {
       const context = createBaseContext({
         templateId: 'template-4',
         userLeaseHistory: [
-          { leaseId: '1', status: 'Completed', templateId: 'template-1', terminatedEarly: false },
-          { leaseId: '2', status: 'Completed', templateId: 'template-2', terminatedEarly: false },
-          { leaseId: '3', status: 'Completed', templateId: 'template-3', terminatedEarly: false },
+          createLease({ uuid: '1', originalLeaseTemplateUuid: 'template-1' }),
+          createLease({ uuid: '2', originalLeaseTemplateUuid: 'template-2' }),
+          createLease({ uuid: '3', originalLeaseTemplateUuid: 'template-3' }),
         ],
       });
       const result = templateHopperRule(context, 2);
@@ -224,9 +289,9 @@ describe('scoring rules', () => {
       const context = createBaseContext({
         templateId: 'template-1', // Repeating
         userLeaseHistory: [
-          { leaseId: '1', status: 'Completed', templateId: 'template-1', terminatedEarly: false },
-          { leaseId: '2', status: 'Completed', templateId: 'template-2', terminatedEarly: false },
-          { leaseId: '3', status: 'Completed', templateId: 'template-3', terminatedEarly: false },
+          createLease({ uuid: '1', originalLeaseTemplateUuid: 'template-1' }),
+          createLease({ uuid: '2', originalLeaseTemplateUuid: 'template-2' }),
+          createLease({ uuid: '3', originalLeaseTemplateUuid: 'template-3' }),
         ],
       });
       const result = templateHopperRule(context, 2);
@@ -237,8 +302,8 @@ describe('scoring rules', () => {
     it('should return 0 for fewer than 3 leases', () => {
       const context = createBaseContext({
         userLeaseHistory: [
-          { leaseId: '1', status: 'Completed', templateId: 'template-1', terminatedEarly: false },
-          { leaseId: '2', status: 'Completed', templateId: 'template-2', terminatedEarly: false },
+          createLease({ uuid: '1', originalLeaseTemplateUuid: 'template-1' }),
+          createLease({ uuid: '2', originalLeaseTemplateUuid: 'template-2' }),
         ],
       });
       const result = templateHopperRule(context, 2);
@@ -333,12 +398,11 @@ describe('scoring rules', () => {
   });
 
   describe('Rule 11: cooldown_violation', () => {
-    it('should return weight for request within 1hr of previous lease end', () => {
-      const previousEnd = new Date('2025-01-15T13:30:00Z');
+    it('should return weight for request within 1hr of previous lease creation', () => {
       const context = createBaseContext({
-        requestTimestamp: new Date('2025-01-15T14:00:00Z'), // 30 min later
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'), // Request time
         userLeaseHistory: [
-          { leaseId: 'prev', status: 'Completed', templateId: 'web', endedAt: previousEnd, terminatedEarly: false },
+          createLease({ uuid: 'prev', created: '2025-01-15T13:30:00Z' }), // 30 min before request
         ],
       });
       const result = cooldownViolationRule(context, 10);
@@ -347,11 +411,10 @@ describe('scoring rules', () => {
     });
 
     it('should return 0 when more than 1hr since last lease', () => {
-      const previousEnd = new Date('2025-01-15T12:00:00Z');
       const context = createBaseContext({
-        requestTimestamp: new Date('2025-01-15T14:00:00Z'), // 2 hours later
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'), // Request time
         userLeaseHistory: [
-          { leaseId: 'prev', status: 'Completed', templateId: 'web', endedAt: previousEnd, terminatedEarly: false },
+          createLease({ uuid: 'prev', created: '2025-01-15T12:00:00Z' }), // 2 hours before request
         ],
       });
       const result = cooldownViolationRule(context, 10);
@@ -366,15 +429,13 @@ describe('scoring rules', () => {
       expect(result.triggered).toBe(false);
     });
 
-    it('should find most recent lease from multiple ended leases', () => {
-      const olderEnd = new Date('2025-01-15T12:00:00Z');
-      const newerEnd = new Date('2025-01-15T13:30:00Z');
+    it('should find most recent lease from multiple leases', () => {
       const context = createBaseContext({
-        requestTimestamp: new Date('2025-01-15T14:00:00Z'), // 30 min after newer
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
         userLeaseHistory: [
-          // Older lease listed first - tests the reduce finding the newer one
-          { leaseId: 'older', status: 'Completed', templateId: 'web', endedAt: olderEnd, terminatedEarly: false },
-          { leaseId: 'newer', status: 'Completed', templateId: 'data', endedAt: newerEnd, terminatedEarly: false },
+          // Older lease listed first - tests the sort finding the newer one
+          createLease({ uuid: 'older', created: '2025-01-15T12:00:00Z' }),
+          createLease({ uuid: 'newer', created: '2025-01-15T13:30:00Z' }),
         ],
       });
       const result = cooldownViolationRule(context, 10);
@@ -383,14 +444,12 @@ describe('scoring rules', () => {
     });
 
     it('should check against most recent even when newest is first in list', () => {
-      const newerEnd = new Date('2025-01-15T13:30:00Z');
-      const olderEnd = new Date('2025-01-15T12:00:00Z');
       const context = createBaseContext({
-        requestTimestamp: new Date('2025-01-15T14:00:00Z'), // 30 min after newer
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
         userLeaseHistory: [
           // Newer lease listed first
-          { leaseId: 'newer', status: 'Completed', templateId: 'data', endedAt: newerEnd, terminatedEarly: false },
-          { leaseId: 'older', status: 'Completed', templateId: 'web', endedAt: olderEnd, terminatedEarly: false },
+          createLease({ uuid: 'newer', created: '2025-01-15T13:30:00Z' }),
+          createLease({ uuid: 'older', created: '2025-01-15T12:00:00Z' }),
         ],
       });
       const result = cooldownViolationRule(context, 10);
@@ -428,11 +487,12 @@ describe('scoring rules', () => {
   });
 
   describe('Rule 13: manual_early_termination', () => {
-    it('should return bonus for early terminated leases', () => {
+    it('should return bonus for ManuallyTerminated leases in last 90 days', () => {
       const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
         userLeaseHistory: [
-          { leaseId: '1', status: 'Terminated', templateId: 'web', terminatedEarly: true },
-          { leaseId: '2', status: 'Terminated', templateId: 'data', terminatedEarly: true },
+          createLease({ uuid: '1', status: 'ManuallyTerminated', created: '2025-01-01T10:00:00Z' }),
+          createLease({ uuid: '2', status: 'ManuallyTerminated', created: '2025-01-05T10:00:00Z' }),
         ],
       });
       const result = manualEarlyTerminationRule(context, -2);
@@ -440,10 +500,22 @@ describe('scoring rules', () => {
       expect(result.triggered).toBe(true);
     });
 
-    it('should return 0 when no early terminations', () => {
+    it('should return 0 when no ManuallyTerminated leases', () => {
       const context = createBaseContext({
         userLeaseHistory: [
-          { leaseId: '1', status: 'Completed', templateId: 'web', terminatedEarly: false },
+          createLease({ uuid: '1', status: 'Expired' }),
+        ],
+      });
+      const result = manualEarlyTerminationRule(context, -2);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
+    });
+
+    it('should exclude ManuallyTerminated leases older than 90 days', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        userLeaseHistory: [
+          createLease({ uuid: '1', status: 'ManuallyTerminated', created: '2024-10-01T10:00:00Z' }), // > 90 days ago
         ],
       });
       const result = manualEarlyTerminationRule(context, -2);
@@ -453,10 +525,11 @@ describe('scoring rules', () => {
   });
 
   describe('Rule 14: org_recent_negative', () => {
-    it('should return weight when org has recent negative history', () => {
+    it('should return weight when org has expired lease in last 30 days', () => {
       const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
         orgLeaseHistory: [
-          { leaseId: '1', status: 'Expired', templateId: 'web', terminatedEarly: false },
+          createLease({ uuid: '1', status: 'Expired', created: '2025-01-05T10:00:00Z' }),
         ],
       });
       const result = orgRecentNegativeRule(context, 3);
@@ -464,10 +537,23 @@ describe('scoring rules', () => {
       expect(result.triggered).toBe(true);
     });
 
-    it('should return 0 when org has clean history', () => {
+    it('should return weight when org has BudgetExceeded lease in last 30 days', () => {
       const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
         orgLeaseHistory: [
-          { leaseId: '1', status: 'Completed', templateId: 'web', terminatedEarly: false },
+          createLease({ uuid: '1', status: 'BudgetExceeded', created: '2025-01-05T10:00:00Z' }),
+        ],
+      });
+      const result = orgRecentNegativeRule(context, 3);
+      expect(result.points).toBe(3);
+      expect(result.triggered).toBe(true);
+    });
+
+    it('should return 0 when org has clean history in last 30 days', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          createLease({ uuid: '1', status: 'Active', created: '2025-01-05T10:00:00Z' }),
         ],
       });
       const result = orgRecentNegativeRule(context, 3);
@@ -477,6 +563,18 @@ describe('scoring rules', () => {
 
     it('should return 0 when no org history', () => {
       const context = createBaseContext({ orgLeaseHistory: [] });
+      const result = orgRecentNegativeRule(context, 3);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
+    });
+
+    it('should exclude negative history older than 30 days', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          createLease({ uuid: '1', status: 'Expired', created: '2024-12-01T10:00:00Z' }), // > 30 days ago
+        ],
+      });
       const result = orgRecentNegativeRule(context, 3);
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
@@ -484,11 +582,12 @@ describe('scoring rules', () => {
   });
 
   describe('Rule 15: org_clean_record', () => {
-    it('should return bonus when org has clean record (all completed)', () => {
+    it('should return bonus when org has clean record in last 90 days', () => {
       const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
         orgLeaseHistory: [
-          { leaseId: '1', status: 'Completed', templateId: 'web', terminatedEarly: false },
-          { leaseId: '2', status: 'Completed', templateId: 'data', terminatedEarly: false },
+          createLease({ uuid: '1', status: 'Active', created: '2025-01-01T10:00:00Z' }),
+          createLease({ uuid: '2', status: 'Expired', created: '2024-12-15T10:00:00Z' }),
         ],
       });
       const result = orgCleanRecordRule(context, -2);
@@ -496,11 +595,24 @@ describe('scoring rules', () => {
       expect(result.triggered).toBe(true);
     });
 
-    it('should return 0 when org has any negative history', () => {
+    it('should return bonus for ManuallyTerminated as clean', () => {
       const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
         orgLeaseHistory: [
-          { leaseId: '1', status: 'Completed', templateId: 'web', terminatedEarly: false },
-          { leaseId: '2', status: 'Expired', templateId: 'data', terminatedEarly: false },
+          createLease({ uuid: '1', status: 'ManuallyTerminated', created: '2025-01-01T10:00:00Z' }),
+        ],
+      });
+      const result = orgCleanRecordRule(context, -2);
+      expect(result.points).toBe(-2);
+      expect(result.triggered).toBe(true);
+    });
+
+    it('should return 0 when org has BudgetExceeded in last 90 days', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          createLease({ uuid: '1', status: 'Active', created: '2025-01-01T10:00:00Z' }),
+          createLease({ uuid: '2', status: 'BudgetExceeded', created: '2024-12-15T10:00:00Z' }),
         ],
       });
       const result = orgCleanRecordRule(context, -2);
@@ -513,6 +625,19 @@ describe('scoring rules', () => {
       const result = orgCleanRecordRule(context, -2);
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
+    });
+
+    it('should ignore history older than 90 days', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          createLease({ uuid: '1', status: 'BudgetExceeded', created: '2024-09-01T10:00:00Z' }), // > 90 days ago
+          createLease({ uuid: '2', status: 'Active', created: '2025-01-01T10:00:00Z' }), // Recent
+        ],
+      });
+      const result = orgCleanRecordRule(context, -2);
+      expect(result.points).toBe(-2); // Only recent history counts
+      expect(result.triggered).toBe(true);
     });
   });
 

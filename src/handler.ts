@@ -1,5 +1,7 @@
 import { EventBridgeClient } from '@aws-sdk/client-eventbridge';
 import { LambdaClient } from '@aws-sdk/client-lambda';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 // makeIdempotent import prepared for future full integration (Story 2.4 deferred handler wrapping)
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { makeIdempotent as _makeIdempotent } from '@aws-lambda-powertools/idempotency';
@@ -7,6 +9,8 @@ import { logger } from './lib/logger.js';
 import { LeaseRequestedEventSchema, type LeaseRequestedEvent } from './lib/types.js';
 import { createEventBridgeService, type EventBridgeService } from './services/eventbridge.js';
 import { createIsbLambdaService, type IsbLambdaService } from './services/isb-lambda.js';
+import { createDynamoDBService, type DynamoDBService } from './services/dynamodb.js';
+import type { LeaseHistoryRecord } from './scoring/types.js';
 import {
   createPersistenceLayer,
   createIdempotencyConfig,
@@ -74,6 +78,22 @@ const isbLambdaConfig = {
 
 // Create ISB Lambda service (can be overridden in tests via dependency injection)
 let isbLambdaService: IsbLambdaService = createIsbLambdaService(lambdaClient, isbLambdaConfig);
+
+// DynamoDB client for user history queries (ISB Leases table)
+const dynamoDBClient = new DynamoDBClient({
+  region: process.env.AWS_REGION || 'us-west-2',
+});
+const dynamoDBDocClient = DynamoDBDocumentClient.from(dynamoDBClient);
+
+// DynamoDB service configuration
+const dynamoDBConfig = {
+  tableName: process.env.ISB_LEASES_TABLE_NAME || '',
+};
+
+// Create DynamoDB service (can be overridden in tests via dependency injection)
+let dynamoDBService: DynamoDBService | undefined = dynamoDBConfig.tableName
+  ? createDynamoDBService(dynamoDBDocClient, dynamoDBConfig)
+  : undefined;
 
 // State machine configuration
 const stateMachineConfig: StateMachineConfig = {
@@ -145,6 +165,22 @@ export const resetIsbLambdaService = (): void => {
 };
 
 /**
+ * Allows overriding the DynamoDB service for testing purposes.
+ */
+export const setDynamoDBService = (service: DynamoDBService | undefined): void => {
+  dynamoDBService = service;
+};
+
+/**
+ * Resets to the default DynamoDB service (for test cleanup).
+ */
+export const resetDynamoDBService = (): void => {
+  dynamoDBService = dynamoDBConfig.tableName
+    ? createDynamoDBService(dynamoDBDocClient, dynamoDBConfig)
+    : undefined;
+};
+
+/**
  * Allows overriding the state machine orchestrator for testing purposes.
  */
 export const setOrchestrator = (newOrchestrator: StateMachineOrchestrator): void => {
@@ -162,9 +198,42 @@ export const resetOrchestrator = (): void => {
 };
 
 /**
+ * Queries user lease history from DynamoDB with pessimistic fallback on error.
+ * If DynamoDB is not configured or query fails, returns empty array (pessimistic fallback).
+ */
+const queryUserHistory = async (userEmail: string): Promise<LeaseHistoryRecord[]> => {
+  if (!dynamoDBService) {
+    logger.warn('DynamoDB service not configured - using pessimistic fallback', {
+      userEmail,
+    });
+    return [];
+  }
+
+  try {
+    const history = await dynamoDBService.getUserLeaseHistory(userEmail);
+    logger.info('User history retrieved', {
+      userEmail,
+      leaseCount: history.length,
+    });
+    return history;
+  } catch (error) {
+    // Log error but use pessimistic fallback (empty history)
+    // This triggers first_time_user penalty and skips bonuses
+    logger.error('Failed to query user history - using pessimistic fallback', {
+      error: error instanceof Error ? error.message : String(error),
+      userEmail,
+    });
+    return [];
+  }
+};
+
+/**
  * Prepares the initial state context from a validated event.
  */
-const prepareContext = (event: LeaseRequestedEvent): StateContext => {
+const prepareContext = (
+  event: LeaseRequestedEvent,
+  userLeaseHistory: LeaseHistoryRecord[]
+): StateContext => {
   const { detail } = event;
   const { leaseId, templateId, budgetAmount, leaseDurationHours, requiresManualApproval, comments } =
     detail;
@@ -178,6 +247,7 @@ const prepareContext = (event: LeaseRequestedEvent): StateContext => {
     leaseDurationHours,
     requiresManualApproval,
     comments,
+    userLeaseHistory,
   };
 };
 
@@ -285,8 +355,11 @@ export const handler = async (
   let currentScore: number | undefined;
 
   try {
+    // Query user history before running state machine
+    const userLeaseHistory = await queryUserHistory(leaseId.userEmail);
+
     // Prepare context and run state machine
-    const initialContext = prepareContext(validatedEvent);
+    const initialContext = prepareContext(validatedEvent, userLeaseHistory);
     const result = orchestrator.run(ApprovalState.RECEIVED, initialContext);
 
     // Capture score for error handling

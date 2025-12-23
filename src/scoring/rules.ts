@@ -5,20 +5,34 @@
  * Each rule: (context, weight) => ScoringRuleResult
  */
 
-import type { RuleId, ScoringRuleFn } from './types.js';
+import type { RuleId, ScoringRuleFn, LeaseHistoryRecord } from './types.js';
+import { isWithinDays } from '../services/dynamodb.js';
+
+/**
+ * Successful lease statuses that indicate responsible completion.
+ * These include Active (currently running), Expired (ran full duration),
+ * and ManuallyTerminated (user responsibly ended early).
+ */
+const SUCCESSFUL_STATUSES: LeaseHistoryRecord['status'][] = [
+  'Active',
+  'Expired',
+  'ManuallyTerminated',
+];
 
 /**
  * Rule 1: expired_leases
  * +weight for each expired lease in last 30 days
  */
 export const expiredLeasesRule: ScoringRuleFn = (context, weight) => {
-  const expiredCount = context.userLeaseHistory.filter((l) => l.status === 'Expired').length;
+  const expiredCount = context.userLeaseHistory.filter(
+    (l) => l.status === 'Expired' && isWithinDays(l.created, 30, context.requestTimestamp)
+  ).length;
 
   return {
     ruleId: 'expired_leases',
     points: expiredCount * weight,
     triggered: expiredCount > 0,
-    reason: expiredCount > 0 ? `${expiredCount} expired lease(s) in history` : undefined,
+    reason: expiredCount > 0 ? `${expiredCount} expired lease(s) in last 30 days` : undefined,
   };
 };
 
@@ -27,13 +41,15 @@ export const expiredLeasesRule: ScoringRuleFn = (context, weight) => {
  * +weight for each budget exceeded lease in last 30 days
  */
 export const budgetExceededRule: ScoringRuleFn = (context, weight) => {
-  const exceededCount = context.userLeaseHistory.filter((l) => l.status === 'BudgetExceeded').length;
+  const exceededCount = context.userLeaseHistory.filter(
+    (l) => l.status === 'BudgetExceeded' && isWithinDays(l.created, 30, context.requestTimestamp)
+  ).length;
 
   return {
     ruleId: 'budget_exceeded',
     points: exceededCount * weight,
     triggered: exceededCount > 0,
-    reason: exceededCount > 0 ? `${exceededCount} budget exceeded lease(s)` : undefined,
+    reason: exceededCount > 0 ? `${exceededCount} budget exceeded lease(s) in last 30 days` : undefined,
   };
 };
 
@@ -99,10 +115,13 @@ export const verifiedGovDomainRule: ScoringRuleFn = (context, weight) => {
 /**
  * Rule 6: familiar_template
  * -weight (bonus) for previously used this template successfully
+ * "Successful" means Active, Expired, or ManuallyTerminated (not budget exceeded or denied)
  */
 export const familiarTemplateRule: ScoringRuleFn = (context, weight) => {
   const hasFamiliarTemplate = context.userLeaseHistory.some(
-    (l) => l.templateId === context.templateId && (l.status === 'Completed' || l.status === 'Terminated')
+    (l) =>
+      l.originalLeaseTemplateUuid === context.templateId &&
+      SUCCESSFUL_STATUSES.includes(l.status)
   );
 
   return {
@@ -130,7 +149,7 @@ export const templateHopperRule: ScoringRuleFn = (context, weight) => {
   }
 
   // Check if any template was repeated (including current request)
-  const allTemplates = [...history.map((l) => l.templateId), context.templateId];
+  const allTemplates = [...history.map((l) => l.originalLeaseTemplateUuid), context.templateId];
   const uniqueTemplates = new Set(allTemplates);
   const isHopper = uniqueTemplates.size === allTemplates.length;
 
@@ -202,14 +221,15 @@ export const endOfWindowRule: ScoringRuleFn = (context, weight) => {
 
 /**
  * Rule 11: cooldown_violation
- * +weight if request within 1hr of previous lease end
+ * +weight if request within 1hr of previous lease creation
+ * Uses 'created' timestamp since we want to detect rapid re-requests
  */
 export const cooldownViolationRule: ScoringRuleFn = (context, weight) => {
   const ONE_HOUR_MS = 60 * 60 * 1000;
+  const history = context.userLeaseHistory;
 
-  // Find most recent ended lease
-  const endedLeases = context.userLeaseHistory.filter((l) => l.endedAt);
-  if (endedLeases.length === 0) {
+  // No history means no cooldown violation
+  if (history.length === 0) {
     return {
       ruleId: 'cooldown_violation',
       points: 0,
@@ -217,21 +237,23 @@ export const cooldownViolationRule: ScoringRuleFn = (context, weight) => {
     };
   }
 
-  // Find the most recent end time
-  const mostRecentEnd = endedLeases.reduce((latest, l) => {
-    const endTime = l.endedAt!.getTime();
-    return endTime > latest ? endTime : latest;
-  }, 0);
+  // Find the most recently created lease
+  const sorted = [...history].sort(
+    (a, b) => new Date(b.created).getTime() - new Date(a.created).getTime()
+  );
+  const mostRecent = sorted[0];
 
-  const timeSinceEnd = context.requestTimestamp.getTime() - mostRecentEnd;
-  const isViolation = timeSinceEnd < ONE_HOUR_MS && timeSinceEnd >= 0;
+  // Calculate time since most recent lease creation
+  const mostRecentTime = new Date(mostRecent.created).getTime();
+  const timeSinceCreation = context.requestTimestamp.getTime() - mostRecentTime;
+  const isViolation = timeSinceCreation < ONE_HOUR_MS && timeSinceCreation >= 0;
 
   return {
     ruleId: 'cooldown_violation',
     points: isViolation ? weight : 0,
     triggered: isViolation,
     reason: isViolation
-      ? `Request ${Math.round(timeSinceEnd / 60000)} minutes after previous lease`
+      ? `Request ${Math.round(timeSinceCreation / 60000)} minutes after previous lease`
       : undefined,
   };
 };
@@ -265,10 +287,13 @@ export const outsideTargetAudienceRule: ScoringRuleFn = (context, weight) => {
 
 /**
  * Rule 13: manual_early_termination
- * -weight (bonus) for each early terminated lease (responsible behavior)
+ * -weight (bonus) for each manually terminated lease in last 90 days
+ * ManuallyTerminated indicates responsible behavior (user ended early)
  */
 export const manualEarlyTerminationRule: ScoringRuleFn = (context, weight) => {
-  const earlyTerminationCount = context.userLeaseHistory.filter((l) => l.terminatedEarly).length;
+  const earlyTerminationCount = context.userLeaseHistory.filter(
+    (l) => l.status === 'ManuallyTerminated' && isWithinDays(l.created, 90, context.requestTimestamp)
+  ).length;
 
   // Avoid -0 by using explicit 0 when not triggered
   const points = earlyTerminationCount > 0 ? earlyTerminationCount * weight : 0;
@@ -279,7 +304,7 @@ export const manualEarlyTerminationRule: ScoringRuleFn = (context, weight) => {
     triggered: earlyTerminationCount > 0,
     reason:
       earlyTerminationCount > 0
-        ? `${earlyTerminationCount} early termination(s) (responsible behavior)`
+        ? `${earlyTerminationCount} early termination(s) in last 90 days (responsible behavior)`
         : undefined,
   };
 };
@@ -290,7 +315,9 @@ export const manualEarlyTerminationRule: ScoringRuleFn = (context, weight) => {
  */
 export const orgRecentNegativeRule: ScoringRuleFn = (context, weight) => {
   const hasNegative = context.orgLeaseHistory.some(
-    (l) => l.status === 'Expired' || l.status === 'BudgetExceeded'
+    (l) =>
+      (l.status === 'Expired' || l.status === 'BudgetExceeded') &&
+      isWithinDays(l.created, 30, context.requestTimestamp)
   );
 
   return {
@@ -304,10 +331,16 @@ export const orgRecentNegativeRule: ScoringRuleFn = (context, weight) => {
 /**
  * Rule 15: org_clean_record
  * -weight (bonus) if domain clean for 90 days
+ * "Clean" means all leases in last 90 days are Active, Expired, or ManuallyTerminated
  */
 export const orgCleanRecordRule: ScoringRuleFn = (context, weight) => {
+  // Filter to last 90 days
+  const recentOrgHistory = context.orgLeaseHistory.filter((l) =>
+    isWithinDays(l.created, 90, context.requestTimestamp)
+  );
+
   // Need some history to have a "clean record"
-  if (context.orgLeaseHistory.length === 0) {
+  if (recentOrgHistory.length === 0) {
     return {
       ruleId: 'org_clean_record',
       points: 0,
@@ -315,15 +348,14 @@ export const orgCleanRecordRule: ScoringRuleFn = (context, weight) => {
     };
   }
 
-  const allClean = context.orgLeaseHistory.every(
-    (l) => l.status === 'Completed' || l.status === 'Terminated'
-  );
+  // Check all leases are "clean" (successful statuses)
+  const allClean = recentOrgHistory.every((l) => SUCCESSFUL_STATUSES.includes(l.status));
 
   return {
     ruleId: 'org_clean_record',
     points: allClean ? weight : 0, // weight is negative for bonus
     triggered: allClean,
-    reason: allClean ? 'Organization has clean record' : undefined,
+    reason: allClean ? 'Organization has clean record for 90 days' : undefined,
   };
 };
 

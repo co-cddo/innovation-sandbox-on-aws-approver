@@ -5,9 +5,12 @@ import {
   resetEventBridgeService,
   setIsbLambdaService,
   resetIsbLambdaService,
+  setDynamoDBService,
+  resetDynamoDBService,
   setOrchestrator,
   resetOrchestrator,
 } from '../src/handler.js';
+import type { DynamoDBService } from '../src/services/dynamodb.js';
 import type { EventBridgeEvent, Context } from 'aws-lambda';
 import type { EventBridgeService } from '../src/services/eventbridge.js';
 import type { IsbLambdaService } from '../src/services/isb-lambda.js';
@@ -39,6 +42,18 @@ vi.mock('@aws-sdk/client-lambda', () => ({
     send: vi.fn().mockResolvedValue({}),
   })),
   InvokeCommand: vi.fn(),
+}));
+
+// Mock the DynamoDB client to prevent real AWS calls
+vi.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: vi.fn().mockImplementation(() => ({})),
+}));
+
+vi.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: {
+    from: vi.fn().mockReturnValue({}),
+  },
+  QueryCommand: vi.fn(),
 }));
 
 // Import the mocked logger for assertions
@@ -114,6 +129,7 @@ describe('handler', () => {
     // Reset to avoid affecting other tests
     resetEventBridgeService();
     resetIsbLambdaService();
+    resetDynamoDBService();
     resetOrchestrator();
   });
 
@@ -679,6 +695,118 @@ describe('handler', () => {
         expect.objectContaining({
           action: 'approved',
           allowListOverride: true,
+        })
+      );
+    });
+  });
+
+  describe('DynamoDB user history integration', () => {
+    it('should query user history when DynamoDB service is configured', async () => {
+      const mockHistory = [
+        {
+          uuid: 'lease-1',
+          userEmail: 'user@example.gov.uk',
+          status: 'Expired' as const,
+          originalLeaseTemplateUuid: 'template-1',
+          created: new Date().toISOString(),
+        },
+      ];
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue(mockHistory),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      expect(mockDynamoDBService.getUserLeaseHistory).toHaveBeenCalledWith('user@example.gov.uk');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'User history retrieved',
+        expect.objectContaining({
+          userEmail: 'user@example.gov.uk',
+          leaseCount: 1,
+        })
+      );
+    });
+
+    it('should use pessimistic fallback when DynamoDB service is not configured', async () => {
+      // Set DynamoDB service to undefined to simulate not configured
+      setDynamoDBService(undefined);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed with pessimistic fallback
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'DynamoDB service not configured - using pessimistic fallback',
+        expect.objectContaining({
+          userEmail: 'user@example.gov.uk',
+        })
+      );
+    });
+
+    it('should use pessimistic fallback on DynamoDB query error (AC9)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockRejectedValue(new Error('DynamoDB unavailable')),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed with pessimistic fallback
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to query user history - using pessimistic fallback',
+        expect.objectContaining({
+          error: 'DynamoDB unavailable',
+          userEmail: 'user@example.gov.uk',
+        })
+      );
+    });
+
+    it('should pass user history to state machine context', async () => {
+      const mockHistory = [
+        {
+          uuid: 'lease-1',
+          userEmail: 'user@example.gov.uk',
+          status: 'Active' as const,
+          originalLeaseTemplateUuid: 'web-hosting',
+          created: new Date().toISOString(),
+        },
+      ];
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue(mockHistory),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // Create mock orchestrator to verify context passed
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 0,
+            decision: 'approved',
+            userLeaseHistory: mockHistory,
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      // Verify orchestrator was called with history in context
+      expect(mockOrchestrator.run).toHaveBeenCalledWith(
+        ApprovalState.RECEIVED,
+        expect.objectContaining({
+          userLeaseHistory: mockHistory,
         })
       );
     });

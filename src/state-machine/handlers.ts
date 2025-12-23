@@ -171,9 +171,10 @@ export const createStateHandlers = (
       budgetAmount: context.budgetAmount,
       leaseDurationHours: context.leaseDurationHours,
       requestTimestamp: new Date(), // Use current time for scoring
-      // Stub data sources (Epic 3 adds real data)
-      userLeaseHistory: [],
-      orgLeaseHistory: [],
+      // Real history data from handler (Story 3.1 user, Story 3.2 org)
+      userLeaseHistory: context.userLeaseHistory,
+      orgLeaseHistory: context.orgLeaseHistory,
+      // Stub until implemented (Story 3.3 domain verification, Story 3.4 AI)
       isVerifiedGovDomain: false,
       aiAnalysis: undefined,
     });

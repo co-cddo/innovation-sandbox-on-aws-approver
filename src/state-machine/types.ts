@@ -3,6 +3,8 @@
  * Implements enum-based state machine pattern per architecture.md
  */
 
+import type { LeaseHistoryRecord } from '../scoring/types.js';
+
 /**
  * Approval states for the decision orchestration state machine.
  * Terminal states: APPROVED, DENIED, ESCALATED, ERROR
@@ -107,6 +109,12 @@ export interface StateContext {
   /** Optional comments from requester */
   comments?: string;
 
+  // History data (populated before state machine runs)
+  /** User's lease history for scoring rules */
+  userLeaseHistory: LeaseHistoryRecord[];
+  /** Organization (domain) lease history for org reputation rules */
+  orgLeaseHistory: LeaseHistoryRecord[];
+
   // Processing state (populated during processing)
   /** Calculated risk score */
   score: number;
@@ -179,6 +187,8 @@ export const createInitialContext = (): StateContext => ({
   budgetAmount: 0,
   leaseDurationHours: 0,
   requiresManualApproval: false,
+  userLeaseHistory: [],
+  orgLeaseHistory: [],
   score: 0,
   scoreBreakdown: [],
   stateHistory: [],
