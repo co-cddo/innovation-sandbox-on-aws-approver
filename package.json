@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/handler.js",
   "scripts": {
-    "build": "esbuild src/handler.ts --bundle --platform=node --target=node20 --outdir=dist --format=cjs '--external:@aws-sdk/*' '--external:@aws-lambda-powertools/*'",
+    "build": "esbuild src/handler.ts --bundle --platform=node --target=node20 --outdir=dist --format=cjs '--external:@aws-sdk/*'",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
