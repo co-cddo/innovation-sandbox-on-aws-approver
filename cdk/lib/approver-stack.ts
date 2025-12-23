@@ -7,6 +7,8 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as scheduler from 'aws-cdk-lib/aws-scheduler';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as sns from 'aws-cdk-lib/aws-sns';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -147,6 +149,71 @@ export class ApproverStack extends cdk.Stack {
     });
 
     // ==========================================
+    // CloudWatch Alarms (Story 5.3, NFR-OBS-03)
+    // ==========================================
+
+    // SNS Topic for alarm notifications
+    const alarmTopic = new sns.Topic(this, 'ApproverAlarmTopic', {
+      topicName: 'ApproverAlarms',
+      displayName: 'Approver Service Alarms',
+    });
+
+    // DLQ Depth Alarm - triggers when DLQ has more than 5 messages
+    const dlqDepthAlarm = new cloudwatch.Alarm(this, 'DlqDepthAlarm', {
+      alarmName: 'Approver-DLQ-Depth',
+      alarmDescription: 'DLQ has more than 5 messages - indicates processing failures',
+      metric: delayQueueDlq.metricApproximateNumberOfMessagesVisible({
+        period: cdk.Duration.minutes(5),
+        statistic: 'Maximum',
+      }),
+      threshold: 5,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    dlqDepthAlarm.addAlarmAction(new cdk.aws_cloudwatch_actions.SnsAction(alarmTopic));
+
+    // Lambda Error Rate Alarm - triggers when errors exceed 1% over 5 minutes
+    const errorRateAlarm = new cloudwatch.Alarm(this, 'ErrorRateAlarm', {
+      alarmName: 'Approver-Error-Rate',
+      alarmDescription: 'Lambda error rate exceeded threshold',
+      metric: new cloudwatch.MathExpression({
+        expression: '(errors / invocations) * 100',
+        usingMetrics: {
+          errors: approverLambda.function.metricErrors({
+            period: cdk.Duration.minutes(5),
+            statistic: 'Sum',
+          }),
+          invocations: approverLambda.function.metricInvocations({
+            period: cdk.Duration.minutes(5),
+            statistic: 'Sum',
+          }),
+        },
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    errorRateAlarm.addAlarmAction(new cdk.aws_cloudwatch_actions.SnsAction(alarmTopic));
+
+    // Lambda Duration Alarm - triggers when p95 latency exceeds 5 seconds (NFR-PERF-01)
+    const durationAlarm = new cloudwatch.Alarm(this, 'DurationAlarm', {
+      alarmName: 'Approver-High-Latency',
+      alarmDescription: 'Lambda p95 latency exceeded 5 seconds',
+      metric: approverLambda.function.metricDuration({
+        period: cdk.Duration.minutes(5),
+        statistic: 'p95',
+      }),
+      threshold: 5000, // 5 seconds in milliseconds
+      evaluationPeriods: 2,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    durationAlarm.addAlarmAction(new cdk.aws_cloudwatch_actions.SnsAction(alarmTopic));
+
+    // ==========================================
     // Stack Outputs
     // ==========================================
     new cdk.CfnOutput(this, 'LambdaFunctionName', {
@@ -172,6 +239,11 @@ export class ApproverStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DelayQueueDlqUrl', {
       value: delayQueueDlq.queueUrl,
       description: 'Delay queue DLQ URL',
+    });
+
+    new cdk.CfnOutput(this, 'AlarmTopicArn', {
+      value: alarmTopic.topicArn,
+      description: 'SNS topic for alarm notifications',
     });
   }
 }

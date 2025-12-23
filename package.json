@@ -34,6 +34,7 @@
   "dependencies": {
     "@aws-lambda-powertools/idempotency": "^2.12.0",
     "@aws-lambda-powertools/logger": "^2.12.0",
+    "@aws-lambda-powertools/metrics": "^2.12.0",
     "@aws-lambda-powertools/parameters": "^2.12.0",
     "@aws-sdk/client-appconfigdata": "^3.700.0",
     "@aws-sdk/client-bedrock-runtime": "^3.700.0",
