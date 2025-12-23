@@ -237,3 +237,9 @@ export interface ScoringEngineConfig {
   /** Threshold for auto-approval (score must be < this to auto-approve) */
   threshold: number;
 }
+
+/**
+ * Score breakdown as a simple object mapping rule names to point values.
+ * Used for user-facing messages (Story 5.1).
+ */
+export type ScoreBreakdown = Record<string, number>;

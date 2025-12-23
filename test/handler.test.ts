@@ -378,6 +378,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -404,6 +405,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 0 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -428,6 +430,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -454,6 +457,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -475,6 +479,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -495,6 +500,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -595,6 +601,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -659,6 +666,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -743,6 +751,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -824,6 +833,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -854,6 +864,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -896,6 +907,7 @@ describe('handler', () => {
           count: 0,
           error: 'DynamoDB timeout',
         }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -915,6 +927,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -1342,6 +1355,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue(mockHistory),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -1380,6 +1394,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockRejectedValue(new Error('DynamoDB unavailable')),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -1411,6 +1426,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue(mockHistory),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -1460,6 +1476,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue(mockOrgHistory),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -1485,6 +1502,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockRejectedValue(new Error('DynamoDB scan failed')),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -1516,6 +1534,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue(mockOrgHistory),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -1554,6 +1573,7 @@ describe('handler', () => {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
         getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 

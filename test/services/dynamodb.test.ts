@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DynamoDBDocumentClient, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import {
   createDynamoDBService,
   filterByDays,
@@ -466,6 +466,86 @@ describe('DynamoDB Service', () => {
           }),
         })
       );
+    });
+  });
+
+  describe('updateLeaseComments (Story 5.1)', () => {
+    it('should update comments field with UpdateCommand (AC1)', async () => {
+      const leaseId = { userEmail: 'test@example.gov.uk', uuid: 'lease-123' };
+      const comments = 'Your lease request has been approved.';
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await service.updateLeaseComments(leaseId, comments);
+
+      expect(result.success).toBe(true);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      const call = mockSend.mock.calls[0]![0];
+      expect(call).toBeInstanceOf(UpdateCommand);
+      expect(call.input).toEqual({
+        TableName: tableName,
+        Key: {
+          userEmail: leaseId.userEmail,
+          uuid: leaseId.uuid,
+        },
+        UpdateExpression: 'SET comments = :comments',
+        ExpressionAttributeValues: {
+          ':comments': comments,
+        },
+      });
+    });
+
+    it('should return success on successful update (AC1)', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await service.updateLeaseComments(
+        { userEmail: 'user@test.gov.uk', uuid: 'abc-123' },
+        'Test comment'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should return failure on DynamoDB error (AC1 - pessimistic)', async () => {
+      mockSend.mockRejectedValueOnce(new Error('ConditionalCheckFailedException'));
+
+      const result = await service.updateLeaseComments(
+        { userEmail: 'user@test.gov.uk', uuid: 'abc-123' },
+        'Test comment'
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('ConditionalCheckFailedException');
+    });
+
+    it('should handle non-Error exceptions gracefully', async () => {
+      mockSend.mockRejectedValueOnce('Unknown error string');
+
+      const result = await service.updateLeaseComments(
+        { userEmail: 'user@test.gov.uk', uuid: 'abc-123' },
+        'Test comment'
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Unknown error string');
+    });
+
+    it('should handle multiline comments correctly', async () => {
+      const multilineComments = [
+        'Your lease request has been automatically approved.',
+        'Score: 15 (threshold: 20)',
+        'Reference: ISB-2025-0042',
+      ].join('\n');
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await service.updateLeaseComments(
+        { userEmail: 'user@test.gov.uk', uuid: 'abc-123' },
+        multilineComments
+      );
+
+      expect(result.success).toBe(true);
+      const call = mockSend.mock.calls[0]![0];
+      expect(call.input.ExpressionAttributeValues[':comments']).toBe(multilineComments);
     });
   });
 });

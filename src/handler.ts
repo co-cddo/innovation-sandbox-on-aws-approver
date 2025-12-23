@@ -44,6 +44,15 @@ import {
   createIdempotencyConfig,
   generateIdempotencyKey,
 } from './lib/idempotency.js';
+import { generateReferenceNumber } from './lib/reference-number.js';
+import {
+  buildAutoApprovedMessage,
+  buildAllowListApprovedMessage,
+  buildEscalatedMessage,
+  buildDelayedMessage,
+  buildExpiredMessage,
+  ruleResultsToBreakdown,
+} from './lib/lease-comments.js';
 import {
   ApprovalState,
   createInitialContext,
@@ -624,6 +633,49 @@ const emitEscalationOnError = async (
 };
 
 /**
+ * Updates lease comments in DynamoDB (Story 5.1).
+ * Fails silently to avoid blocking approval flow - logs warning on failure.
+ *
+ * @param leaseId - The lease ID to update
+ * @param comments - The comments string to set
+ */
+const updateLeaseComments = async (
+  leaseId: { userEmail: string; uuid: string },
+  comments: string
+): Promise<void> => {
+  if (!dynamoDBService) {
+    logger.warn('DynamoDB service not configured - skipping comments update', {
+      leaseId: leaseId.uuid,
+    });
+    return;
+  }
+
+  try {
+    const result = await dynamoDBService.updateLeaseComments(leaseId, comments);
+    if (!result.success) {
+      logger.warn('Failed to update lease comments', {
+        leaseId: leaseId.uuid,
+        userEmail: leaseId.userEmail,
+        error: result.error,
+      });
+      return;
+    }
+
+    logger.info('Lease comments updated', {
+      leaseId: leaseId.uuid,
+      userEmail: leaseId.userEmail,
+    });
+  } catch (error) {
+    // Log and continue - don't fail the overall request
+    logger.warn('Error updating lease comments', {
+      leaseId: leaseId.uuid,
+      userEmail: leaseId.userEmail,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+/**
  * Checks if there are available sandbox accounts.
  * Returns 0 on failure (pessimistic assumption).
  */
@@ -720,24 +772,6 @@ const processDelayedMessage = async (
 };
 
 /**
- * Generates a reference number in ISB-YYYY-NNNN format.
- * Uses the leaseId UUID to create a deterministic short reference.
- *
- * NOTE: This format supports max 10,000 unique references per year.
- * The same leaseId will always generate the same reference number.
- * For high-volume scenarios, collision risk increases (birthday paradox).
- * Acceptable for current low-volume use case.
- */
-const generateReferenceNumber = (leaseId: string): string => {
-  const year = new Date().getFullYear();
-  // Use last 4 hex chars of UUID for deterministic reference
-  const shortRef = leaseId.replace(/-/g, '').slice(-4).toUpperCase();
-  // Convert hex to decimal and pad to 4 digits
-  const numRef = (parseInt(shortRef, 16) % 10000).toString().padStart(4, '0');
-  return `ISB-${year}-${numRef}`;
-};
-
-/**
  * Processes an expired message from the delay queue.
  * Emits a LeaseDenied event and updates lease comments, then deletes the message.
  * Returns true if expiry was successful, false otherwise.
@@ -775,20 +809,9 @@ const processExpiredMessage = async (
       reason: 'queue_timeout',
     });
 
-    // Note: Lease comments update is implemented in Story 5.1
-    // For now, just log the intended message
-    const expiryMessage = [
-      `Your lease request has expired after ${queueExpiryDays} business days in queue.`,
-      'This may have occurred because no sandbox accounts were available.',
-      'Please submit a new request if you still need access.',
-      `Reference: ${referenceNumber}`,
-    ].join('\n');
-
-    logger.info('Expiry message for lease comments (Story 5.1)', {
-      leaseId: leaseId.uuid,
-      referenceNumber,
-      expiryMessage,
-    });
+    // Update lease comments with expiry message (Story 5.1 AC7)
+    const expiryMessage = buildExpiredMessage(referenceNumber, queueExpiryDays);
+    await updateLeaseComments(leaseId, expiryMessage);
 
     // Delete the message from the queue
     if (!sqsService) {
@@ -1196,6 +1219,13 @@ export const handler = async (
         allowListOverride,
       });
 
+      // Update lease comments (Story 5.1 AC2, AC3)
+      const referenceNumber = generateReferenceNumber(leaseId.uuid);
+      const commentsMessage = allowListOverride
+        ? buildAllowListApprovedMessage(score, referenceNumber)
+        : buildAutoApprovedMessage(score, referenceNumber);
+      await updateLeaseComments(leaseId, commentsMessage);
+
       return {
         statusCode: 200,
         body: 'OK',
@@ -1256,6 +1286,16 @@ export const handler = async (
         scoreBreakdown: result.context.scoreBreakdown,
         reason: 'Escalated - manual review pending (stub: auto-approved)',
       });
+
+      // Update lease comments (Story 5.1 AC4)
+      const referenceNumber = generateReferenceNumber(leaseId.uuid);
+      const scoreBreakdown = ruleResultsToBreakdown(result.context.scoreBreakdown ?? []);
+      const escalatedMessage = buildEscalatedMessage(
+        score,
+        scoreBreakdown,
+        referenceNumber
+      );
+      await updateLeaseComments(leaseId, escalatedMessage);
 
       return {
         statusCode: 200,
@@ -1340,6 +1380,11 @@ export const handler = async (
         userEmail: leaseId.userEmail,
         processAfter: delayMessage.processAfter,
       });
+
+      // Update lease comments (Story 5.1 AC5)
+      const referenceNumber = generateReferenceNumber(leaseId.uuid);
+      const delayedMessage = buildDelayedMessage(referenceNumber);
+      await updateLeaseComments(leaseId, delayedMessage);
 
       return {
         statusCode: 200,

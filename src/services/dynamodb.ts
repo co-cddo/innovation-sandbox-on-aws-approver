@@ -5,7 +5,8 @@
  * Uses factory pattern for dependency injection of client.
  */
 
-import { DynamoDBDocumentClient, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import type { LeaseId } from '../lib/types.js';
 import type { LeaseHistoryRecord } from '../scoring/types.js';
 
 /**
@@ -26,6 +27,16 @@ export interface AvailableAccountsResult {
   success: boolean;
   /** Number of available accounts */
   count: number;
+  /** Error message if failed */
+  error?: string;
+}
+
+/**
+ * Result of updating lease comments.
+ */
+export interface UpdateCommentsResult {
+  /** Whether the update was successful */
+  success: boolean;
   /** Error message if failed */
   error?: string;
 }
@@ -62,6 +73,16 @@ export interface DynamoDBService {
    * @returns Count of accounts with status = 'Available'
    */
   getAvailableAccountsCount: () => Promise<AvailableAccountsResult>;
+
+  /**
+   * Update the comments field for a lease in ISB Leases table.
+   * Used to provide user-facing status messages (Story 5.1).
+   *
+   * @param leaseId - The lease ID (userEmail + uuid)
+   * @param comments - The new comments string
+   * @returns Success/failure result with optional error message
+   */
+  updateLeaseComments: (leaseId: LeaseId, comments: string) => Promise<UpdateCommentsResult>;
 }
 
 /**
@@ -190,7 +211,39 @@ export const createDynamoDBService = (
     }
   };
 
-  return { getUserLeaseHistory, getOrgLeaseHistory, getAvailableAccountsCount };
+  /**
+   * Update the comments field for a lease in ISB Leases table.
+   * Returns success/failure result to allow fail-safe handling.
+   */
+  const updateLeaseComments = async (
+    leaseId: LeaseId,
+    comments: string
+  ): Promise<UpdateCommentsResult> => {
+    try {
+      const command = new UpdateCommand({
+        TableName: tableName,
+        Key: {
+          userEmail: leaseId.userEmail,
+          uuid: leaseId.uuid,
+        },
+        UpdateExpression: 'SET comments = :comments',
+        ExpressionAttributeValues: {
+          ':comments': comments,
+        },
+      });
+
+      await client.send(command);
+
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  };
+
+  return { getUserLeaseHistory, getOrgLeaseHistory, getAvailableAccountsCount, updateLeaseComments };
 };
 
 /**
