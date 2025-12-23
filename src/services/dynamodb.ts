@@ -5,7 +5,7 @@
  * Uses factory pattern for dependency injection of client.
  */
 
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import type { LeaseHistoryRecord } from '../scoring/types.js';
 
 /**
@@ -29,6 +29,17 @@ export interface DynamoDBService {
    * @returns Array of lease history records
    */
   getUserLeaseHistory: (userEmail: string) => Promise<LeaseHistoryRecord[]>;
+
+  /**
+   * Get organization lease history from ISB Leases table.
+   * Scans for all users with emails ending in @domain.
+   * Used for org-level scoring rules (Story 3.2).
+   *
+   * @param domain - Email domain to query (e.g., 'councilname.gov.uk')
+   * @param excludeEmail - Optional email to exclude (the current user)
+   * @returns Array of lease history records for the organization
+   */
+  getOrgLeaseHistory: (domain: string, excludeEmail?: string) => Promise<LeaseHistoryRecord[]>;
 }
 
 /**
@@ -71,7 +82,48 @@ export const createDynamoDBService = (
     }));
   };
 
-  return { getUserLeaseHistory };
+  /**
+   * Get organization lease history from ISB Leases table.
+   * Uses Scan with filter for domain matching (acceptable at 500 requests/day scale).
+   * Handles pagination to ensure all results are returned.
+   */
+  const getOrgLeaseHistory = async (
+    domain: string,
+    excludeEmail?: string
+  ): Promise<LeaseHistoryRecord[]> => {
+    const allItems: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+    // Paginate through all results
+    do {
+      const command = new ScanCommand({
+        TableName: tableName,
+        FilterExpression: 'contains(userEmail, :domain)',
+        ExpressionAttributeValues: {
+          ':domain': `@${domain}`,
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+      });
+
+      const response = await client.send(command);
+      allItems.push(...(response.Items ?? []));
+      lastEvaluatedKey = response.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+
+    // Map DynamoDB items to LeaseHistoryRecord and filter out current user
+    return allItems
+      .filter((item) => !excludeEmail || item.userEmail !== excludeEmail)
+      .map((item) => ({
+        uuid: item.uuid as string,
+        userEmail: item.userEmail as string,
+        status: item.status as LeaseHistoryRecord['status'],
+        originalLeaseTemplateUuid: item.originalLeaseTemplateUuid as string,
+        created: item.created as string,
+        endDate: item.endDate as string | undefined,
+      }));
+  };
+
+  return { getUserLeaseHistory, getOrgLeaseHistory };
 };
 
 /**

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import {
   createDynamoDBService,
   filterByDays,
@@ -143,6 +143,155 @@ describe('DynamoDB Service', () => {
       await expect(service.getUserLeaseHistory('test@example.gov.uk')).rejects.toThrow(
         'DynamoDB connection failed'
       );
+    });
+  });
+
+  describe('getOrgLeaseHistory', () => {
+    it('should scan with domain filter', async () => {
+      const domain = 'example.gov.uk';
+      mockSend.mockResolvedValueOnce({ Items: [] });
+
+      await service.getOrgLeaseHistory(domain);
+
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      const call = mockSend.mock.calls[0][0];
+      expect(call).toBeInstanceOf(ScanCommand);
+      expect(call.input).toEqual({
+        TableName: tableName,
+        FilterExpression: 'contains(userEmail, :domain)',
+        ExpressionAttributeValues: {
+          ':domain': '@example.gov.uk',
+        },
+      });
+    });
+
+    it('should return leases for all users in the domain', async () => {
+      const dynamoItems = [
+        {
+          uuid: 'lease-1',
+          userEmail: 'alice@example.gov.uk',
+          status: 'Active',
+          originalLeaseTemplateUuid: 'template-1',
+          created: '2024-12-01T10:00:00Z',
+        },
+        {
+          uuid: 'lease-2',
+          userEmail: 'bob@example.gov.uk',
+          status: 'Expired',
+          originalLeaseTemplateUuid: 'template-2',
+          created: '2024-11-15T14:30:00Z',
+          endDate: '2024-11-20T14:30:00Z',
+        },
+      ];
+      mockSend.mockResolvedValueOnce({ Items: dynamoItems });
+
+      const result = await service.getOrgLeaseHistory('example.gov.uk');
+
+      expect(result).toHaveLength(2);
+      expect(result[0].userEmail).toBe('alice@example.gov.uk');
+      expect(result[1].userEmail).toBe('bob@example.gov.uk');
+    });
+
+    it('should exclude current user when excludeEmail provided', async () => {
+      const dynamoItems = [
+        {
+          uuid: 'lease-1',
+          userEmail: 'alice@example.gov.uk',
+          status: 'Active',
+          originalLeaseTemplateUuid: 'template-1',
+          created: '2024-12-01T10:00:00Z',
+        },
+        {
+          uuid: 'lease-2',
+          userEmail: 'bob@example.gov.uk',
+          status: 'Expired',
+          originalLeaseTemplateUuid: 'template-2',
+          created: '2024-11-15T14:30:00Z',
+        },
+      ];
+      mockSend.mockResolvedValueOnce({ Items: dynamoItems });
+
+      const result = await service.getOrgLeaseHistory('example.gov.uk', 'alice@example.gov.uk');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].userEmail).toBe('bob@example.gov.uk');
+    });
+
+    it('should include all users when excludeEmail not provided', async () => {
+      const dynamoItems = [
+        {
+          uuid: 'lease-1',
+          userEmail: 'alice@example.gov.uk',
+          status: 'Active',
+          originalLeaseTemplateUuid: 'template-1',
+          created: '2024-12-01T10:00:00Z',
+        },
+      ];
+      mockSend.mockResolvedValueOnce({ Items: dynamoItems });
+
+      const result = await service.getOrgLeaseHistory('example.gov.uk');
+
+      expect(result).toHaveLength(1);
+    });
+
+    it('should return empty array when no leases in domain', async () => {
+      mockSend.mockResolvedValueOnce({ Items: [] });
+
+      const result = await service.getOrgLeaseHistory('unknown-domain.gov.uk');
+
+      expect(result).toEqual([]);
+    });
+
+    it('should return empty array when Items is undefined', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await service.getOrgLeaseHistory('example.gov.uk');
+
+      expect(result).toEqual([]);
+    });
+
+    it('should throw on DynamoDB error', async () => {
+      const error = new Error('DynamoDB scan failed');
+      mockSend.mockRejectedValueOnce(error);
+
+      await expect(service.getOrgLeaseHistory('example.gov.uk')).rejects.toThrow(
+        'DynamoDB scan failed'
+      );
+    });
+
+    it('should handle pagination when LastEvaluatedKey is present', async () => {
+      // First page with LastEvaluatedKey
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          {
+            uuid: 'lease-1',
+            userEmail: 'alice@example.gov.uk',
+            status: 'Active',
+            originalLeaseTemplateUuid: 'template-1',
+            created: '2024-12-01T10:00:00Z',
+          },
+        ],
+        LastEvaluatedKey: { userEmail: 'alice@example.gov.uk', uuid: 'lease-1' },
+      });
+      // Second page without LastEvaluatedKey (final page)
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          {
+            uuid: 'lease-2',
+            userEmail: 'bob@example.gov.uk',
+            status: 'Active',
+            originalLeaseTemplateUuid: 'template-2',
+            created: '2024-12-02T10:00:00Z',
+          },
+        ],
+      });
+
+      const result = await service.getOrgLeaseHistory('example.gov.uk');
+
+      expect(mockSend).toHaveBeenCalledTimes(2);
+      expect(result).toHaveLength(2);
+      expect(result[0].uuid).toBe('lease-1');
+      expect(result[1].uuid).toBe('lease-2');
     });
   });
 

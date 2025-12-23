@@ -579,40 +579,65 @@ describe('scoring rules', () => {
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
     });
+
+    it('should count multiple negative outcomes in reason', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          createLease({ uuid: '1', status: 'Expired', created: '2025-01-05T10:00:00Z' }),
+          createLease({ uuid: '2', status: 'BudgetExceeded', created: '2025-01-03T10:00:00Z' }),
+          createLease({ uuid: '3', status: 'Active', created: '2025-01-01T10:00:00Z' }), // Not negative
+        ],
+      });
+      const result = orgRecentNegativeRule(context, 3);
+      expect(result.points).toBe(3);
+      expect(result.triggered).toBe(true);
+      expect(result.reason).toContain('2 negative outcome(s)');
+    });
   });
 
   describe('Rule 15: org_clean_record', () => {
-    it('should return bonus when org has clean record in last 90 days', () => {
+    it('should return bonus when org has 5+ clean leases in last 90 days', () => {
       const context = createBaseContext({
         requestTimestamp: new Date('2025-01-15T14:00:00Z'),
         orgLeaseHistory: [
           createLease({ uuid: '1', status: 'Active', created: '2025-01-01T10:00:00Z' }),
-          createLease({ uuid: '2', status: 'Expired', created: '2024-12-15T10:00:00Z' }),
+          createLease({ uuid: '2', status: 'Active', created: '2024-12-20T10:00:00Z' }),
+          createLease({ uuid: '3', status: 'Active', created: '2024-12-15T10:00:00Z' }),
+          createLease({ uuid: '4', status: 'ManuallyTerminated', created: '2024-12-10T10:00:00Z' }),
+          createLease({ uuid: '5', status: 'Active', created: '2024-12-05T10:00:00Z' }),
         ],
       });
       const result = orgCleanRecordRule(context, -2);
       expect(result.points).toBe(-2);
       expect(result.triggered).toBe(true);
+      expect(result.reason).toContain('5 leases');
     });
 
-    it('should return bonus for ManuallyTerminated as clean', () => {
-      const context = createBaseContext({
-        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
-        orgLeaseHistory: [
-          createLease({ uuid: '1', status: 'ManuallyTerminated', created: '2025-01-01T10:00:00Z' }),
-        ],
-      });
-      const result = orgCleanRecordRule(context, -2);
-      expect(result.points).toBe(-2);
-      expect(result.triggered).toBe(true);
-    });
-
-    it('should return 0 when org has BudgetExceeded in last 90 days', () => {
+    it('should return 0 when org has less than 5 leases (even if clean)', () => {
       const context = createBaseContext({
         requestTimestamp: new Date('2025-01-15T14:00:00Z'),
         orgLeaseHistory: [
           createLease({ uuid: '1', status: 'Active', created: '2025-01-01T10:00:00Z' }),
-          createLease({ uuid: '2', status: 'BudgetExceeded', created: '2024-12-15T10:00:00Z' }),
+          createLease({ uuid: '2', status: 'Active', created: '2024-12-15T10:00:00Z' }),
+          createLease({ uuid: '3', status: 'ManuallyTerminated', created: '2024-12-10T10:00:00Z' }),
+          createLease({ uuid: '4', status: 'Active', created: '2024-12-05T10:00:00Z' }),
+        ],
+      });
+      const result = orgCleanRecordRule(context, -2);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
+    });
+
+    it('should return 0 when org has 5+ leases but has negative outcome', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          createLease({ uuid: '1', status: 'Active', created: '2025-01-01T10:00:00Z' }),
+          createLease({ uuid: '2', status: 'Active', created: '2024-12-20T10:00:00Z' }),
+          createLease({ uuid: '3', status: 'BudgetExceeded', created: '2024-12-15T10:00:00Z' }),
+          createLease({ uuid: '4', status: 'Active', created: '2024-12-10T10:00:00Z' }),
+          createLease({ uuid: '5', status: 'Active', created: '2024-12-05T10:00:00Z' }),
         ],
       });
       const result = orgCleanRecordRule(context, -2);
@@ -627,17 +652,37 @@ describe('scoring rules', () => {
       expect(result.triggered).toBe(false);
     });
 
-    it('should ignore history older than 90 days', () => {
+    it('should ignore history older than 90 days when counting', () => {
       const context = createBaseContext({
         requestTimestamp: new Date('2025-01-15T14:00:00Z'),
         orgLeaseHistory: [
-          createLease({ uuid: '1', status: 'BudgetExceeded', created: '2024-09-01T10:00:00Z' }), // > 90 days ago
-          createLease({ uuid: '2', status: 'Active', created: '2025-01-01T10:00:00Z' }), // Recent
+          createLease({ uuid: '1', status: 'BudgetExceeded', created: '2024-09-01T10:00:00Z' }), // > 90 days ago, ignored
+          createLease({ uuid: '2', status: 'Active', created: '2025-01-01T10:00:00Z' }),
+          createLease({ uuid: '3', status: 'Active', created: '2024-12-20T10:00:00Z' }),
+          createLease({ uuid: '4', status: 'Active', created: '2024-12-15T10:00:00Z' }),
+          createLease({ uuid: '5', status: 'Active', created: '2024-12-10T10:00:00Z' }),
+          createLease({ uuid: '6', status: 'Active', created: '2024-12-05T10:00:00Z' }),
         ],
       });
       const result = orgCleanRecordRule(context, -2);
-      expect(result.points).toBe(-2); // Only recent history counts
+      expect(result.points).toBe(-2); // Only recent history counts (5 clean leases)
       expect(result.triggered).toBe(true);
+    });
+
+    it('should treat Expired in org history as negative outcome', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          createLease({ uuid: '1', status: 'Active', created: '2025-01-01T10:00:00Z' }),
+          createLease({ uuid: '2', status: 'Active', created: '2024-12-20T10:00:00Z' }),
+          createLease({ uuid: '3', status: 'Expired', created: '2024-12-15T10:00:00Z' }), // Negative
+          createLease({ uuid: '4', status: 'Active', created: '2024-12-10T10:00:00Z' }),
+          createLease({ uuid: '5', status: 'Active', created: '2024-12-05T10:00:00Z' }),
+        ],
+      });
+      const result = orgCleanRecordRule(context, -2);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
     });
   });
 

@@ -310,28 +310,38 @@ export const manualEarlyTerminationRule: ScoringRuleFn = (context, weight) => {
 };
 
 /**
+ * Negative outcome statuses - used for org-level rules.
+ * BudgetExceeded and Expired indicate problematic behavior.
+ */
+const NEGATIVE_STATUSES: LeaseHistoryRecord['status'][] = ['BudgetExceeded', 'Expired'];
+
+/**
  * Rule 14: org_recent_negative
- * +weight if same domain had issues in last 30 days
+ * +weight if OTHER users at same domain had negative outcomes in last 30 days (FR19, FR20)
+ * Note: orgLeaseHistory already excludes current user's leases
  */
 export const orgRecentNegativeRule: ScoringRuleFn = (context, weight) => {
-  const hasNegative = context.orgLeaseHistory.some(
+  const recentNegative = context.orgLeaseHistory.filter(
     (l) =>
-      (l.status === 'Expired' || l.status === 'BudgetExceeded') &&
-      isWithinDays(l.created, 30, context.requestTimestamp)
+      NEGATIVE_STATUSES.includes(l.status) && isWithinDays(l.created, 30, context.requestTimestamp)
   );
+
+  const hasNegative = recentNegative.length > 0;
 
   return {
     ruleId: 'org_recent_negative',
     points: hasNegative ? weight : 0,
     triggered: hasNegative,
-    reason: hasNegative ? 'Organization has recent negative history' : undefined,
+    reason: hasNegative
+      ? `Organization has ${recentNegative.length} negative outcome(s) in last 30 days`
+      : undefined,
   };
 };
 
 /**
  * Rule 15: org_clean_record
- * -weight (bonus) if domain clean for 90 days
- * "Clean" means all leases in last 90 days are Active, Expired, or ManuallyTerminated
+ * -weight (bonus) if domain has 5+ leases in last 90 days with zero negative outcomes
+ * Note: orgLeaseHistory already excludes current user's leases
  */
 export const orgCleanRecordRule: ScoringRuleFn = (context, weight) => {
   // Filter to last 90 days
@@ -339,8 +349,8 @@ export const orgCleanRecordRule: ScoringRuleFn = (context, weight) => {
     isWithinDays(l.created, 90, context.requestTimestamp)
   );
 
-  // Need some history to have a "clean record"
-  if (recentOrgHistory.length === 0) {
+  // Need 5+ leases for this rule to apply (AC4)
+  if (recentOrgHistory.length < 5) {
     return {
       ruleId: 'org_clean_record',
       points: 0,
@@ -348,14 +358,17 @@ export const orgCleanRecordRule: ScoringRuleFn = (context, weight) => {
     };
   }
 
-  // Check all leases are "clean" (successful statuses)
-  const allClean = recentOrgHistory.every((l) => SUCCESSFUL_STATUSES.includes(l.status));
+  // Check for any negative outcomes
+  const hasNegative = recentOrgHistory.some((l) => NEGATIVE_STATUSES.includes(l.status));
+  const isClean = !hasNegative;
 
   return {
     ruleId: 'org_clean_record',
-    points: allClean ? weight : 0, // weight is negative for bonus
-    triggered: allClean,
-    reason: allClean ? 'Organization has clean record for 90 days' : undefined,
+    points: isClean ? weight : 0, // weight is negative for bonus
+    triggered: isClean,
+    reason: isClean
+      ? `Organization has clean record (${recentOrgHistory.length} leases, 0 negative)`
+      : undefined,
   };
 };
 

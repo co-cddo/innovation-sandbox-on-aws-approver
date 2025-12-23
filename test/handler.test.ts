@@ -145,7 +145,7 @@ describe('handler', () => {
       });
     });
 
-    it('should extract leaseId, userEmail, and templateId from event', async () => {
+    it('should extract leaseId, userEmail, templateId, and domain from event', async () => {
       const event = createValidLeaseRequestedEvent();
 
       await handler(event, mockContext);
@@ -156,6 +156,7 @@ describe('handler', () => {
         templateId: 'web-hosting',
         eventId: 'test-event-id',
         idempotencyKey: '123e4567-e89b-12d3-a456-426614174000:test-event-id',
+        domain: 'example.gov.uk',
       });
     });
 
@@ -713,6 +714,7 @@ describe('handler', () => {
       ];
       const mockDynamoDBService: DynamoDBService = {
         getUserLeaseHistory: vi.fn().mockResolvedValue(mockHistory),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -749,6 +751,7 @@ describe('handler', () => {
     it('should use pessimistic fallback on DynamoDB query error (AC9)', async () => {
       const mockDynamoDBService: DynamoDBService = {
         getUserLeaseHistory: vi.fn().mockRejectedValue(new Error('DynamoDB unavailable')),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -778,6 +781,7 @@ describe('handler', () => {
       ];
       const mockDynamoDBService: DynamoDBService = {
         getUserLeaseHistory: vi.fn().mockResolvedValue(mockHistory),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -807,6 +811,126 @@ describe('handler', () => {
         ApprovalState.RECEIVED,
         expect.objectContaining({
           userLeaseHistory: mockHistory,
+        })
+      );
+    });
+  });
+
+  describe('DynamoDB org history integration (Story 3.2)', () => {
+    it('should query org history when DynamoDB service is configured', async () => {
+      const mockOrgHistory = [
+        {
+          uuid: 'org-lease-1',
+          userEmail: 'colleague@example.gov.uk',
+          status: 'Active' as const,
+          originalLeaseTemplateUuid: 'template-1',
+          created: new Date().toISOString(),
+        },
+      ];
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue(mockOrgHistory),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      // Org history query should use domain and exclude current user
+      expect(mockDynamoDBService.getOrgLeaseHistory).toHaveBeenCalledWith(
+        'example.gov.uk',
+        'user@example.gov.uk'
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Org history retrieved',
+        expect.objectContaining({
+          domain: 'example.gov.uk',
+          leaseCount: 1,
+        })
+      );
+    });
+
+    it('should use pessimistic fallback on org query error (AC6)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockRejectedValue(new Error('DynamoDB scan failed')),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed with pessimistic fallback
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to query org history - using pessimistic fallback',
+        expect.objectContaining({
+          error: 'DynamoDB scan failed',
+          userEmail: 'user@example.gov.uk',
+        })
+      );
+    });
+
+    it('should pass org history to state machine context', async () => {
+      const mockOrgHistory = [
+        {
+          uuid: 'org-lease-1',
+          userEmail: 'colleague@example.gov.uk',
+          status: 'BudgetExceeded' as const,
+          originalLeaseTemplateUuid: 'template-1',
+          created: new Date().toISOString(),
+        },
+      ];
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue(mockOrgHistory),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // Create mock orchestrator to verify context passed
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 0,
+            decision: 'approved',
+            orgLeaseHistory: mockOrgHistory,
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      // Verify orchestrator was called with org history in context
+      expect(mockOrchestrator.run).toHaveBeenCalledWith(
+        ApprovalState.RECEIVED,
+        expect.objectContaining({
+          orgLeaseHistory: mockOrgHistory,
+        })
+      );
+    });
+
+    it('should include domain in structured logs (AC5)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      // Verify domain was added to logger context
+      expect(mockLogger.appendKeys).toHaveBeenCalledWith(
+        expect.objectContaining({
+          domain: 'example.gov.uk',
         })
       );
     });

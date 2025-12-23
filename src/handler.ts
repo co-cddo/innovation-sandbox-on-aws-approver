@@ -10,6 +10,7 @@ import { LeaseRequestedEventSchema, type LeaseRequestedEvent } from './lib/types
 import { createEventBridgeService, type EventBridgeService } from './services/eventbridge.js';
 import { createIsbLambdaService, type IsbLambdaService } from './services/isb-lambda.js';
 import { createDynamoDBService, type DynamoDBService } from './services/dynamodb.js';
+import { extractDomain } from './lib/domain.js';
 import type { LeaseHistoryRecord } from './scoring/types.js';
 import {
   createPersistenceLayer,
@@ -228,11 +229,43 @@ const queryUserHistory = async (userEmail: string): Promise<LeaseHistoryRecord[]
 };
 
 /**
+ * Queries organization lease history from DynamoDB with pessimistic fallback on error.
+ * Returns leases from OTHER users at the same domain (excludes current user).
+ * If DynamoDB is not configured or query fails, returns empty array (pessimistic fallback).
+ */
+const queryOrgHistory = async (userEmail: string): Promise<LeaseHistoryRecord[]> => {
+  if (!dynamoDBService) {
+    logger.warn('DynamoDB service not configured - skipping org history', {
+      userEmail,
+    });
+    return [];
+  }
+
+  try {
+    const domain = extractDomain(userEmail);
+    const history = await dynamoDBService.getOrgLeaseHistory(domain, userEmail);
+    logger.info('Org history retrieved', {
+      domain,
+      leaseCount: history.length,
+    });
+    return history;
+  } catch (error) {
+    // Pessimistic fallback - empty history means no penalties or bonuses
+    logger.error('Failed to query org history - using pessimistic fallback', {
+      error: error instanceof Error ? error.message : String(error),
+      userEmail,
+    });
+    return [];
+  }
+};
+
+/**
  * Prepares the initial state context from a validated event.
  */
 const prepareContext = (
   event: LeaseRequestedEvent,
-  userLeaseHistory: LeaseHistoryRecord[]
+  userLeaseHistory: LeaseHistoryRecord[],
+  orgLeaseHistory: LeaseHistoryRecord[]
 ): StateContext => {
   const { detail } = event;
   const { leaseId, templateId, budgetAmount, leaseDurationHours, requiresManualApproval, comments } =
@@ -248,6 +281,7 @@ const prepareContext = (
     requiresManualApproval,
     comments,
     userLeaseHistory,
+    orgLeaseHistory,
   };
 };
 
@@ -335,13 +369,22 @@ export const handler = async (
   // Generate idempotency key for deduplication tracking
   const idempotencyKey = generateIdempotencyKey(leaseId.uuid, eventId);
 
-  // Add correlation context for structured logging
+  // Extract domain for org-level queries and logging (AC5: cross-org security review)
+  let domain: string;
+  try {
+    domain = extractDomain(leaseId.userEmail);
+  } catch {
+    domain = 'unknown';
+  }
+
+  // Add correlation context for structured logging (AC5: include domain)
   logger.appendKeys({
     leaseId: leaseId.uuid,
     userEmail: leaseId.userEmail,
     templateId,
     eventId,
     idempotencyKey,
+    domain,
   });
 
   logger.info('LeaseRequested event received', {
@@ -355,11 +398,12 @@ export const handler = async (
   let currentScore: number | undefined;
 
   try {
-    // Query user history before running state machine
+    // Query user and org history before running state machine
     const userLeaseHistory = await queryUserHistory(leaseId.userEmail);
+    const orgLeaseHistory = await queryOrgHistory(leaseId.userEmail);
 
     // Prepare context and run state machine
-    const initialContext = prepareContext(validatedEvent, userLeaseHistory);
+    const initialContext = prepareContext(validatedEvent, userLeaseHistory, orgLeaseHistory);
     const result = orchestrator.run(ApprovalState.RECEIVED, initialContext);
 
     // Capture score for error handling
