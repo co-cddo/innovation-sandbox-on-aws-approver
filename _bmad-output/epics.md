@@ -838,23 +838,34 @@ As a **UK local government user**,
 I want **my verified government domain to earn a trust bonus**,
 So that **legitimate government users are fast-tracked**.
 
+**Data Source:**
+- GitHub: `https://github.com/govuk-digital-backbone/ukps-domains`
+- File: `data/user_domains.json`
+- **Note:** Until PR #1 is merged, use contributor branch: `https://raw.githubusercontent.com/chrisns/ukps-domains/feat/localgov-crawler-and-tests/data/user_domains.json`
+
+**CRITICAL: Filtering Requirement:**
+The `user_domains.json` contains multiple organisation types. We MUST filter to only `organisation_type_id: "local_authority"` entries. Other types to EXCLUDE:
+- `central_gov` (already have access via normal channels)
+- `nhs`, `police`, `military`, `devolved`, `ndpb` (not target audience)
+
 **Acceptance Criteria:**
 
 **Given** domain verification is required (FR8)
 **When** checking if domain is trusted
 **Then** load ukps-domains allowlist from S3 bucket
-**And** cache the list in memory with 1 hour TTL (FR11)
+**And** filter entries to only those with `organisation_type_id: "local_authority"`
+**And** cache the filtered list in memory with 1 hour TTL (FR11)
 
 **Given** the domain list is loaded
 **When** checking `userEmail` domain
 **Then** extract domain (e.g., `councilname.gov.uk`)
-**And** check if domain exists in ukps-domains list
+**And** check if domain exists in filtered local_authority list
 
-**Given** domain is in ukps-domains list (FR9)
+**Given** domain is in local_authority list (FR9)
 **When** calculating verified gov domain rule (#5)
 **Then** apply -5 trust bonus
 
-**Given** domain is NOT in ukps-domains list (FR10)
+**Given** domain is NOT in local_authority list (FR10)
 **When** calculating the rule
 **Then** apply 0 (neutral, no penalty)
 **And** do NOT apply outside target audience penalty here (that's AI-determined)
@@ -869,6 +880,11 @@ So that **legitimate government users are fast-tracked**.
 **When** next request needs domain verification
 **Then** reload from S3
 **And** if reload fails, use stale cache with warning log
+
+**Given** JSON parsing succeeds
+**When** filtering by organisation_type_id
+**Then** only include entries where `organisation_type_id === "local_authority"`
+**And** extract `domain_pattern` field for matching
 
 ---
 
