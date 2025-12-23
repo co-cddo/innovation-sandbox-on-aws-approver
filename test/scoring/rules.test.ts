@@ -395,6 +395,39 @@ describe('scoring rules', () => {
       expect(result.points).toBe(-2);
       expect(result.triggered).toBe(true);
     });
+
+    it('should use pre-calculated isEndOfWindow when true', () => {
+      // Time is 2pm (not end of window), but isEndOfWindow is explicitly set to true
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        isEndOfWindow: true,
+      });
+      const result = endOfWindowRule(context, -2);
+      expect(result.points).toBe(-2);
+      expect(result.triggered).toBe(true);
+    });
+
+    it('should use pre-calculated isEndOfWindow when false', () => {
+      // Time is 5:30pm (end of window), but isEndOfWindow is explicitly set to false
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T17:30:00Z'),
+        isEndOfWindow: false,
+      });
+      const result = endOfWindowRule(context, -2);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
+    });
+
+    it('should calculate internally when isEndOfWindow is undefined', () => {
+      // 5:30pm London = end of window, isEndOfWindow not set
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T17:30:00Z'),
+        isEndOfWindow: undefined,
+      });
+      const result = endOfWindowRule(context, -2);
+      expect(result.points).toBe(-2);
+      expect(result.triggered).toBe(true);
+    });
   });
 
   describe('Rule 11: cooldown_violation', () => {

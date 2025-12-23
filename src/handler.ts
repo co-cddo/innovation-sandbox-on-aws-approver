@@ -4,6 +4,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
+import { SQSClient } from '@aws-sdk/client-sqs';
 // makeIdempotent import prepared for future full integration (Story 2.4 deferred handler wrapping)
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { makeIdempotent as _makeIdempotent } from '@aws-lambda-powertools/idempotency';
@@ -23,6 +24,19 @@ import {
   createBedrockService,
   type BedrockService,
 } from './services/bedrock.js';
+import {
+  createSQSService,
+  type SQSService,
+  type DelayedLeaseMessage,
+} from './services/sqs.js';
+import {
+  createBusinessHoursChecker,
+  type BusinessHoursResult,
+} from './lib/business-hours.js';
+import {
+  createBankHolidayService,
+  type BankHolidayService,
+} from './services/bank-holidays.js';
 import {
   createPersistenceLayer,
   createIdempotencyConfig,
@@ -142,6 +156,33 @@ let bedrockService: BedrockService | undefined = createBedrockService(
   bedrockConfig,
   logger as unknown as import('./services/bedrock.js').BedrockLogger
 );
+
+// SQS client for delay queue
+const sqsClient = new SQSClient({
+  region: process.env.AWS_REGION || 'us-west-2',
+});
+
+// SQS service configuration
+const sqsConfig = {
+  queueUrl: process.env.DELAY_QUEUE_URL || '',
+};
+
+// Create SQS service (can be overridden in tests via dependency injection)
+let sqsService: SQSService | undefined = sqsConfig.queueUrl
+  ? createSQSService(
+      sqsClient,
+      sqsConfig,
+      logger as unknown as import('./services/sqs.js').SQSLogger
+    )
+  : undefined;
+
+// Bank holiday service for business hours checking
+let bankHolidayService: BankHolidayService = createBankHolidayService(
+  logger as unknown as import('./services/bank-holidays.js').BankHolidayLogger
+);
+
+// Business hours checker (uses bank holiday service)
+let businessHoursChecker = createBusinessHoursChecker(bankHolidayService);
 
 // State machine configuration
 const stateMachineConfig: StateMachineConfig = {
@@ -279,6 +320,44 @@ export const resetOrchestrator = (): void => {
     stateMachineConfig,
     logger: logger as StateMachineLogger,
   });
+};
+
+/**
+ * Allows overriding the SQS service for testing purposes.
+ */
+export const setSQSService = (service: SQSService | undefined): void => {
+  sqsService = service;
+};
+
+/**
+ * Resets to the default SQS service (for test cleanup).
+ */
+export const resetSQSService = (): void => {
+  sqsService = sqsConfig.queueUrl
+    ? createSQSService(
+        sqsClient,
+        sqsConfig,
+        logger as unknown as import('./services/sqs.js').SQSLogger
+      )
+    : undefined;
+};
+
+/**
+ * Allows overriding the bank holiday service for testing purposes.
+ */
+export const setBankHolidayService = (service: BankHolidayService): void => {
+  bankHolidayService = service;
+  businessHoursChecker = createBusinessHoursChecker(bankHolidayService);
+};
+
+/**
+ * Resets to the default bank holiday service (for test cleanup).
+ */
+export const resetBankHolidayService = (): void => {
+  bankHolidayService = createBankHolidayService(
+    logger as unknown as import('./services/bank-holidays.js').BankHolidayLogger
+  );
+  businessHoursChecker = createBusinessHoursChecker(bankHolidayService);
 };
 
 /**
@@ -430,6 +509,50 @@ const checkDomainVerification = async (domain: string): Promise<boolean> => {
 };
 
 /**
+ * Checks if the current time is within business hours.
+ * Returns business hours result for inclusion in state context.
+ */
+const checkBusinessHoursNow = async (): Promise<BusinessHoursResult> => {
+  try {
+    const result = await businessHoursChecker();
+
+    logger.info('Business hours check', {
+      businessHoursCheck: result.isWithinBusinessHours ? 'within' : 'outside',
+      londonTime: result.londonTime,
+      londonHour: result.londonHour,
+      dayOfWeek: result.dayOfWeek,
+      isBankHoliday: result.isBankHoliday,
+      isEndOfWindow: result.isEndOfWindow,
+      nextProcessingTime: result.nextProcessingTime,
+    });
+
+    // Log end-of-window bonus if applicable (AC6)
+    if (result.isEndOfWindow) {
+      logger.info('End-of-window bonus applicable', {
+        endOfWindowBonus: true,
+        londonHour: result.londonHour,
+      });
+    }
+
+    return result;
+  } catch (error) {
+    // On error, default to within business hours to avoid blocking requests
+    logger.error('Failed to check business hours - defaulting to within', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      isWithinBusinessHours: true,
+      isEndOfWindow: false,
+      londonTime: new Date().toISOString(),
+      londonHour: 12,
+      dayOfWeek: 1,
+      isBankHoliday: false,
+      dateString: new Date().toISOString().split('T')[0]!,
+    };
+  }
+};
+
+/**
  * Prepares the initial state context from a validated event.
  */
 const prepareContext = (
@@ -437,6 +560,7 @@ const prepareContext = (
   userLeaseHistory: LeaseHistoryRecord[],
   orgLeaseHistory: LeaseHistoryRecord[],
   isVerifiedDomain: boolean,
+  businessHoursResult: BusinessHoursResult,
   aiAnalysis?: AIAnalysisResult
 ): StateContext => {
   const { detail } = event;
@@ -456,6 +580,10 @@ const prepareContext = (
     orgLeaseHistory,
     isVerifiedGovDomain: isVerifiedDomain,
     aiAnalysis,
+    // Business hours data from checker
+    isWithinBusinessHours: businessHoursResult.isWithinBusinessHours,
+    isEndOfWindow: businessHoursResult.isEndOfWindow,
+    nextProcessingTime: businessHoursResult.nextProcessingTime,
   };
 };
 
@@ -572,6 +700,9 @@ export const handler = async (
   let currentScore: number | undefined;
 
   try {
+    // Check business hours first
+    const businessHoursResult = await checkBusinessHoursNow();
+
     // Query user and org history before running state machine
     const userLeaseHistory = await queryUserHistory(leaseId.userEmail);
     const orgLeaseHistory = await queryOrgHistory(leaseId.userEmail);
@@ -588,6 +719,7 @@ export const handler = async (
       userLeaseHistory,
       orgLeaseHistory,
       isVerifiedDomain,
+      businessHoursResult,
       aiAnalysis
     );
     const result = orchestrator.run(ApprovalState.RECEIVED, initialContext);
@@ -752,6 +884,90 @@ export const handler = async (
       return {
         statusCode: 200,
         body: 'OK',
+      };
+    }
+
+    if (decision === 'delayed') {
+      // Request arrived outside business hours - send to delay queue
+      logger.info('Request delayed - outside business hours', {
+        action: 'delayed',
+        timestamp: new Date().toISOString(),
+        leaseId: leaseId.uuid,
+        userEmail: leaseId.userEmail,
+        reason,
+        nextProcessingTime: result.context.nextProcessingTime,
+      });
+
+      // Check if SQS service is configured
+      if (!sqsService) {
+        // No delay queue configured - escalate instead (fail-closed)
+        logger.warn('Delay queue not configured - escalating instead', {
+          leaseId: leaseId.uuid,
+          userEmail: leaseId.userEmail,
+        });
+
+        await emitEscalationOnError(
+          leaseId,
+          'Request delayed but no delay queue configured',
+          'DELAY_QUEUE_NOT_CONFIGURED',
+          score
+        );
+
+        throw new ProcessingError(
+          'Delay queue not configured',
+          'DELAY_QUEUE_NOT_CONFIGURED',
+          leaseId.uuid,
+          leaseId.userEmail,
+          score
+        );
+      }
+
+      // Send to delay queue
+      const delayMessage: DelayedLeaseMessage = {
+        leaseId,
+        originalEvent: validatedEvent,
+        receivedAt: new Date().toISOString(),
+        processAfter: result.context.nextProcessingTime ?? new Date().toISOString(),
+        reason: reason ?? 'Outside business hours',
+      };
+
+      const sqsResult = await sqsService.sendDelayedRequest(delayMessage);
+
+      if (!sqsResult.success) {
+        // SQS send failed - escalate (fail-closed)
+        logger.error('Failed to send to delay queue - escalating', {
+          leaseId: leaseId.uuid,
+          userEmail: leaseId.userEmail,
+          error: sqsResult.error,
+        });
+
+        await emitEscalationOnError(
+          leaseId,
+          `Failed to send to delay queue: ${sqsResult.error}`,
+          'DELAY_QUEUE_SEND_FAILED',
+          score
+        );
+
+        throw new ProcessingError(
+          sqsResult.error ?? 'Failed to send to delay queue',
+          'DELAY_QUEUE_SEND_FAILED',
+          leaseId.uuid,
+          leaseId.userEmail,
+          score
+        );
+      }
+
+      logger.info('Request sent to delay queue', {
+        action: 'delayed',
+        messageId: sqsResult.messageId,
+        leaseId: leaseId.uuid,
+        userEmail: leaseId.userEmail,
+        processAfter: delayMessage.processAfter,
+      });
+
+      return {
+        statusCode: 200,
+        body: 'Delayed - will process during next business hours',
       };
     }
 

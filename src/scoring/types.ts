@@ -147,6 +147,10 @@ export interface ScoringContext {
   // From AI analysis (populated in Story 3.4 via Bedrock)
   /** AI analysis of email/domain - only available in Epic 3+ */
   aiAnalysis?: AIAnalysisResult;
+
+  // From business hours check (populated in Story 4.1)
+  /** Whether request is in end-of-window period (5-7pm London) - pre-calculated by state machine */
+  isEndOfWindow?: boolean;
 }
 
 /**
@@ -163,6 +167,7 @@ export interface ScoringContextInput {
   orgLeaseHistory?: LeaseHistoryRecord[];
   isVerifiedGovDomain?: boolean;
   aiAnalysis?: AIAnalysisResult;
+  isEndOfWindow?: boolean;
 }
 
 /**
@@ -180,6 +185,7 @@ export const createScoringContext = (input: ScoringContextInput): ScoringContext
   orgLeaseHistory: input.orgLeaseHistory ?? [],
   isVerifiedGovDomain: input.isVerifiedGovDomain ?? false,
   aiAnalysis: input.aiAnalysis,
+  isEndOfWindow: input.isEndOfWindow,
 });
 
 /**

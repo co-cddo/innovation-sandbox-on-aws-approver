@@ -212,6 +212,8 @@ export const createStateHandlers = (
       isVerifiedGovDomain: context.isVerifiedGovDomain,
       // AI analysis from Bedrock or fallback (Story 3.4)
       aiAnalysis: context.aiAnalysis,
+      // Business hours data (Story 4.1) - pass pre-calculated value
+      isEndOfWindow: context.isEndOfWindow,
     });
 
     // Run the scoring engine

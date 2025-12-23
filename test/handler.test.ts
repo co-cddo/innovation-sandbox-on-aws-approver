@@ -13,6 +13,9 @@ import {
   resetBedrockService,
   setOrchestrator,
   resetOrchestrator,
+  resetSQSService,
+  setBankHolidayService,
+  resetBankHolidayService,
 } from '../src/handler.js';
 import type { DynamoDBService } from '../src/services/dynamodb.js';
 import type { DomainAllowlistService } from '../src/services/domain-allowlist.js';
@@ -22,6 +25,7 @@ import type { EventBridgeService } from '../src/services/eventbridge.js';
 import type { IsbLambdaService } from '../src/services/isb-lambda.js';
 import type { StateMachineOrchestrator } from '../src/state-machine/index.js';
 import { ApprovalState, createInitialContext } from '../src/state-machine/index.js';
+import { createMockBankHolidayService } from '../src/services/bank-holidays.js';
 
 vi.mock('../src/lib/logger.ts', () => ({
   logger: {
@@ -76,6 +80,14 @@ vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
     send: vi.fn().mockResolvedValue({}),
   })),
   InvokeModelCommand: vi.fn(),
+}));
+
+// Mock the SQS client to prevent real AWS calls
+vi.mock('@aws-sdk/client-sqs', () => ({
+  SQSClient: vi.fn().mockImplementation(() => ({
+    send: vi.fn().mockResolvedValue({}),
+  })),
+  SendMessageCommand: vi.fn(),
 }));
 
 // Import the mocked logger for assertions
@@ -145,6 +157,8 @@ describe('handler', () => {
     // Inject mock services for testing
     setEventBridgeService(mockEventBridgeService);
     setIsbLambdaService(mockIsbLambdaService);
+    // Use mock bank holiday service to ensure consistent business hours (always within)
+    setBankHolidayService(createMockBankHolidayService([]));
   });
 
   afterEach(() => {
@@ -155,6 +169,8 @@ describe('handler', () => {
     resetDomainAllowlistService();
     resetBedrockService();
     resetOrchestrator();
+    resetSQSService();
+    resetBankHolidayService();
   });
 
   describe('LeaseRequested events', () => {

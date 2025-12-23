@@ -193,9 +193,10 @@ export const durationRequestedRule: ScoringRuleFn = (context, weight) => {
 
 /**
  * Check if time is in end-of-window (5-7pm London)
- * Handles both GMT and BST
+ * Handles both GMT and BST via Intl API
+ * Used as fallback when isEndOfWindow is not pre-calculated
  */
-const isEndOfWindow = (date: Date): boolean => {
+const calculateEndOfWindow = (date: Date): boolean => {
   // Convert to London time
   const londonTime = new Date(date.toLocaleString('en-US', { timeZone: 'Europe/London' }));
   const hour = londonTime.getHours();
@@ -207,9 +208,12 @@ const isEndOfWindow = (date: Date): boolean => {
 /**
  * Rule 10: end_of_window
  * -weight (bonus) for request in final 2 hours (5-7pm London)
+ * Uses pre-calculated isEndOfWindow from context if available (from business hours check),
+ * otherwise calculates internally for backwards compatibility.
  */
 export const endOfWindowRule: ScoringRuleFn = (context, weight) => {
-  const inEndOfWindow = isEndOfWindow(context.requestTimestamp);
+  // Use pre-calculated value if available, otherwise calculate
+  const inEndOfWindow = context.isEndOfWindow ?? calculateEndOfWindow(context.requestTimestamp);
 
   return {
     ruleId: 'end_of_window',
