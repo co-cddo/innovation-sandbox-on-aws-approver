@@ -65,7 +65,7 @@ development_status:
   3-3-domain-verification-from-s3-cache: done
   3-4-bedrock-ai-email-analysis-with-circuit-breaker: done
   3-5-e2e-milestone-intelligent-scoring-validation: done
-  epic-3-retrospective: optional
+  epic-3-retrospective: done
 
   # Epic 4: Timing & Queue Management
   epic-4: backlog
