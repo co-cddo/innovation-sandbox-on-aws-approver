@@ -50,15 +50,17 @@ export class ApproverLambda extends Construct {
     });
 
     // Grant Bedrock invoke permissions for Nova Micro (via cross-region inference profile)
-    // The us.amazon.nova-micro-v1:0 profile routes to any US region, so we need both
+    // The us.amazon.nova-micro-v1:0 profile routes to any US region dynamically
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['bedrock:InvokeModel'],
         resources: [
-          // Foundation model ARNs for cross-region inference routing
+          // Foundation model ARNs for all US regions (cross-region inference routing)
           'arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-micro-v1:0',
           'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0',
+          'arn:aws:bedrock:us-east-2::foundation-model/amazon.nova-micro-v1:0',
+          'arn:aws:bedrock:us-west-1::foundation-model/amazon.nova-micro-v1:0',
           // Inference profile ARN (required for on-demand throughput)
           `arn:aws:bedrock:us-west-2:${cdk.Stack.of(this).account}:inference-profile/${config.bedrockModelId}`,
         ],
