@@ -115,12 +115,46 @@ export const createStateHandlers = (
       };
     }
 
-    // All validation passed - move to allow-list check
+    // All validation passed - move to timing check
     return {
-      nextState: ApprovalState.ALLOW_LIST_CHECK,
+      nextState: ApprovalState.TIMING_CHECK,
       context: {
         ...context,
-        // Context validated and ready for allow-list check
+        // Context validated and ready for timing check
+      },
+    };
+  },
+
+  /**
+   * TIMING_CHECK state handler.
+   * Checks if request is within business hours.
+   * Business hours data is pre-populated in context by the handler before state machine runs.
+   */
+  [ApprovalState.TIMING_CHECK]: (context: StateContext): StateHandlerResult => {
+    const { isWithinBusinessHours, nextProcessingTime } = context;
+
+    // If timing hasn't been checked yet (undefined), proceed to allow-list
+    // This allows backwards compatibility and testing without timing setup
+    if (isWithinBusinessHours === undefined || isWithinBusinessHours === true) {
+      // Within business hours - proceed to allow-list check
+      return {
+        nextState: ApprovalState.ALLOW_LIST_CHECK,
+        context: {
+          ...context,
+          reason: isWithinBusinessHours === undefined
+            ? 'Business hours not checked - proceeding'
+            : 'Within business hours',
+        },
+      };
+    }
+
+    // Outside business hours - delay the request
+    return {
+      nextState: ApprovalState.DELAYED,
+      context: {
+        ...context,
+        decision: 'delayed',
+        reason: `Outside business hours. Next processing: ${nextProcessingTime ?? 'unknown'}`,
       },
     };
   },
@@ -288,6 +322,22 @@ export const createStateHandlers = (
       context: {
         ...context,
         decision: 'escalated',
+      },
+    };
+  },
+
+  /**
+   * DELAYED state handler.
+   * Terminal state for out-of-hours requests.
+   * The request will be sent to SQS delay queue by the main handler.
+   */
+  [ApprovalState.DELAYED]: (context: StateContext): StateHandlerResult => {
+    // Terminal state - return same state
+    return {
+      nextState: ApprovalState.DELAYED,
+      context: {
+        ...context,
+        decision: 'delayed',
       },
     };
   },

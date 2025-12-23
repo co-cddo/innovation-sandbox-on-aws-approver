@@ -103,7 +103,7 @@ describe('RECEIVED handler', () => {
 describe('VALIDATING handler', () => {
   const handlers = createStateHandlers();
 
-  it('should transition to ALLOW_LIST_CHECK when valid', () => {
+  it('should transition to TIMING_CHECK when valid', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
@@ -113,7 +113,7 @@ describe('VALIDATING handler', () => {
 
     const result = handlers[ApprovalState.VALIDATING](context);
 
-    expect(result.nextState).toBe(ApprovalState.ALLOW_LIST_CHECK);
+    expect(result.nextState).toBe(ApprovalState.TIMING_CHECK);
   });
 
   it('should transition to ERROR when leaseId is missing', () => {
@@ -169,6 +169,73 @@ describe('VALIDATING handler', () => {
     const originalContext = JSON.parse(JSON.stringify(context));
 
     handlers[ApprovalState.VALIDATING](context);
+
+    expect(context).toEqual(originalContext);
+  });
+});
+
+describe('TIMING_CHECK handler', () => {
+  const handlers = createStateHandlers();
+
+  it('should transition to ALLOW_LIST_CHECK when within business hours', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+      isWithinBusinessHours: true,
+    };
+
+    const result = handlers[ApprovalState.TIMING_CHECK](context);
+
+    expect(result.nextState).toBe(ApprovalState.ALLOW_LIST_CHECK);
+    expect(result.context.reason).toBe('Within business hours');
+  });
+
+  it('should transition to DELAYED when outside business hours', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+      isWithinBusinessHours: false,
+      nextProcessingTime: '2025-01-16T07:00:00.000Z',
+    };
+
+    const result = handlers[ApprovalState.TIMING_CHECK](context);
+
+    expect(result.nextState).toBe(ApprovalState.DELAYED);
+    expect(result.context.decision).toBe('delayed');
+    expect(result.context.reason).toContain('Outside business hours');
+    expect(result.context.reason).toContain('2025-01-16T07:00:00.000Z');
+  });
+
+  it('should proceed to ALLOW_LIST_CHECK when timing not checked (undefined)', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+      // isWithinBusinessHours is undefined
+    };
+
+    const result = handlers[ApprovalState.TIMING_CHECK](context);
+
+    expect(result.nextState).toBe(ApprovalState.ALLOW_LIST_CHECK);
+    expect(result.context.reason).toBe('Business hours not checked - proceeding');
+  });
+
+  it('should be a pure function (no mutation)', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+      isWithinBusinessHours: true,
+    };
+    const originalContext = JSON.parse(JSON.stringify(context));
+
+    handlers[ApprovalState.TIMING_CHECK](context);
 
     expect(context).toEqual(originalContext);
   });
@@ -555,6 +622,38 @@ describe('ESCALATED handler (terminal)', () => {
     const result = handlers[ApprovalState.ESCALATED](context);
 
     expect(result.context.decision).toBe('escalated');
+  });
+});
+
+describe('DELAYED handler (terminal)', () => {
+  const handlers = createStateHandlers();
+
+  it('should stay in DELAYED state', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+      isWithinBusinessHours: false,
+      nextProcessingTime: '2025-01-16T07:00:00.000Z',
+    };
+
+    const result = handlers[ApprovalState.DELAYED](context);
+
+    expect(result.nextState).toBe(ApprovalState.DELAYED);
+  });
+
+  it('should set decision to delayed', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+    };
+
+    const result = handlers[ApprovalState.DELAYED](context);
+
+    expect(result.context.decision).toBe('delayed');
   });
 });
 

@@ -14,6 +14,8 @@ export enum ApprovalState {
   RECEIVED = 'RECEIVED',
   /** Validating event schema and extracting data */
   VALIDATING = 'VALIDATING',
+  /** Checking business hours and timing */
+  TIMING_CHECK = 'TIMING_CHECK',
   /** Checking if user is on the allow-list for auto-approval bypass */
   ALLOW_LIST_CHECK = 'ALLOW_LIST_CHECK',
   /** Running scoring rules */
@@ -26,6 +28,8 @@ export enum ApprovalState {
   DENIED = 'DENIED',
   /** Terminal state for manual review */
   ESCALATED = 'ESCALATED',
+  /** Terminal state for out-of-hours requests sent to delay queue */
+  DELAYED = 'DELAYED',
   /** Terminal state for infrastructure errors */
   ERROR = 'ERROR',
 }
@@ -37,6 +41,7 @@ export const TERMINAL_STATES: readonly ApprovalState[] = [
   ApprovalState.APPROVED,
   ApprovalState.DENIED,
   ApprovalState.ESCALATED,
+  ApprovalState.DELAYED,
   ApprovalState.ERROR,
 ] as const;
 
@@ -119,13 +124,21 @@ export interface StateContext {
   /** AI analysis result for email patterns (from Bedrock or fallback) */
   aiAnalysis?: AIAnalysisResult;
 
+  // Timing data (populated in TIMING_CHECK state)
+  /** Whether the request is within business hours */
+  isWithinBusinessHours?: boolean;
+  /** Whether the request is in end-of-window period (5pm-7pm) */
+  isEndOfWindow?: boolean;
+  /** Next processing time if delayed (ISO string) */
+  nextProcessingTime?: string;
+
   // Processing state (populated during processing)
   /** Calculated risk score */
   score: number;
   /** Breakdown of score by rule */
   scoreBreakdown: RuleResult[];
   /** Final decision */
-  decision?: 'approved' | 'denied' | 'escalated';
+  decision?: 'approved' | 'denied' | 'escalated' | 'delayed';
   /** Who approved/denied (system or operator email) */
   approvedBy?: string;
   /** Reason for the decision */
