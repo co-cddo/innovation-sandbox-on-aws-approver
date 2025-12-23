@@ -54,9 +54,11 @@ describe('EventBridge Service', () => {
 
   describe('emitLeaseApproved', () => {
     const approvalParams: EmitLeaseApprovedParams = {
-      leaseId: '123e4567-e89b-12d3-a456-426614174000',
-      userEmail: 'user@example.gov.uk',
-      approvedBy: 'approver-service@system',
+      leaseId: {
+        userEmail: 'user@example.gov.uk',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+      },
+      approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
       score: 0,
       reason: 'Stub approval - scoring not implemented',
     };
@@ -99,8 +101,7 @@ describe('EventBridge Service', () => {
       const entries = sentCommand.input.Entries ?? [];
       const detail = JSON.parse(entries[0]?.Detail ?? '{}');
 
-      expect(detail.leaseId).toBe(approvalParams.leaseId);
-      expect(detail.userEmail).toBe(approvalParams.userEmail);
+      expect(detail.leaseId).toEqual(approvalParams.leaseId);
       expect(detail.approvedBy).toBe(approvalParams.approvedBy);
       expect(detail.score).toBe(approvalParams.score);
       expect(detail.reason).toBe(approvalParams.reason);
@@ -166,8 +167,10 @@ describe('EventBridge Service', () => {
 
     it('handles different approval types', async () => {
       const manualApprovalParams: EmitLeaseApprovedParams = {
-        leaseId: '123e4567-e89b-12d3-a456-426614174000',
-        userEmail: 'user@nhs.uk',
+        leaseId: {
+          userEmail: 'user@nhs.uk',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+        },
         approvedBy: 'operator@ndx.gov.uk',
         score: 25,
         reason: 'Manually approved after verification',
@@ -190,8 +193,10 @@ describe('EventBridge Service', () => {
 
   describe('emitLeaseEscalated', () => {
     const escalationParams: EmitLeaseEscalatedParams = {
-      leaseId: '123e4567-e89b-12d3-a456-426614174000',
-      userEmail: 'user@example.gov.uk',
+      leaseId: {
+        userEmail: 'user@example.gov.uk',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+      },
       reason: 'State machine error: Validation failed',
       errorCode: 'VALIDATION_ERROR',
       score: 5,
@@ -235,8 +240,7 @@ describe('EventBridge Service', () => {
       const entries = sentCommand.input.Entries ?? [];
       const detail = JSON.parse(entries[0]?.Detail ?? '{}');
 
-      expect(detail.leaseId).toBe(escalationParams.leaseId);
-      expect(detail.userEmail).toBe(escalationParams.userEmail);
+      expect(detail.leaseId).toEqual(escalationParams.leaseId);
       expect(detail.reason).toBe(escalationParams.reason);
       expect(detail.errorCode).toBe(escalationParams.errorCode);
       expect(detail.score).toBe(escalationParams.score);
@@ -245,8 +249,10 @@ describe('EventBridge Service', () => {
 
     it('handles optional score being undefined', async () => {
       const paramsWithoutScore: EmitLeaseEscalatedParams = {
-        leaseId: '123e4567-e89b-12d3-a456-426614174000',
-        userEmail: 'user@example.gov.uk',
+        leaseId: {
+          userEmail: 'user@example.gov.uk',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+        },
         reason: 'Unexpected error',
         errorCode: 'UNEXPECTED_ERROR',
       };

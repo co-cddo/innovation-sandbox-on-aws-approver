@@ -1,10 +1,13 @@
 /**
  * EventBridge service for emitting approval events
  * Uses DI pattern with factory function for testability
+ *
+ * Note: emitLeaseApproved is currently unused (approvals go via ISB Lambda directly).
+ * It's kept for potential future use (audit trail, notifications) and interface stability.
  */
 
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
-import type { LeaseApprovedDetail, LeaseEscalatedDetail } from '../lib/types.js';
+import type { LeaseApprovedDetail, LeaseEscalatedDetail, LeaseId } from '../lib/types.js';
 
 /**
  * EventBridge service configuration
@@ -18,8 +21,7 @@ export interface EventBridgeServiceConfig {
  * Parameters for emitting a lease approved event
  */
 export interface EmitLeaseApprovedParams {
-  readonly leaseId: string;
-  readonly userEmail: string;
+  readonly leaseId: LeaseId;
   readonly approvedBy: string;
   readonly score: number;
   readonly reason: string;
@@ -29,8 +31,7 @@ export interface EmitLeaseApprovedParams {
  * Parameters for emitting a lease escalated event (fail-closed error handling)
  */
 export interface EmitLeaseEscalatedParams {
-  readonly leaseId: string;
-  readonly userEmail: string;
+  readonly leaseId: LeaseId;
   readonly reason: string;
   readonly errorCode: string;
   readonly score?: number;
@@ -60,9 +61,8 @@ export interface EventBridgeService {
  *   source: 'innovation-sandbox',
  * });
  * await service.emitLeaseApproved({
- *   leaseId: 'abc-123',
- *   userEmail: 'user@gov.uk',
- *   approvedBy: 'approver-service@system',
+ *   leaseId: { userEmail: 'user@gov.uk', uuid: 'abc-123' },
+ *   approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
  *   score: 0,
  *   reason: 'Auto-approved',
  * });
@@ -74,8 +74,10 @@ export const createEventBridgeService = (
 ): EventBridgeService => ({
   emitLeaseApproved: async (params: EmitLeaseApprovedParams): Promise<void> => {
     const detail: LeaseApprovedDetail = {
-      leaseId: params.leaseId,
-      userEmail: params.userEmail,
+      leaseId: {
+        userEmail: params.leaseId.userEmail,
+        uuid: params.leaseId.uuid,
+      },
       approvedBy: params.approvedBy,
       score: params.score,
       reason: params.reason,
@@ -106,8 +108,10 @@ export const createEventBridgeService = (
 
   emitLeaseEscalated: async (params: EmitLeaseEscalatedParams): Promise<void> => {
     const detail: LeaseEscalatedDetail = {
-      leaseId: params.leaseId,
-      userEmail: params.userEmail,
+      leaseId: {
+        userEmail: params.leaseId.userEmail,
+        uuid: params.leaseId.uuid,
+      },
       reason: params.reason,
       errorCode: params.errorCode,
       score: params.score,

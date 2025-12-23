@@ -136,7 +136,6 @@ describe('ApproverStack', () => {
       template.hasResourceProperties('AWS::Events::Rule', {
         Name: 'ApproverLeaseRequested',
         EventPattern: {
-          source: ['innovation-sandbox'],
           'detail-type': ['LeaseRequested'],
         },
       });
@@ -146,7 +145,6 @@ describe('ApproverStack', () => {
       template.hasResourceProperties('AWS::Events::Rule', {
         Name: 'ApproverCleanupSucceeded',
         EventPattern: {
-          source: ['innovation-sandbox'],
           'detail-type': ['AccountCleanupSucceeded'],
         },
       });
@@ -191,14 +189,14 @@ describe('ApproverStack', () => {
       });
     });
 
-    it('grants EventBridge put events', () => {
+    it('grants EventBridge put events to ISB event bus', () => {
       template.hasResourceProperties('AWS::IAM::Policy', {
         PolicyDocument: {
           Statement: Match.arrayWith([
             Match.objectLike({
               Action: 'events:PutEvents',
               Effect: 'Allow',
-              Resource: Match.stringLikeRegexp('.*event-bus/default'),
+              Resource: Match.stringLikeRegexp('.*event-bus/InnovationSandboxCompute.*'),
             }),
           ]),
         },

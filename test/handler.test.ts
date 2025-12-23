@@ -3,11 +3,14 @@ import {
   handler,
   setEventBridgeService,
   resetEventBridgeService,
+  setIsbLambdaService,
+  resetIsbLambdaService,
   setOrchestrator,
   resetOrchestrator,
 } from '../src/handler.js';
 import type { EventBridgeEvent, Context } from 'aws-lambda';
 import type { EventBridgeService } from '../src/services/eventbridge.js';
+import type { IsbLambdaService } from '../src/services/isb-lambda.js';
 import type { StateMachineOrchestrator } from '../src/state-machine/index.js';
 import { ApprovalState, createInitialContext } from '../src/state-machine/index.js';
 
@@ -30,15 +33,31 @@ vi.mock('@aws-sdk/client-eventbridge', () => ({
   PutEventsCommand: vi.fn(),
 }));
 
+// Mock the Lambda client to prevent real AWS calls
+vi.mock('@aws-sdk/client-lambda', () => ({
+  LambdaClient: vi.fn().mockImplementation(() => ({
+    send: vi.fn().mockResolvedValue({}),
+  })),
+  InvokeCommand: vi.fn(),
+}));
+
 // Import the mocked logger for assertions
 import { logger as mockLogger } from '../src/lib/logger.js';
 
-// Mock EventBridge service for testing
-const mockEmitLeaseApproved = vi.fn().mockResolvedValue(undefined);
+// Mock EventBridge service for testing (used for escalation events only)
+// Note: emitLeaseApproved is no longer used - approvals go via ISB Lambda directly
 const mockEmitLeaseEscalated = vi.fn().mockResolvedValue(undefined);
 const mockEventBridgeService: EventBridgeService = {
-  emitLeaseApproved: mockEmitLeaseApproved,
+  emitLeaseApproved: vi.fn().mockResolvedValue(undefined), // Kept for interface compliance
   emitLeaseEscalated: mockEmitLeaseEscalated,
+};
+
+// Mock ISB Lambda service for testing (used for actual approvals)
+const mockApproveLease = vi.fn().mockResolvedValue({ success: true, statusCode: 200 });
+const mockDenyLease = vi.fn().mockResolvedValue({ success: true, statusCode: 200 });
+const mockIsbLambdaService: IsbLambdaService = {
+  approveLease: mockApproveLease,
+  denyLease: mockDenyLease,
 };
 
 describe('handler', () => {
@@ -86,13 +105,15 @@ describe('handler', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Inject mock EventBridge service for testing
+    // Inject mock services for testing
     setEventBridgeService(mockEventBridgeService);
+    setIsbLambdaService(mockIsbLambdaService);
   });
 
   afterEach(() => {
     // Reset to avoid affecting other tests
     resetEventBridgeService();
+    resetIsbLambdaService();
     resetOrchestrator();
   });
 
@@ -174,18 +195,18 @@ describe('handler', () => {
       expect(result.statusCode).toBe(200);
     });
 
-    it('should emit LeaseApproved event with correct parameters', async () => {
+    it('should call ISB Lambda service to approve lease', async () => {
       const event = createValidLeaseRequestedEvent();
 
       await handler(event, mockContext);
 
-      expect(mockEmitLeaseApproved).toHaveBeenCalledTimes(1);
-      expect(mockEmitLeaseApproved).toHaveBeenCalledWith({
-        leaseId: '123e4567-e89b-12d3-a456-426614174000',
-        userEmail: 'user@example.gov.uk',
-        approvedBy: 'approver-service@system',
-        score: expect.any(Number), // Score calculated by scoring engine
-        reason: expect.stringContaining('below threshold'), // State machine provides decision reason
+      expect(mockApproveLease).toHaveBeenCalledTimes(1);
+      expect(mockApproveLease).toHaveBeenCalledWith({
+        leaseId: {
+          userEmail: 'user@example.gov.uk',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+        },
+        approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
       });
     });
 
@@ -195,47 +216,49 @@ describe('handler', () => {
       await handler(event, mockContext);
 
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Approval emitted',
+        'Lease approved via ISB Lambda',
         expect.objectContaining({
           action: 'approved',
           timestamp: expect.any(String),
           leaseId: '123e4567-e89b-12d3-a456-426614174000',
           userEmail: 'user@example.gov.uk',
-          approvedBy: 'approver-service@system',
+          approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
           score: expect.any(Number), // Score calculated by scoring engine
         })
       );
     });
 
-    it('should throw ProcessingError when EventBridge emission fails (fail-closed)', async () => {
+    it('should throw ProcessingError when ISB Lambda approval fails (fail-closed)', async () => {
       const event = createValidLeaseRequestedEvent();
-      mockEmitLeaseApproved.mockRejectedValueOnce(new Error('EventBridge unavailable'));
+      mockApproveLease.mockResolvedValueOnce({ success: false, statusCode: 500, error: 'ISB unavailable' });
 
-      await expect(handler(event, mockContext)).rejects.toThrow('EventBridge unavailable');
+      await expect(handler(event, mockContext)).rejects.toThrow('ISB unavailable');
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'Unexpected error - triggering fail-closed escalation',
+        'ISB Lambda approval failed',
         expect.objectContaining({
-          error: 'EventBridge unavailable',
           leaseId: '123e4567-e89b-12d3-a456-426614174000',
           userEmail: 'user@example.gov.uk',
+          error: 'ISB unavailable',
         })
       );
       // Should emit LeaseEscalated for fail-closed behavior with score from state machine
       expect(mockEmitLeaseEscalated).toHaveBeenCalledWith({
-        leaseId: '123e4567-e89b-12d3-a456-426614174000',
-        userEmail: 'user@example.gov.uk',
-        reason: 'Unexpected error: EventBridge unavailable',
-        errorCode: 'UNEXPECTED_ERROR',
+        leaseId: {
+          userEmail: 'user@example.gov.uk',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+        },
+        reason: 'ISB Lambda approval failed: ISB unavailable',
+        errorCode: 'ISB_APPROVAL_FAILED',
         score: expect.any(Number), // Score is now captured from state machine for error reporting
       });
     });
 
-    it('should throw ProcessingError for non-Error exceptions in EventBridge emission', async () => {
+    it('should throw ProcessingError when ISB Lambda throws exception', async () => {
       const event = createValidLeaseRequestedEvent();
-      mockEmitLeaseApproved.mockRejectedValueOnce('String error');
+      mockApproveLease.mockRejectedValueOnce(new Error('Network error'));
 
-      await expect(handler(event, mockContext)).rejects.toThrow('String error');
+      await expect(handler(event, mockContext)).rejects.toThrow('Network error');
 
       expect(mockEmitLeaseEscalated).toHaveBeenCalled();
     });
@@ -297,8 +320,10 @@ describe('handler', () => {
       );
       // Should emit LeaseEscalated for fail-closed behavior
       expect(mockEmitLeaseEscalated).toHaveBeenCalledWith({
-        leaseId: '123e4567-e89b-12d3-a456-426614174000',
-        userEmail: 'user@example.gov.uk',
+        leaseId: {
+          userEmail: 'user@example.gov.uk',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+        },
         reason: 'State machine error: Validation failed',
         errorCode: 'VALIDATION_ERROR',
         score: 0,
@@ -335,11 +360,11 @@ describe('handler', () => {
           score: 25,
         })
       );
-      // Escalated requests still emit approval event for backward compatibility
-      expect(mockEmitLeaseApproved).toHaveBeenCalled();
+      // Escalated requests call ISB Lambda for approval (stub auto-approval)
+      expect(mockApproveLease).toHaveBeenCalled();
     });
 
-    it('should throw ProcessingError when EventBridge emission fails for escalated request (fail-closed)', async () => {
+    it('should throw ProcessingError when ISB Lambda fails for escalated request (fail-closed)', async () => {
       const mockOrchestrator: StateMachineOrchestrator = {
         run: vi.fn().mockReturnValue({
           finalState: ApprovalState.ESCALATED,
@@ -356,21 +381,21 @@ describe('handler', () => {
         }),
       };
       setOrchestrator(mockOrchestrator);
-      mockEmitLeaseApproved.mockRejectedValueOnce(new Error('EventBridge unavailable'));
+      mockApproveLease.mockResolvedValueOnce({ success: false, statusCode: 500, error: 'ISB unavailable' });
 
       const event = createValidLeaseRequestedEvent();
-      await expect(handler(event, mockContext)).rejects.toThrow('EventBridge unavailable');
+      await expect(handler(event, mockContext)).rejects.toThrow('ISB unavailable');
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'Unexpected error - triggering fail-closed escalation',
+        'ISB Lambda approval failed for escalated request',
         expect.objectContaining({
-          error: 'EventBridge unavailable',
+          error: 'ISB unavailable',
         })
       );
       expect(mockEmitLeaseEscalated).toHaveBeenCalled();
     });
 
-    it('should throw ProcessingError for non-Error exceptions in escalated EventBridge emission', async () => {
+    it('should throw ProcessingError when ISB Lambda throws for escalated request', async () => {
       const mockOrchestrator: StateMachineOrchestrator = {
         run: vi.fn().mockReturnValue({
           finalState: ApprovalState.ESCALATED,
@@ -387,10 +412,10 @@ describe('handler', () => {
         }),
       };
       setOrchestrator(mockOrchestrator);
-      mockEmitLeaseApproved.mockRejectedValueOnce('String error');
+      mockApproveLease.mockRejectedValueOnce(new Error('Network error'));
 
       const event = createValidLeaseRequestedEvent();
-      await expect(handler(event, mockContext)).rejects.toThrow('String error');
+      await expect(handler(event, mockContext)).rejects.toThrow('Network error');
 
       expect(mockEmitLeaseEscalated).toHaveBeenCalled();
     });
@@ -483,7 +508,7 @@ describe('handler', () => {
       expect(result.body).toBe('Unexpected processing state');
     });
 
-    it('should use default approvedBy and reason when not set by state machine', async () => {
+    it('should use default approvedBy when not set by state machine', async () => {
       const mockOrchestrator: StateMachineOrchestrator = {
         run: vi.fn().mockReturnValue({
           finalState: ApprovalState.APPROVED,
@@ -506,10 +531,9 @@ describe('handler', () => {
       const result = await handler(event, mockContext);
 
       expect(result.statusCode).toBe(200);
-      expect(mockEmitLeaseApproved).toHaveBeenCalledWith(
+      expect(mockApproveLease).toHaveBeenCalledWith(
         expect.objectContaining({
-          approvedBy: 'approver-service@system',
-          reason: 'Auto-approved',
+          approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
         })
       );
     });
@@ -607,8 +631,10 @@ describe('handler', () => {
 
       // Should emit LeaseEscalated with default error code
       expect(mockEmitLeaseEscalated).toHaveBeenCalledWith({
-        leaseId: '123e4567-e89b-12d3-a456-426614174000',
-        userEmail: 'user@example.gov.uk',
+        leaseId: {
+          userEmail: 'user@example.gov.uk',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+        },
         reason: 'State machine error: Unknown error',
         errorCode: 'UNKNOWN_ERROR',
         score: 0,
@@ -627,7 +653,7 @@ describe('handler', () => {
             templateId: 'web-hosting',
             score: 0,
             decision: 'approved',
-            approvedBy: 'approver-service@system',
+            approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
             reason: 'ALLOW-LIST-OVERRIDE',
             allowListOverride: true,
           },

@@ -68,15 +68,43 @@ describe('LeaseRequestedDetailSchema', () => {
     }
   });
 
-  it('rejects missing required fields', () => {
+  it('rejects missing leaseId (only truly required field)', () => {
     const invalidDetail = {
-      leaseId: validDetail.leaseId,
       templateId: 'web-hosting',
-      // Missing budgetAmount, leaseDurationHours, requiresManualApproval
+      // Missing leaseId - the only required field
     };
 
     const result = LeaseRequestedDetailSchema.safeParse(invalidDetail);
     expect(result.success).toBe(false);
+  });
+
+  it('accepts minimal event with just leaseId and applies defaults', () => {
+    const minimalDetail = {
+      leaseId: validDetail.leaseId,
+      // All other fields are optional with defaults
+    };
+
+    const result = LeaseRequestedDetailSchema.safeParse(minimalDetail);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.budgetAmount).toBe(100); // default
+      expect(result.data.leaseDurationHours).toBe(24); // default
+      expect(result.data.requiresManualApproval).toBe(false); // default
+      expect(result.data.templateId).toBe('unknown'); // default
+    }
+  });
+
+  it('normalizes leaseTemplateId to templateId', () => {
+    const detailWithLeaseTemplateId = {
+      leaseId: validDetail.leaseId,
+      leaseTemplateId: 'my-template',
+    };
+
+    const result = LeaseRequestedDetailSchema.safeParse(detailWithLeaseTemplateId);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.templateId).toBe('my-template');
+    }
   });
 });
 
@@ -126,13 +154,30 @@ describe('LeaseRequestedEventSchema', () => {
     const result = LeaseRequestedEventSchema.safeParse(invalidEvent);
     expect(result.success).toBe(false);
   });
+
+  it('accepts InnovationSandbox-ndx source (ISB format)', () => {
+    const isbEvent = {
+      ...validEvent,
+      source: 'InnovationSandbox-ndx',
+    };
+
+    const result = LeaseRequestedEventSchema.safeParse(isbEvent);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts innovation-sandbox source (lowercase)', () => {
+    const result = LeaseRequestedEventSchema.safeParse(validEvent);
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('LeaseApprovedDetailSchema', () => {
   const validDetail = {
-    leaseId: '123e4567-e89b-12d3-a456-426614174000',
-    userEmail: 'user@example.gov.uk',
-    approvedBy: 'approver-service@system',
+    leaseId: {
+      userEmail: 'user@example.gov.uk',
+      uuid: '123e4567-e89b-12d3-a456-426614174000',
+    },
+    approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
     score: 0,
     reason: 'Stub approval - scoring not implemented',
     timestamp: '2025-12-22T10:00:00.000Z',
@@ -158,17 +203,23 @@ describe('LeaseApprovedDetailSchema', () => {
   it('rejects invalid leaseId UUID', () => {
     const invalidDetail = {
       ...validDetail,
-      leaseId: 'not-a-uuid',
+      leaseId: {
+        userEmail: 'user@example.gov.uk',
+        uuid: 'not-a-uuid',
+      },
     };
 
     const result = LeaseApprovedDetailSchema.safeParse(invalidDetail);
     expect(result.success).toBe(false);
   });
 
-  it('rejects invalid email', () => {
+  it('rejects invalid email in leaseId', () => {
     const invalidDetail = {
       ...validDetail,
-      userEmail: 'not-an-email',
+      leaseId: {
+        userEmail: 'not-an-email',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+      },
     };
 
     const result = LeaseApprovedDetailSchema.safeParse(invalidDetail);
@@ -177,9 +228,11 @@ describe('LeaseApprovedDetailSchema', () => {
 
   it('rejects missing timestamp', () => {
     const invalidDetail = {
-      leaseId: '123e4567-e89b-12d3-a456-426614174000',
-      userEmail: 'user@example.gov.uk',
-      approvedBy: 'approver-service@system',
+      leaseId: {
+        userEmail: 'user@example.gov.uk',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+      },
+      approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
       score: 0,
       reason: 'Missing timestamp',
       // No timestamp

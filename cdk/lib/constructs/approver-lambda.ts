@@ -41,6 +41,10 @@ export class ApproverLambda extends Construct {
         BEDROCK_MODEL_ID: config.bedrockModelId,
         LOG_LEVEL: config.logLevel,
         RULE_WEIGHTS: config.ruleWeights,
+        // ISB event bus for emitting escalation events
+        EVENT_BUS_NAME: 'InnovationSandboxComputeISBEventBus6697FE33',
+        // ISB Leases Lambda for direct approval invocation
+        ISB_LEASES_LAMBDA_NAME: config.isbLeasesLambdaName,
       },
       tracing: lambda.Tracing.ACTIVE,
     });
@@ -65,12 +69,25 @@ export class ApproverLambda extends Construct {
       })
     );
 
-    // Grant EventBridge put events
+    // Grant EventBridge put events to ISB event bus (for escalation events)
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['events:PutEvents'],
-        resources: [`arn:aws:events:us-west-2:${cdk.Stack.of(this).account}:event-bus/default`],
+        resources: [
+          `arn:aws:events:us-west-2:${cdk.Stack.of(this).account}:event-bus/InnovationSandboxComputeISBEventBus6697FE33`,
+        ],
+      })
+    );
+
+    // Grant Lambda invoke permission for ISB Leases Lambda (direct approval)
+    this.function.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['lambda:InvokeFunction'],
+        resources: [
+          `arn:aws:lambda:us-west-2:${cdk.Stack.of(this).account}:function:${config.isbLeasesLambdaName}`,
+        ],
       })
     );
 

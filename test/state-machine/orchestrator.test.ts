@@ -66,7 +66,7 @@ describe('orchestrator.run', () => {
       expect(result.finalState).toBe(ApprovalState.APPROVED);
       expect(result.success).toBe(true);
       expect(result.context.decision).toBe('approved');
-      expect(result.context.approvedBy).toBe('approver-service@system');
+      expect(result.context.approvedBy).toBe('ndx+try-automated-approver@dsit.gov.uk');
     });
 
     it('should process high-score request to ESCALATED', () => {
@@ -457,7 +457,7 @@ describe('orchestrator.run', () => {
         userEmail: 'user@example.gov.uk',
         templateId: 'web-hosting',
         decision: 'approved',
-        approvedBy: 'approver-service@system',
+        approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
       };
 
       const result = orchestrator.run(ApprovalState.APPROVED, context);

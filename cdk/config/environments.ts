@@ -17,6 +17,8 @@ export interface ApproverConfig {
   isbLeasesTableName: string;
   /** ISB Accounts DynamoDB table name */
   isbAccountsTableName: string;
+  /** ISB Leases Lambda function name for direct approval invocation */
+  isbLeasesLambdaName: string;
   /** Slack webhook secret ARN (pre-created) */
   slackWebhookSecretArn: string;
   /** Bedrock model ID for AI analysis */
@@ -35,6 +37,7 @@ export const DEFAULT_CONFIG: ApproverConfig = {
   isbConsoleUrl: 'https://isb-console.example.com', // Will be updated from AppConfig
   isbLeasesTableName: 'InnovationSandboxData-Leases', // Cross-stack reference
   isbAccountsTableName: 'InnovationSandboxData-SandboxAccounts', // Cross-stack reference
+  isbLeasesLambdaName: 'ISB-LeasesLambdaFunction-ndx', // Cross-stack reference
   slackWebhookSecretArn:
     'arn:aws:secretsmanager:us-west-2:568672915267:secret:/approver/slack-webhook-url-FXJl1d',
   bedrockModelId: 'amazon.nova-micro-v1:0',

@@ -141,7 +141,7 @@ export const createStateHandlers = (
           ...context,
           score: 0, // Score set to 0 for reference
           decision: 'approved',
-          approvedBy: 'approver-service@system',
+          approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
           reason: 'ALLOW-LIST-OVERRIDE',
           allowListOverride: true,
         },
@@ -227,7 +227,7 @@ export const createStateHandlers = (
         context: {
           ...context,
           decision: 'approved',
-          approvedBy: 'approver-service@system',
+          approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
           reason: `Score ${score} below threshold ${threshold}`,
         },
       };
@@ -255,7 +255,7 @@ export const createStateHandlers = (
       context: {
         ...context,
         decision: context.decision ?? 'approved',
-        approvedBy: context.approvedBy ?? 'approver-service@system',
+        approvedBy: context.approvedBy ?? 'ndx+try-automated-approver@dsit.gov.uk',
       },
     };
   },

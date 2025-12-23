@@ -324,7 +324,7 @@ describe('DECIDING handler', () => {
 
       expect(result.nextState).toBe(ApprovalState.APPROVED);
       expect(result.context.decision).toBe('approved');
-      expect(result.context.approvedBy).toBe('approver-service@system');
+      expect(result.context.approvedBy).toBe('ndx+try-automated-approver@dsit.gov.uk');
       expect(result.context.reason).toContain('below threshold');
     });
 
@@ -459,7 +459,7 @@ describe('APPROVED handler (terminal)', () => {
       userEmail: 'user@example.gov.uk',
       templateId: 'web-hosting',
       decision: 'approved',
-      approvedBy: 'approver-service@system',
+      approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
     };
 
     const result = handlers[ApprovalState.APPROVED](context);
@@ -494,7 +494,7 @@ describe('APPROVED handler (terminal)', () => {
     const result = handlers[ApprovalState.APPROVED](context);
 
     expect(result.context.decision).toBe('approved');
-    expect(result.context.approvedBy).toBe('approver-service@system');
+    expect(result.context.approvedBy).toBe('ndx+try-automated-approver@dsit.gov.uk');
   });
 });
 

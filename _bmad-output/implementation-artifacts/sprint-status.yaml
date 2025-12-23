@@ -50,12 +50,12 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2: Core Approval Flow
-  epic-2: in-progress
+  epic-2: done
   2-1-minimal-vertical-slice-event-to-approval: done
   2-2-state-machine-with-decision-orchestration: done
   2-3-scoring-engine-with-16-configurable-rules: done
   2-4-idempotency-dlq-and-fail-closed-error-handling: done
-  2-5-e2e-milestone-core-flow-validation: backlog
+  2-5-e2e-milestone-core-flow-validation: done
   epic-2-retrospective: optional
 
   # Epic 3: Intelligent Scoring

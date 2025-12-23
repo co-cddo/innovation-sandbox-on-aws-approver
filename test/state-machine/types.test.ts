@@ -194,7 +194,7 @@ describe('Type structures', () => {
         { rule: 'verified-domain', points: -5, triggered: true },
       ],
       decision: 'approved',
-      approvedBy: 'approver-service@system',
+      approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
       reason: 'Score below threshold',
       stateHistory: [
         {

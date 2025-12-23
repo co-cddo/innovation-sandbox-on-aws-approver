@@ -1,10 +1,12 @@
 import { EventBridgeClient } from '@aws-sdk/client-eventbridge';
+import { LambdaClient } from '@aws-sdk/client-lambda';
 // makeIdempotent import prepared for future full integration (Story 2.4 deferred handler wrapping)
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { makeIdempotent as _makeIdempotent } from '@aws-lambda-powertools/idempotency';
 import { logger } from './lib/logger.js';
 import { LeaseRequestedEventSchema, type LeaseRequestedEvent } from './lib/types.js';
 import { createEventBridgeService, type EventBridgeService } from './services/eventbridge.js';
+import { createIsbLambdaService, type IsbLambdaService } from './services/isb-lambda.js';
 import {
   createPersistenceLayer,
   createIdempotencyConfig,
@@ -59,6 +61,19 @@ let eventBridgeService: EventBridgeService = createEventBridgeService(
   eventBridgeClient,
   eventBridgeConfig
 );
+
+// Lambda client for direct ISB Lambda invocation
+const lambdaClient = new LambdaClient({
+  region: process.env.AWS_REGION || 'us-west-2',
+});
+
+// ISB Lambda service configuration
+const isbLambdaConfig = {
+  functionName: process.env.ISB_LEASES_LAMBDA_NAME || 'ISB-LeasesLambdaFunction-ndx',
+};
+
+// Create ISB Lambda service (can be overridden in tests via dependency injection)
+let isbLambdaService: IsbLambdaService = createIsbLambdaService(lambdaClient, isbLambdaConfig);
 
 // State machine configuration
 const stateMachineConfig: StateMachineConfig = {
@@ -116,6 +131,20 @@ export const resetEventBridgeService = (): void => {
 };
 
 /**
+ * Allows overriding the ISB Lambda service for testing purposes.
+ */
+export const setIsbLambdaService = (service: IsbLambdaService): void => {
+  isbLambdaService = service;
+};
+
+/**
+ * Resets to the default ISB Lambda service (for test cleanup).
+ */
+export const resetIsbLambdaService = (): void => {
+  isbLambdaService = createIsbLambdaService(lambdaClient, isbLambdaConfig);
+};
+
+/**
  * Allows overriding the state machine orchestrator for testing purposes.
  */
 export const setOrchestrator = (newOrchestrator: StateMachineOrchestrator): void => {
@@ -157,8 +186,7 @@ const prepareContext = (event: LeaseRequestedEvent): StateContext => {
  * This ensures the request is queued for manual review even when errors occur.
  */
 const emitEscalationOnError = async (
-  leaseId: string,
-  userEmail: string,
+  leaseId: { userEmail: string; uuid: string },
   reason: string,
   errorCode: string,
   score?: number
@@ -166,7 +194,6 @@ const emitEscalationOnError = async (
   try {
     await eventBridgeService.emitLeaseEscalated({
       leaseId,
-      userEmail,
       reason,
       errorCode,
       score,
@@ -174,15 +201,15 @@ const emitEscalationOnError = async (
     logger.info('LeaseEscalated event emitted for error handling', {
       action: 'escalated',
       errorCode,
-      leaseId,
-      userEmail,
+      leaseId: leaseId.uuid,
+      userEmail: leaseId.userEmail,
     });
   } catch (emitError) {
     // Log the failure but don't throw - we still want to throw the original error for DLQ
     logger.error('Failed to emit LeaseEscalated event', {
       error: emitError instanceof Error ? emitError.message : String(emitError),
-      leaseId,
-      userEmail,
+      leaseId: leaseId.uuid,
+      userEmail: leaseId.userEmail,
       originalError: reason,
     });
   }
@@ -280,8 +307,7 @@ export const handler = async (
 
       // Emit LeaseEscalated event before throwing for DLQ
       await emitEscalationOnError(
-        leaseId.uuid,
-        leaseId.userEmail,
+        leaseId,
         `State machine error: ${errorMessage}`,
         errorCode,
         result.context.score
@@ -315,25 +341,47 @@ export const handler = async (
         });
       }
 
-      // Emit LeaseApproved event (side effect - not in state machine)
-      const approvalParams = {
-        leaseId: leaseId.uuid,
-        userEmail: leaseId.userEmail,
-        approvedBy: approvedBy ?? 'approver-service@system',
-        score,
-        reason: reason ?? 'Auto-approved',
-      };
+      // Approve lease via direct ISB Lambda invocation
+      const approverEmail = approvedBy ?? 'ndx+try-automated-approver@dsit.gov.uk';
+      const approvalResult = await isbLambdaService.approveLease({
+        leaseId,
+        approverEmail,
+      });
 
-      await eventBridgeService.emitLeaseApproved(approvalParams);
+      if (!approvalResult.success) {
+        logger.error('ISB Lambda approval failed', {
+          leaseId: leaseId.uuid,
+          userEmail: leaseId.userEmail,
+          statusCode: approvalResult.statusCode,
+          error: approvalResult.error,
+        });
 
-      logger.info('Approval emitted', {
+        // Escalate on approval failure
+        await emitEscalationOnError(
+          leaseId,
+          `ISB Lambda approval failed: ${approvalResult.error}`,
+          'ISB_APPROVAL_FAILED',
+          score
+        );
+
+        throw new ProcessingError(
+          approvalResult.error ?? 'ISB approval failed',
+          'ISB_APPROVAL_FAILED',
+          leaseId.uuid,
+          leaseId.userEmail,
+          score
+        );
+      }
+
+      logger.info('Lease approved via ISB Lambda', {
         action: 'approved',
         timestamp: new Date().toISOString(),
         leaseId: leaseId.uuid,
         userEmail: leaseId.userEmail,
-        approvedBy: approvalParams.approvedBy,
-        score: approvalParams.score,
-        reason: approvalParams.reason,
+        approvedBy: approverEmail,
+        score,
+        scoreBreakdown: result.context.scoreBreakdown,
+        reason: reason ?? 'Auto-approved',
         allowListOverride,
       });
 
@@ -351,20 +399,52 @@ export const handler = async (
         leaseId: leaseId.uuid,
         userEmail: leaseId.userEmail,
         score,
+        scoreBreakdown: result.context.scoreBreakdown,
         reason,
       });
 
       // TODO: In Story 5.2, this will send Slack notification
       // For now, treat as approved for backward compatibility with Story 2.1
-      const approvalParams = {
+      const approverEmail = 'ndx+try-automated-approver@dsit.gov.uk';
+      const approvalResult = await isbLambdaService.approveLease({
+        leaseId,
+        approverEmail,
+      });
+
+      if (!approvalResult.success) {
+        logger.error('ISB Lambda approval failed for escalated request', {
+          leaseId: leaseId.uuid,
+          userEmail: leaseId.userEmail,
+          statusCode: approvalResult.statusCode,
+          error: approvalResult.error,
+        });
+
+        await emitEscalationOnError(
+          leaseId,
+          `ISB Lambda approval failed (escalated): ${approvalResult.error}`,
+          'ISB_APPROVAL_FAILED',
+          score
+        );
+
+        throw new ProcessingError(
+          approvalResult.error ?? 'ISB approval failed',
+          'ISB_APPROVAL_FAILED',
+          leaseId.uuid,
+          leaseId.userEmail,
+          score
+        );
+      }
+
+      logger.info('Escalated lease approved via ISB Lambda (stub)', {
+        action: 'escalated_approved',
+        timestamp: new Date().toISOString(),
         leaseId: leaseId.uuid,
         userEmail: leaseId.userEmail,
-        approvedBy: 'approver-service@system',
+        approvedBy: approverEmail,
         score,
+        scoreBreakdown: result.context.scoreBreakdown,
         reason: 'Escalated - manual review pending (stub: auto-approved)',
-      };
-
-      await eventBridgeService.emitLeaseApproved(approvalParams);
+      });
 
       return {
         statusCode: 200,
@@ -380,6 +460,7 @@ export const handler = async (
         leaseId: leaseId.uuid,
         userEmail: leaseId.userEmail,
         score,
+        scoreBreakdown: result.context.scoreBreakdown,
         reason,
       });
 
@@ -417,8 +498,7 @@ export const handler = async (
 
     // Emit LeaseEscalated event before throwing for DLQ
     await emitEscalationOnError(
-      leaseId.uuid,
-      leaseId.userEmail,
+      leaseId,
       `Unexpected error: ${errorMessage}`,
       'UNEXPECTED_ERROR',
       currentScore

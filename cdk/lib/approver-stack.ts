@@ -77,24 +77,31 @@ export class ApproverStack extends cdk.Stack {
     delayQueue.grantConsumeMessages(approverLambda.function);
 
     // ==========================================
-    // EventBridge Rules
+    // EventBridge Rules (on ISB custom event bus)
     // ==========================================
 
-    // LeaseRequested Rule
+    // Import the ISB event bus
+    const isbEventBus = events.EventBus.fromEventBusArn(
+      this,
+      'ISBEventBus',
+      'arn:aws:events:us-west-2:568672915267:event-bus/InnovationSandboxComputeISBEventBus6697FE33'
+    );
+
+    // LeaseRequested Rule - no source filter to catch events from any source
     const leaseRequestedRule = new events.Rule(this, 'LeaseRequestedRule', {
       ruleName: 'ApproverLeaseRequested',
+      eventBus: isbEventBus,
       eventPattern: {
-        source: ['innovation-sandbox'],
         detailType: ['LeaseRequested'],
       },
     });
     leaseRequestedRule.addTarget(new targets.LambdaFunction(approverLambda.function));
 
-    // AccountCleanupSucceeded Rule
+    // AccountCleanupSucceeded Rule - no source filter to catch events from any source
     const cleanupSucceededRule = new events.Rule(this, 'CleanupSucceededRule', {
       ruleName: 'ApproverCleanupSucceeded',
+      eventBus: isbEventBus,
       eventPattern: {
-        source: ['innovation-sandbox'],
         detailType: ['AccountCleanupSucceeded'],
       },
     });
