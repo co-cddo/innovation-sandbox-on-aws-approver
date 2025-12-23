@@ -49,14 +49,16 @@ export class ApproverLambda extends Construct {
       tracing: lambda.Tracing.ACTIVE,
     });
 
-    // Grant Bedrock invoke permissions for Nova Micro (via inference profile)
+    // Grant Bedrock invoke permissions for Nova Micro (via cross-region inference profile)
+    // The us.amazon.nova-micro-v1:0 profile routes to any US region, so we need both
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['bedrock:InvokeModel'],
         resources: [
-          // Foundation model ARN
+          // Foundation model ARNs for cross-region inference routing
           'arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-micro-v1:0',
+          'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0',
           // Inference profile ARN (required for on-demand throughput)
           `arn:aws:bedrock:us-west-2:${cdk.Stack.of(this).account}:inference-profile/${config.bedrockModelId}`,
         ],
@@ -116,6 +118,18 @@ export class ApproverLambda extends Construct {
         resources: [
           `arn:aws:dynamodb:us-west-2:${cdk.Stack.of(this).account}:table/${config.isbAccountsTableName}`,
           `arn:aws:dynamodb:us-west-2:${cdk.Stack.of(this).account}:table/${config.isbAccountsTableName}/index/*`,
+        ],
+      })
+    );
+
+    // Grant KMS decrypt for ISB DynamoDB tables (encrypted at rest)
+    this.function.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['kms:Decrypt'],
+        resources: [
+          // ISB data tables are encrypted with this key
+          `arn:aws:kms:us-west-2:${cdk.Stack.of(this).account}:key/4682f54a-cf9a-4a2f-941c-aba8795ac878`,
         ],
       })
     );
