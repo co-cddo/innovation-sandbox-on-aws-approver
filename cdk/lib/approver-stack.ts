@@ -1,12 +1,15 @@
 import * as cdk from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as scheduler from 'aws-cdk-lib/aws-scheduler';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { ApproverLambda } from './constructs/approver-lambda.js';
 import type { ApproverConfig } from '../config/environments.js';
 
@@ -40,6 +43,16 @@ export class ApproverStack extends cdk.Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: cdk.RemovalPolicy.DESTROY, // For dev; change to RETAIN for prod
       autoDeleteObjects: true, // For dev; remove for prod
+    });
+
+    // Deploy domain list JSON from ukps-domains repo
+    // Source: https://github.com/govuk-digital-backbone/ukps-domains
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    new s3deploy.BucketDeployment(this, 'DomainListDeployment', {
+      sources: [s3deploy.Source.asset(path.join(__dirname, '../assets'))],
+      destinationBucket: domainListBucket,
+      prune: false, // Don't delete other files
     });
 
     // ==========================================

@@ -1,0 +1,3917 @@
+{
+    "version": "0.1.0",
+    "domains": [
+        {
+            "domain_pattern": "*.gov.scot",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "devolved_wildcard",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "*.gov.uk",
+            "identifiers": {},
+            "notes": "Covers generic government domain space",
+            "organisation_id": null,
+            "organisation_type_id": "public_sector_wildcard",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "*.gov.wales",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "devolved_wildcard",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "*.independent-inquiry.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "public_sector_wildcard",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "*.mod.gov.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "d994e55c-48c9-4795-b872-58d8ec98af12",
+            "organisation_type_id": "military",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "*.mod.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "d994e55c-48c9-4795-b872-58d8ec98af12",
+            "organisation_type_id": "military",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "*.nhs.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "nhs",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "*.police.je",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "police",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "*.police.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "police",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "*.public-inquiry.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "public_sector_wildcard",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "aberdeencity.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Aberdeen City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "aberdeenshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Aberdeenshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "acas.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "fb40955a-d2ff-4993-a052-91a7558cbb79",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "achievingforchildren.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "adur-worthing.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Worthing",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "adur.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Adur",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "ambervalley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Amber Valley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "anglesey.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Isle of Anglesey",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "angus.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Angus",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "antrimandnewtownabbey.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Antrim & Newtownabbey",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "ardsandnorthdown.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Ards & North Down Borough Council",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "argyll-bute.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Argyll & Bute",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "armaghbanbridgecraigavon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Armagh City, Banbridge & Craigavon District",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "artscouncil-ni.org",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "b6849b69-fcd0-4ab0-83ea-dcb9d4e861ce",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "arun.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Arun",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "ashfield-dc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Ashfield",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "ashford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Ashford",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "awe.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "c866d35e-17da-4219-a585-18b4a05faf52",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "babergh.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Babergh",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bankofengland.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "b8a83a88-3a0f-4c41-8c68-95fc71a0d477",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "barnet.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Barnet",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "barnsley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Barnsley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "barrowbc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Barrow-in-Furness",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "basildon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Basildon",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "basingstoke.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Basingstoke & Deane",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bassetlaw.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bassetlaw",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bathnes.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bath & North East Somerset",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bedford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bedford",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "belfastcity.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Belfast City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bexley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bexley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bfi.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "0bf06d87-d3a8-47c2-b823-e180d933a58c",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "birmingham.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Birmingham City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bl.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "33fca0f5-1f62-493c-a059-5a1e98441f0c",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "blaby.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Blaby",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "blackburn.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Blackburn with Darwen",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "blackpool.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Blackpool",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "blaenau-gwent.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Blaenau Gwent",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bolsover.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bolsover",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bolton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bolton",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "boston.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Boston",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bracknell-forest.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bracknell Forest",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bradford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bradford City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "braintree.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Braintree",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "breckland.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Breckland",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "brent.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Brent",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "brentwood.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Brentwood",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bridgend.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bridgend",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "brighton-hove.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Brighton & Hove",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bristol.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bristol City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "british-business-bank.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "1e93b589-7840-4f12-abcd-57e90b083166",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "britishcouncil.org",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "37d2c134-1285-4907-a366-611617cfe44c",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "britishfilmcommission.org",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "britishfilmcommission.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "britishmuseum.org",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "1bd53730-69f4-46e5-8f11-6a5b3934c5bc",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "broadland.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Broadland",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bromley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bromley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bromsgrove.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bromsgrove",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "broxbourne.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Broxbourne",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "broxtowe.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Broxtowe",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "buckscc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Buckinghamshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "burnley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Burnley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "bury.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Bury",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "caa.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "1400bcfb-c0f2-4e1c-b8fb-1135a2b83088",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "caerphilly.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Caerphilly",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "calderdale.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Calderdale",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cambridge.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Cambridge City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cambridgeshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Cambridgeshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "camden.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Camden London Borough Council",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cannockchasedc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Cannock Chase",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "canterbury.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Canterbury City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cardiff.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Cardiff",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "carmarthenshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Carmarthenshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "castlepoint.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Castle Point",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "causewaycoastandglens.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Causeway Coast & Glens District Council",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cefas.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "fd6cee28-ac4c-4fb5-9f46-54d24a500818",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "centralbedfordshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Central Bedfordshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "ceredigion.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Ceredigion",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "charnwood.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Charnwood",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "chelmsford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Chelmsford",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cheltenham.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Cheltenham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cherwell-dc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Cherwell",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cheshireeast.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Cheshire East",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cheshirewestandchester.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Cheshire West & Chester",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "chesterfield.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Chesterfield",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "chichester.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Chichester",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "chorley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Chorley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cityoflondon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: City of London",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cne-siar.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Western Isles",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "colchester.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Colchester",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "conwy.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Conwy",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cornwall.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Cornwall",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cotswold.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Cotswold",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "coventry.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Coventry City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "cqc.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "a124d48a-7c10-48c9-9a1a-514f9d59cdbf",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "cravendc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Craven",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "crawley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Crawley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "croydon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Croydon",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "dacorum.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Dacorum",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "darlington.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Darlington",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "dartford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Dartford",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "denbighshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Denbighshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "derby.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Derby City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "derbyshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Derbyshire County Council",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "derbyshiredales.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Derbyshire Dales",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "developmentbank.wales",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "devolved",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "devon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Devon",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "digitaloffice.scot",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "doncaster.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Doncaster",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "dorsetcouncil.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Dorset",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "dover.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Dover",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "dsit.gov.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "c352c234-8083-47ec-8a4b-0edd45c31263",
+            "organisation_type_id": "central_gov",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "dudley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Dudley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "dumgal.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Dumfries & Galloway",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "dundeecity.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Dundee City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "durham.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Durham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "e-lindsey.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: East Lindsey",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "ealing.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Ealing",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "east-ayrshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: East Ayrshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eastbourne.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Eastbourne",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eastcambs.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: East Cambridgeshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eastdevon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: East Devon",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eastdunbarton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: East Dunbartonshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "easthants.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: East Hampshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eastherts.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: East Hertfordshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eastleigh.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Eastleigh",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eastlothian.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: East Lothian",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eastrenfrewshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: East Renfrewshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eastriding.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: East Riding of Yorkshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eaststaffsbc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: East Staffordshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eastsussex.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: East Sussex",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eastwestrail.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "55af09d1-b130-4d23-a1ac-05c6b2b82797",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "eden.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Eden",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "edinburgh.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Edinburgh, City of",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "elmbridge.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Elmbridge",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "enfield.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Enfield",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "eppingforestdc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Epping Forest",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "epsom-ewell.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Epsom & Ewell",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "erewash.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Erewash",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "essex.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Essex",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "exeter.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Exeter City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "falkirk.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Falkirk",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "fareham.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Fareham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "fdean.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Forest of Dean",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "fenland.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Fenland",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "flintshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Flintshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "folkestone-hythe.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Shepway",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "forestryengland.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "dbf69c86-d5f7-4785-8f8e-26d74240d7fb",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "frc.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "58d99415-2d4a-4791-b15c-189c56668acb",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "fss.scot",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "fylde.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Fylde",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "gateshead.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Gateshead",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "gedling.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Gedling",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "glasgow.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Glasgow, City of",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "gloucester.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Gloucester City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "gloucestershire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Gloucestershire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "gosport.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Gosport",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "gov.gg",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "devolved",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "gov.im",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "devolved",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "gov.je",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "devolved",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "gov.scot",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "devolved",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "gov.wales",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "devolved",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "gravesham.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Gravesham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "great-yarmouth.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Great Yarmouth",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "greatbritishnuclear.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "1c2df800-ce5f-453d-861b-fb6e46b0ae49",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "greenwich.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Greenwich",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "guildford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Guildford",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "gwynedd.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Gwynedd",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "gyrfacymru.com",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "devolved",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "hackney.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Hackney",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "halton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Halton",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "hambleton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Hambleton",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "hants.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Hampshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "harborough.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Harborough",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "haringey.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Haringey",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "harlow.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Harlow",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "harrogate.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Harrogate",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "harrow.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Harrow",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "hart.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Hart",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "hartlepool.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Hartlepool",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "hastings.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Hastings",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "havant.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Havant",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "havering.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Havering",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "hblb.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "3cf62435-602b-4dc5-ac32-b01d635d0cc7",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "herefordshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Herefordshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "hertsmere.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Hertsmere",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "hient.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "highland.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Highland",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "highpeak.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: High Peak",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "hillingdon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Hillingdon",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "hinckley-bosworth.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Hinckley & Bosworth",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "historicengland.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "4dc9c134-62e4-40ab-aaa0-45ca55f0a1e3",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "hmcts.net",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "6f757605-ab8f-4b62-84e4-99f79cf085c2",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "horsham.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Horsham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "hounslow.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Hounslow",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "housing-ombudsman.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "9e28ceb5-667e-4950-bd82-22dec742f20d",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "hs2.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "b80fab8b-6ed4-426a-bb8d-f4b614437671",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "hull.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Kingston upon Hull City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "huntingdonshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Huntingdonshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "hyndburnbc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Hyndburn",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "ibca.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "80fc3a6c-b2c4-471d-be00-e3639169d9f8",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "ico.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "763d15dd-c454-4f5b-876d-838a6cfc2fae",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "ima-citizensrights.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "bae12d37-f7e3-4d96-85ac-7f6f10c65174",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "inverclyde.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Inverclyde",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "investni.com",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "325d6110-af70-4a59-9eda-c995d3fd6839",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "ipco.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "c032577f-7ed4-4fc2-8151-8c44d574a730",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "ipswich.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Ipswich",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "islington.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Islington",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "iwm.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "9ec60cf3-32f6-454b-803e-1ce494baa554",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "judiciary.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "kent.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Kent",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "kettering.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Kettering",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "kew.org",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "kingston.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Kingston upon Thames",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "knowsley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Knowsley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "lambeth.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Lambeth",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "lancashire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Lancashire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "lancaster.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Lancaster City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "lbbd.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Barking & Dagenham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "lbhf.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Hammersmith & Fulham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "leeds.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Leeds City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "legalservicesboard.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "1bfc68b1-30d5-4924-8e2d-b4b9eed71b26",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "leicester.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Leicester City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "leics.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Leicestershire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "lewes.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Lewes",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "lewisham.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Lewisham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "lichfielddc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Lichfield",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "lincoln.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Lincoln City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "lincolnshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Lincolnshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "lisburncastlereagh.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Lisburn City & Castlereagh District",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "liverpool.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Liverpool City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "livestockinformation.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "de4e9dc6-cca4-43af-a594-682023b84d6c",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "luton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Luton",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "maidstone.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Maidstone",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "maldon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Maldon",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "malvernhills.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Malvern Hills",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "manchester.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Manchester City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "mansfield.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Mansfield",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "maps.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "ccc9dff8-87b7-4d0f-8d78-b8339063b440",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "marinemanagement.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "8d56bb52-2f79-4b6d-9fc6-6d7dcc4f7586",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "medway.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Medway",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "melton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Melton",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "mendip.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Mendip",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "merthyr.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Merthyr Tydfil",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "merton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Merton",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "midandeastantrim.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Mid & East Antrim District Council",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "middevon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Mid Devon",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "middlesbrough.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Middlesbrough",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "midlothian.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Midlothian",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "midsuffolk.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Mid Suffolk",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "midsussex.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Mid Sussex",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "mil.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "military",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "milton-keynes.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Milton Keynes",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "mod.gov.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "d994e55c-48c9-4795-b872-58d8ec98af12",
+            "organisation_type_id": "military",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "molevalley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Mole Valley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "monmouthshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Monmouthshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "moray.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Moray",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "mrc.ukri.org",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "c4e35ca7-01ed-4b2c-97cb-b31d9ebdb4dd",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "mu.britishcouncil.org",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "37d2c134-1285-4907-a366-611617cfe44c",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "n-kesteven.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North Kesteven",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "n-somerset.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North Somerset",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "nao.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "nationalhighways.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "adb19d22-1374-4470-a202-db6e30a1afa4",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "nats.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "naturalengland.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "d3ce4ba7-bc75-46b4-89d9-38cb3240376d",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "ne-derbyshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North East Derbyshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "nelincs.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North East Lincolnshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "nerc.ukri.org",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "e83c99b4-d96e-4772-88bc-2973e9412475",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "nestcorporation.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "4d14dda6-55a5-4bfa-9e4b-25dda8207b37",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "nestpensions.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "networkrail.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "6fec95fb-2d8c-4015-bfb6-799c2e8949b3",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "newark-sherwooddc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Newark & Sherwood",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "newcastle-staffs.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Newcastle-under-Lyme",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "newcastle.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Newcastle upon Tyne City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "newforest.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: New Forest",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "newham.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Newham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "newport.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Newport City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "nhs.net",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "nhs",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "nice.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "1ad98e10-6422-4202-9d39-e341787d527c",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "norfolk.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Norfolk",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "north-ayrshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North Ayrshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "north-herts.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North Hertfordshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "north-norfolk.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North Norfolk",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "northdevon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North Devon",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "northlanarkshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North Lanarkshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "northlincs.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North Lincolnshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "northtyneside.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North Tyneside",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "northumberland.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Northumberland",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "northwarks.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North Warwickshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "northyorks.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North Yorkshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "norwich.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Norwich City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "nottinghamcity.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Nottingham City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "nottinghamshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Nottinghamshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "npg.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "e81e15cf-90b2-43f3-b3f5-c48735531c23",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "npl.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "e4283b2f-69d4-4ebd-be59-5de9850c550b",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "npt.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Neath Port Talbot",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "nsandi.com",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "590039e7-1976-48fa-b84d-d688d4661269",
+            "organisation_type_id": "nmd",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "nstauthority.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "300e6509-2c77-4ea5-8666-92ce0799cd02",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "nuclearwasteservices.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "87ad1f5a-f535-433c-8dde-eae033c593ec",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "nuneatonandbedworth.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Nuneaton & Bedworth",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "nwleics.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: North West Leicestershire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "oadby-wigston.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Oadby & Wigston",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "obr.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "1c117305-51f8-497a-9372-9330d1e59497",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "ofcom.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "956ecc87-b889-4c41-ac39-ba6a6ba48e97",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "officeforstudents.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "349da970-6d4b-40ba-9b4c-57c75b17ce29",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "ofgem.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "844d0880-14b1-4de1-bfb6-f233f3d5ae1d",
+            "organisation_type_id": "nmd",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "oldham.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Oldham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "orkney.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Orkney",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "os.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "b6d83795-a693-4f88-90fb-a5f67cd680a3",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "oxford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Oxford City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "oxfordshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Oxfordshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "parliament.scot",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "devolved",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "parliament.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "pembrokeshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Pembrokeshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "pendle.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Pendle",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "pensions-ombudsman.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "9db1fb50-bf20-4cf0-a00d-5a95654b7d7e",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "peterborough.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Peterborough City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "pkc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Perth & Kinross",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "plymouth.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Plymouth City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "policeombudsman.org",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "3f43ee0c-1989-4d2b-87db-773cec90fb0b",
+            "organisation_type_id": "devolved",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "portsmouth.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Portsmouth City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "powys.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Powys",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "ppf.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "234e02d3-ec77-4a99-b523-e4f5993d7a38",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "preston.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Preston",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "rbkc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Kensington & Chelsea",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "rbwm.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Windsor & Maidenhead",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "rctcbc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Rhondda Cynon Taff",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "redbridge.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Redbridge",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "redcar-cleveland.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Redcar & Cleveland",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "redditchbc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Redditch",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "reigate-banstead.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Reigate & Banstead",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "renfrewshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Renfrewshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "ribblevalley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Ribble Valley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "richmond.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Richmond upon Thames",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "richmondshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Richmondshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "rmg.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "0fb2c31d-c6dd-4be9-9a0b-297edc5b4930",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "rochdale.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Rochdale",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "rochford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Rochford",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "rossendale.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Rossendale",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "rother.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Rother",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "rotherham.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Rotherham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "royal.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "rugby.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Rugby",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "runnymede.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Runnymede",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "rushcliffe.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Rushcliffe",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "rushmoor.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Rushmoor",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "rutland.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Rutland",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "ryedale.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Ryedale",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "salford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Salford City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "sandwell.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Sandwell",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "scambs.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Cambridgeshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "scarborough.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Scarborough",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "sciencemuseum.ac.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "6ee60260-9821-4908-8363-6b94f079e384",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "scotborders.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Scottish Borders",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "scotent.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "sedgemoor.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Sedgemoor",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "sefton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Sefton",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "selby.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Selby",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "sellafieldsites.com",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "35ec21d9-c787-4821-871c-f914069e7904",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "senedd.wales",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "sevenoaks.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Sevenoaks",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "sheffield.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Sheffield City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "shetland.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Shetland",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "sholland.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Holland District Council",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "slc.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "9a9111aa-1db8-4025-8dd2-e08ec3175e72",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "slough.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Slough",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "solihull.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Solihull",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "somerset.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Somerset",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "south-ayrshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Ayrshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "south-derbys.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Derbyshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "south-norfolk.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Norfolk",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southampton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Southampton City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southbucks.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Bucks",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southend.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Southend-on-Sea",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southglos.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Gloucestershire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southhams.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Hams",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southkesteven.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Kesteven",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southlakeland.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Lakeland",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southlanarkshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Lanarkshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southoxon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Oxfordshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southribble.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Ribble",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southsomerset.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Somerset",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southtyneside.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Tyneside",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "southwark.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Southwark",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "spelthorne.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Spelthorne",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "sportscotland.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "sstaffs.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: South Staffordshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "staffordbc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Stafford",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "staffordshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Staffordshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "staffsmoorlands.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Staffordshire Moorlands",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "stevenage.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Stevenage",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "stfc.ac.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "a24bcb07-b88b-4e9c-ab06-98527242b78e",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "stirling.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Stirling",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "stockport.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Stockport",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "stockton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Stockton-on-Tees",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "stoke.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Stoke-on-Trent City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "stratford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Stratford-upon-Avon",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "stroud.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Stroud",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "suffolk.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Suffolk",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "sunderland.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Sunderland",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "supremecourt.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "ed629212-17e1-44cd-b41a-52103cdaaea9",
+            "organisation_type_id": "nmd",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "surreycc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Surrey",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "surreyheath.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Surrey Heath",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "sutton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Sutton",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "swale.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Swale",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "swansea.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Swansea, City of",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "swindon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Swindon",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "tameside.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Tameside",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "tamworth.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Tamworth",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "tandridge.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Tandridge",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "tate.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "7b38b48c-aad8-48f6-8bfa-1c48e07ef483",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "tauntondeane.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Taunton Deane",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "teignbridge.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Teignbridge",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "telford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Telford & Wrekin",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "tendringdc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Tendring",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "testvalley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Test Valley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "tewkesbury.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Tewkesbury",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "tfw.wales",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "thanet.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Thanet",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "threerivers.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Three Rivers",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "thurrock.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Thurrock",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "tmbc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Tonbridge & Malling",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "tnlcommunityfund.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "af7b989f-8fff-45cf-a657-8c5cb9cd1aec",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "torbay.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Torbay",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "torfaen.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Torfaen",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "torridge.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Torridge",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "towerhamlets.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Tower Hamlets",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "trafford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Trafford",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "tunbridgewells.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Tunbridge Wells",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "ukaea.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "bb4afa19-6b2f-4bf7-9725-22a259c90c73",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "ukgi.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "5329e3f4-08e5-4166-9bb2-434312442ce7",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "ukifs.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "55ae6ee0-138e-4031-97fd-616d1174b348",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "uknnl.com",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "78c48d24-7f78-4591-a221-b36c2aa1e151",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "ukri.org",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "d664afa8-ecd3-4e03-b914-d60aed4709c6",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "uksbs.co.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "666e939a-a9f8-4659-8063-a49089603afe",
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "uttlesford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Uttlesford",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "valeofglamorgan.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Vale of Glamorgan",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "vam.ac.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "30b3709d-2140-4795-b511-0256f62eb6ca",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "visitbritain.org",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "7f34c9c5-4e1f-4688-9731-3b44ddd3ede2",
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "visitscotland.com",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": null,
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "wakefield.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wakefield City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "walsall.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Walsall",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "walthamforest.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Waltham Forest",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wandsworth.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wandsworth",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "warrington.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Warrington",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "warwickdc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Warwick",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "warwickshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Warwickshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "watford.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Watford",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "waverley.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Waverley",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wealden.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wealden",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "welhat.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Welwyn Hatfield",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wellingborough.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wellingborough",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "west-dunbarton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: West Dunbartonshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "west-lindsey.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: West Lindsey",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "west-norfolk.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: King's Lynn & West Norfolk",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "westberks.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: West Berkshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "westdevon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: West Devon",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "westlancs.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: West Lancashire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "westlothian.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: West Lothian",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "westminster.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Westminster City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "westoxon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: West Oxfordshire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "westsomersetonline.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: West Somerset",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "westsussex.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: West Sussex",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wfd.org",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": null,
+            "organisation_type_id": "ndpb",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "whitehorsedc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Vale of White Horse",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wigan.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wigan",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wiltonpark.org.uk",
+            "identifiers": {},
+            "notes": null,
+            "organisation_id": "a787a14d-3bdd-44fc-820a-f821efd74f81",
+            "organisation_type_id": "ea",
+            "source": "internal"
+        },
+        {
+            "domain_pattern": "wiltshire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wiltshire Unitary",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "winchester.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Winchester City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wirral.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wirral",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "woking.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Woking",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wokingham.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wokingham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wolverhampton.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wolverhampton",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "worcester.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Worcester City",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "worcestershire.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Worcestershire",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wrexham.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wrexham",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wychavon.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wychavon",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wyrebc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wyre",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "wyreforestdc.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: Wyre Forest",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "york.gov.uk",
+            "identifiers": {},
+            "notes": "Local authority: York, City of",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "localgov.co.uk"
+        }
+    ]
+}
