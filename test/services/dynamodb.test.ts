@@ -392,4 +392,80 @@ describe('DynamoDB Service', () => {
       expect(isWithinDays(outsideWindow, 90, referenceDate)).toBe(false);
     });
   });
+
+  describe('getAvailableAccountsCount', () => {
+    it('should return count of available accounts', async () => {
+      mockSend.mockResolvedValueOnce({ Count: 3 });
+
+      const service = createDynamoDBService(mockClient, {
+        tableName: 'ISB-Leases',
+        accountsTableName: 'ISB-SandboxAccounts',
+      });
+      const result = await service.getAvailableAccountsCount();
+
+      expect(result.success).toBe(true);
+      expect(result.count).toBe(3);
+    });
+
+    it('should return 0 when no accounts available', async () => {
+      mockSend.mockResolvedValueOnce({ Count: 0 });
+
+      const service = createDynamoDBService(mockClient, {
+        tableName: 'ISB-Leases',
+        accountsTableName: 'ISB-SandboxAccounts',
+      });
+      const result = await service.getAvailableAccountsCount();
+
+      expect(result.success).toBe(true);
+      expect(result.count).toBe(0);
+    });
+
+    it('should return error when accounts table not configured', async () => {
+      const service = createDynamoDBService(mockClient, {
+        tableName: 'ISB-Leases',
+        // accountsTableName not provided
+      });
+      const result = await service.getAvailableAccountsCount();
+
+      expect(result.success).toBe(false);
+      expect(result.count).toBe(0);
+      expect(result.error).toBe('Accounts table not configured');
+    });
+
+    it('should return 0 on query failure (pessimistic fallback)', async () => {
+      mockSend.mockRejectedValueOnce(new Error('DynamoDB timeout'));
+
+      const service = createDynamoDBService(mockClient, {
+        tableName: 'ISB-Leases',
+        accountsTableName: 'ISB-SandboxAccounts',
+      });
+      const result = await service.getAvailableAccountsCount();
+
+      expect(result.success).toBe(false);
+      expect(result.count).toBe(0);
+      expect(result.error).toBe('DynamoDB timeout');
+    });
+
+    it('should filter for Available status', async () => {
+      mockSend.mockResolvedValueOnce({ Count: 5 });
+
+      const service = createDynamoDBService(mockClient, {
+        tableName: 'ISB-Leases',
+        accountsTableName: 'ISB-SandboxAccounts',
+      });
+      await service.getAvailableAccountsCount();
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            TableName: 'ISB-SandboxAccounts',
+            FilterExpression: '#status = :available',
+            ExpressionAttributeValues: {
+              ':available': 'Available',
+            },
+          }),
+        })
+      );
+    });
+  });
 });

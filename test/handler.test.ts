@@ -13,6 +13,7 @@ import {
   resetBedrockService,
   setOrchestrator,
   resetOrchestrator,
+  setSQSService,
   resetSQSService,
   setBankHolidayService,
   resetBankHolidayService,
@@ -20,6 +21,7 @@ import {
 import type { DynamoDBService } from '../src/services/dynamodb.js';
 import type { DomainAllowlistService } from '../src/services/domain-allowlist.js';
 import type { BedrockService } from '../src/services/bedrock.js';
+import type { SQSService } from '../src/services/sqs.js';
 import type { EventBridgeEvent, Context } from 'aws-lambda';
 import type { EventBridgeService } from '../src/services/eventbridge.js';
 import type { IsbLambdaService } from '../src/services/isb-lambda.js';
@@ -322,27 +324,428 @@ describe('handler', () => {
   });
 
   describe('non-LeaseRequested events', () => {
-    it('should ignore AccountCleanupSucceeded events', async () => {
-      const event = createMockEvent('AccountCleanupSucceeded', {
-        accountId: 'test-account',
-      });
-
-      const result = await handler(event, mockContext);
-
-      expect(result.statusCode).toBe(200);
-      expect(result.body).toBe('Ignored - not a LeaseRequested event');
-      expect(mockLogger.info).toHaveBeenCalledWith('Ignoring non-LeaseRequested event', {
-        detailType: 'AccountCleanupSucceeded',
-      });
-    });
-
-    it('should ignore ScheduledProcessing events', async () => {
+    it('should ignore unrecognized event types', async () => {
       const event = createMockEvent('ScheduledProcessing', {});
 
       const result = await handler(event, mockContext);
 
       expect(result.statusCode).toBe(200);
-      expect(result.body).toBe('Ignored - not a LeaseRequested event');
+      expect(result.body).toBe('Ignored - unrecognized event type');
+    });
+  });
+
+  describe('scheduled queue check and delay queue processing (Story 4.2)', () => {
+    const createScheduledEvent = (): EventBridgeEvent<string, unknown> => ({
+      version: '0',
+      id: 'scheduled-event-id',
+      'detail-type': 'ScheduledQueueCheck',
+      source: 'scheduled.queue-check',
+      account: '123456789012',
+      time: '2024-01-01T10:00:00Z',
+      region: 'us-east-1',
+      resources: [],
+      detail: {},
+    });
+
+    const createMockSQSService = (overrides?: Partial<SQSService>): SQSService => ({
+      sendDelayedRequest: vi.fn().mockResolvedValue({ success: true, messageId: 'msg-123' }),
+      receiveMessages: vi.fn().mockResolvedValue({ success: true, messages: [] }),
+      deleteMessage: vi.fn().mockResolvedValue({ success: true }),
+      getQueueDepth: vi.fn().mockResolvedValue({ success: true, approximateNumberOfMessages: 0 }),
+      ...overrides,
+    });
+
+    it('should handle scheduled queue check event (AC1)', async () => {
+      const event = createScheduledEvent();
+
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Scheduled queue check triggered',
+        expect.objectContaining({
+          source: 'scheduled.queue-check',
+        })
+      );
+    });
+
+    it('should skip queue processing when outside business hours (AC3)', async () => {
+      // Mark today as a bank holiday to simulate outside business hours
+      // Bank holidays are considered non-business days regardless of time
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // Use a bank holiday service that returns today as a bank holiday
+      const today = new Date().toISOString().split('T')[0]!;
+      const mockBankHolidayService = createMockBankHolidayService([today]);
+      setBankHolidayService(mockBankHolidayService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Outside business hours - queue processing skipped');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Outside business hours - skipping queue processing',
+        expect.objectContaining({
+          triggerType: 'scheduled',
+        })
+      );
+    });
+
+    it('should skip queue processing when no accounts available (AC3)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 0 }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const mockSQSService = createMockSQSService();
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('No accounts available - queue processing skipped');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'No accounts available - skipping queue processing',
+        expect.objectContaining({
+          triggerType: 'scheduled',
+        })
+      );
+    });
+
+    it('should log queue depth before and after processing (AC4)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const mockSQSService = createMockSQSService({
+        getQueueDepth: vi.fn().mockResolvedValue({ success: true, approximateNumberOfMessages: 3 }),
+        receiveMessages: vi.fn().mockResolvedValue({ success: true, messages: [] }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      await handler(event, mockContext);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Queue depth before processing',
+        expect.objectContaining({
+          approximateNumberOfMessages: 3,
+          triggerType: 'scheduled',
+        })
+      );
+    });
+
+    it('should receive messages with 5-minute visibility timeout (AC5)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const mockReceiveMessages = vi.fn().mockResolvedValue({ success: true, messages: [] });
+      const mockSQSService = createMockSQSService({
+        receiveMessages: mockReceiveMessages,
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      await handler(event, mockContext);
+
+      // Verify receiveMessages was called with 5-minute (300 second) visibility timeout
+      expect(mockReceiveMessages).toHaveBeenCalledWith(1, 300);
+    });
+
+    it('should return no messages when queue is empty', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({ success: true, messages: [] }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('No messages in queue');
+    });
+
+    it('should process delayed message and delete on success (AC5)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // Use a valid UUID for the delayed lease
+      const delayedLeaseUuid = '11111111-1111-1111-1111-111111111111';
+
+      // Use mock orchestrator to ensure the nested LeaseRequested event is approved
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: delayedLeaseUuid,
+            userEmail: 'delayed@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 0,
+            decision: 'approved',
+            approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      // Create a delayed message with a valid LeaseRequested event
+      const originalEvent = {
+        version: '0',
+        id: 'original-event-id',
+        'detail-type': 'LeaseRequested',
+        source: 'innovation-sandbox',
+        account: '123456789012',
+        time: '2024-01-01T09:00:00Z',
+        region: 'us-east-1',
+        resources: [],
+        detail: {
+          leaseId: {
+            userEmail: 'delayed@example.gov.uk',
+            uuid: delayedLeaseUuid,
+          },
+          templateId: 'web-hosting',
+          budgetAmount: 50,
+          leaseDurationHours: 48,
+          requiresManualApproval: false,
+        },
+      };
+
+      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: true });
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({
+          success: true,
+          messages: [
+            {
+              messageId: 'msg-delayed-1',
+              receiptHandle: 'receipt-handle-123',
+              body: {
+                leaseId: { userEmail: 'delayed@example.gov.uk', uuid: delayedLeaseUuid },
+                originalEvent,
+                receivedAt: '2024-01-01T09:00:00Z',
+                processAfter: '2024-01-01T10:00:00Z',
+                reason: 'Outside business hours',
+              },
+              sentTimestamp: 1704099600000,
+            },
+          ],
+        }),
+        deleteMessage: mockDeleteMessage,
+        getQueueDepth: vi.fn()
+          .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 })
+          .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 0 }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Processed 1 message from queue');
+      expect(mockDeleteMessage).toHaveBeenCalledWith('receipt-handle-123');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Delayed message processed and deleted',
+        expect.objectContaining({
+          leaseId: delayedLeaseUuid,
+          userEmail: 'delayed@example.gov.uk',
+        })
+      );
+    });
+
+    it('should not delete message when processing fails (AC5)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // Create a delayed message with an INVALID event (will fail validation)
+      const invalidOriginalEvent = {
+        version: '0',
+        id: 'original-event-id',
+        'detail-type': 'LeaseRequested',
+        source: 'innovation-sandbox',
+        account: '123456789012',
+        time: '2024-01-01T09:00:00Z',
+        region: 'us-east-1',
+        resources: [],
+        detail: {
+          leaseId: 'invalid-format', // Invalid - should be object
+          templateId: 'web-hosting',
+        },
+      };
+
+      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: true });
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({
+          success: true,
+          messages: [
+            {
+              messageId: 'msg-invalid-1',
+              receiptHandle: 'receipt-handle-invalid',
+              body: {
+                leaseId: { userEmail: 'invalid@example.gov.uk', uuid: 'invalid-lease-uuid' },
+                originalEvent: invalidOriginalEvent,
+                receivedAt: '2024-01-01T09:00:00Z',
+                processAfter: '2024-01-01T10:00:00Z',
+                reason: 'Outside business hours',
+              },
+              sentTimestamp: 1704099600000,
+            },
+          ],
+        }),
+        deleteMessage: mockDeleteMessage,
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Message processing failed - will retry');
+      // Message should NOT be deleted since processing failed
+      expect(mockDeleteMessage).not.toHaveBeenCalled();
+    });
+
+    it('should handle SQS receive failure gracefully', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({
+          success: false,
+          messages: [],
+          error: 'SQS unavailable',
+        }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(500);
+      expect(result.body).toBe('Failed to receive messages: SQS unavailable');
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to receive messages from queue',
+        expect.objectContaining({
+          error: 'SQS unavailable',
+        })
+      );
+    });
+
+    it('should handle AccountCleanupSucceeded event by processing queue (AC2)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({ success: true, messages: [] }),
+      });
+      setSQSService(mockSQSService);
+
+      const event: EventBridgeEvent<string, unknown> = {
+        version: '0',
+        id: 'cleanup-event-id',
+        'detail-type': 'AccountCleanupSucceeded',
+        source: 'innovation-sandbox',
+        account: '123456789012',
+        time: '2024-01-01T10:00:00Z',
+        region: 'us-east-1',
+        resources: [],
+        detail: { accountId: 'cleaned-account-123' },
+      };
+
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Account cleanup succeeded - checking delay queue',
+        expect.objectContaining({
+          accountId: 'cleaned-account-123',
+        })
+      );
+      // Should trigger queue processing with 'cleanup' trigger type
+      expect(mockSQSService.receiveMessages).toHaveBeenCalled();
+    });
+
+    it('should use pessimistic fallback when account check fails', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({
+          success: false,
+          count: 0,
+          error: 'DynamoDB timeout',
+        }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const mockSQSService = createMockSQSService();
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      // Should skip processing due to pessimistic fallback (0 accounts)
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('No accounts available - queue processing skipped');
+    });
+
+    it('should handle SQS service not configured', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // Set SQS service to undefined
+      setSQSService(undefined);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('SQS service not configured');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'SQS service not configured - cannot process queue'
+      );
     });
   });
 
@@ -755,6 +1158,7 @@ describe('handler', () => {
       const mockDynamoDBService: DynamoDBService = {
         getUserLeaseHistory: vi.fn().mockResolvedValue(mockHistory),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -792,6 +1196,7 @@ describe('handler', () => {
       const mockDynamoDBService: DynamoDBService = {
         getUserLeaseHistory: vi.fn().mockRejectedValue(new Error('DynamoDB unavailable')),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -822,6 +1227,7 @@ describe('handler', () => {
       const mockDynamoDBService: DynamoDBService = {
         getUserLeaseHistory: vi.fn().mockResolvedValue(mockHistory),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -870,6 +1276,7 @@ describe('handler', () => {
       const mockDynamoDBService: DynamoDBService = {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue(mockOrgHistory),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -894,6 +1301,7 @@ describe('handler', () => {
       const mockDynamoDBService: DynamoDBService = {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockRejectedValue(new Error('DynamoDB scan failed')),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -924,6 +1332,7 @@ describe('handler', () => {
       const mockDynamoDBService: DynamoDBService = {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue(mockOrgHistory),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
       };
       setDynamoDBService(mockDynamoDBService);
 
@@ -961,6 +1370,7 @@ describe('handler', () => {
       const mockDynamoDBService: DynamoDBService = {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
       };
       setDynamoDBService(mockDynamoDBService);
 

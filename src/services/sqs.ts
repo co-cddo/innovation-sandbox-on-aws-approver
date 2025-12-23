@@ -5,7 +5,13 @@
  * arrive outside business hours.
  */
 
-import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import {
+  SQSClient,
+  SendMessageCommand,
+  ReceiveMessageCommand,
+  DeleteMessageCommand,
+  GetQueueAttributesCommand,
+} from '@aws-sdk/client-sqs';
 
 /**
  * Message structure for delayed lease requests.
@@ -36,6 +42,46 @@ export interface SendDelayedResult {
 }
 
 /**
+ * Received message from the delay queue.
+ */
+export interface ReceivedMessage {
+  /** Message ID */
+  messageId: string;
+  /** Receipt handle for deletion */
+  receiptHandle: string;
+  /** Parsed message body */
+  body: DelayedLeaseMessage;
+  /** Approximate time message was sent (for FIFO ordering) */
+  sentTimestamp?: number;
+}
+
+/**
+ * Result from receiving messages from the delay queue.
+ */
+export interface ReceiveMessagesResult {
+  success: boolean;
+  messages: ReceivedMessage[];
+  error?: string;
+}
+
+/**
+ * Result from deleting a message from the delay queue.
+ */
+export interface DeleteMessageResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Queue depth information.
+ */
+export interface QueueDepthResult {
+  success: boolean;
+  approximateNumberOfMessages?: number;
+  error?: string;
+}
+
+/**
  * SQS service configuration.
  */
 export interface SQSServiceConfig {
@@ -50,6 +96,24 @@ export interface SQSService {
    * Sends a delayed lease request to the delay queue.
    */
   sendDelayedRequest(message: DelayedLeaseMessage): Promise<SendDelayedResult>;
+
+  /**
+   * Receives messages from the delay queue.
+   * Returns oldest messages first (FIFO by SentTimestamp).
+   * @param maxMessages - Maximum number of messages to receive (1-10, default 1)
+   * @param visibilityTimeout - Visibility timeout in seconds (default 300 = 5 min)
+   */
+  receiveMessages(maxMessages?: number, visibilityTimeout?: number): Promise<ReceiveMessagesResult>;
+
+  /**
+   * Deletes a message from the delay queue after successful processing.
+   */
+  deleteMessage(receiptHandle: string): Promise<DeleteMessageResult>;
+
+  /**
+   * Gets the approximate number of messages in the queue.
+   */
+  getQueueDepth(): Promise<QueueDepthResult>;
 }
 
 /**
@@ -124,6 +188,125 @@ export const createSQSService = (
           success: false,
           error: errorMessage,
         };
+      }
+    },
+
+    async receiveMessages(
+      maxMessages: number = 1,
+      visibilityTimeout: number = 300
+    ): Promise<ReceiveMessagesResult> {
+      try {
+        const command = new ReceiveMessageCommand({
+          QueueUrl: config.queueUrl,
+          MaxNumberOfMessages: Math.min(Math.max(1, maxMessages), 10),
+          VisibilityTimeout: visibilityTimeout,
+          AttributeNames: ['All'], // Includes SentTimestamp
+          MessageAttributeNames: ['All'],
+          WaitTimeSeconds: 0, // Short poll - we don't want to wait
+        });
+
+        const result = await client.send(command);
+
+        if (!result.Messages || result.Messages.length === 0) {
+          log.info('No messages in delay queue');
+          return { success: true, messages: [] };
+        }
+
+        // Parse messages and sort by SentTimestamp (oldest first for FIFO)
+        const messages: ReceivedMessage[] = result.Messages.map((msg) => {
+          const sentTimestamp = msg.Attributes?.SentTimestamp
+            ? parseInt(msg.Attributes.SentTimestamp, 10)
+            : undefined;
+
+          let body: DelayedLeaseMessage;
+          try {
+            body = JSON.parse(msg.Body ?? '{}') as DelayedLeaseMessage;
+          } catch {
+            // If parsing fails, create a minimal structure
+            body = {
+              leaseId: { userEmail: 'unknown', uuid: 'unknown' },
+              originalEvent: {},
+              receivedAt: new Date().toISOString(),
+              processAfter: new Date().toISOString(),
+              reason: 'Unparseable message',
+            };
+          }
+
+          return {
+            messageId: msg.MessageId ?? 'unknown',
+            receiptHandle: msg.ReceiptHandle ?? '',
+            body,
+            sentTimestamp,
+          };
+        }).sort((a, b) => (a.sentTimestamp ?? 0) - (b.sentTimestamp ?? 0));
+
+        log.info('Received messages from delay queue', {
+          messageCount: messages.length,
+          oldestMessageId: messages[0]?.messageId,
+        });
+
+        return { success: true, messages };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        log.error('Failed to receive messages from queue', {
+          error: errorMessage,
+        });
+
+        return { success: false, messages: [], error: errorMessage };
+      }
+    },
+
+    async deleteMessage(receiptHandle: string): Promise<DeleteMessageResult> {
+      try {
+        const command = new DeleteMessageCommand({
+          QueueUrl: config.queueUrl,
+          ReceiptHandle: receiptHandle,
+        });
+
+        await client.send(command);
+
+        log.info('Message deleted from delay queue', {
+          receiptHandle: receiptHandle.substring(0, 50) + '...',
+        });
+
+        return { success: true };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        log.error('Failed to delete message from queue', {
+          error: errorMessage,
+        });
+
+        return { success: false, error: errorMessage };
+      }
+    },
+
+    async getQueueDepth(): Promise<QueueDepthResult> {
+      try {
+        const command = new GetQueueAttributesCommand({
+          QueueUrl: config.queueUrl,
+          AttributeNames: ['ApproximateNumberOfMessages'],
+        });
+
+        const result = await client.send(command);
+        const count = result.Attributes?.ApproximateNumberOfMessages
+          ? parseInt(result.Attributes.ApproximateNumberOfMessages, 10)
+          : 0;
+
+        log.info('Queue depth retrieved', {
+          approximateNumberOfMessages: count,
+        });
+
+        return { success: true, approximateNumberOfMessages: count };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        log.error('Failed to get queue depth', {
+          error: errorMessage,
+        });
+
+        return { success: false, error: errorMessage };
       }
     },
   };

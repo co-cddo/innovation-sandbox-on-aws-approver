@@ -28,6 +28,7 @@ import {
   createSQSService,
   type SQSService,
   type DelayedLeaseMessage,
+  type ReceivedMessage,
 } from './services/sqs.js';
 import {
   createBusinessHoursChecker,
@@ -114,6 +115,7 @@ const dynamoDBDocClient = DynamoDBDocumentClient.from(dynamoDBClient);
 // DynamoDB service configuration
 const dynamoDBConfig = {
   tableName: process.env.ISB_LEASES_TABLE_NAME || '',
+  accountsTableName: process.env.ISB_ACCOUNTS_TABLE_NAME || '',
 };
 
 // Create DynamoDB service (can be overridden in tests via dependency injection)
@@ -618,6 +620,234 @@ const emitEscalationOnError = async (
 };
 
 /**
+ * Checks if there are available sandbox accounts.
+ * Returns 0 on failure (pessimistic assumption).
+ */
+const checkAccountAvailability = async (): Promise<number> => {
+  if (!dynamoDBService) {
+    logger.warn('DynamoDB service not configured - assuming no accounts available');
+    return 0;
+  }
+
+  try {
+    const result = await dynamoDBService.getAvailableAccountsCount();
+    if (!result.success) {
+      logger.warn('Failed to check account availability - assuming no accounts', {
+        error: result.error,
+      });
+      return 0;
+    }
+    logger.info('Account availability checked', {
+      availableAccounts: result.count,
+    });
+    return result.count;
+  } catch (error) {
+    logger.error('Error checking account availability', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return 0;
+  }
+};
+
+/**
+ * Processes a single delayed message from the queue.
+ * Returns true if processing was successful, false otherwise.
+ */
+const processDelayedMessage = async (
+  message: ReceivedMessage,
+  context: Context
+): Promise<boolean> => {
+  const { body, receiptHandle } = message;
+  const { leaseId, originalEvent } = body;
+
+  logger.info('Processing delayed message', {
+    leaseId: leaseId.uuid,
+    userEmail: leaseId.userEmail,
+    receivedAt: body.receivedAt,
+  });
+
+  try {
+    // Parse the original event and process it
+    const event = originalEvent as EventBridgeEvent<string, unknown>;
+
+    // Recursively call the main handler to process the original event
+    // This will go through the full scoring and approval flow
+    const result = await handler(event, context);
+
+    if (result.statusCode === 200) {
+      // Success - delete the message
+      if (!sqsService) {
+        logger.error('SQS service not available for message deletion');
+        return false;
+      }
+
+      const deleteResult = await sqsService.deleteMessage(receiptHandle);
+      if (!deleteResult.success) {
+        logger.error('Failed to delete processed message', {
+          error: deleteResult.error,
+          leaseId: leaseId.uuid,
+        });
+        // Message will become visible again after timeout
+        return false;
+      }
+
+      logger.info('Delayed message processed and deleted', {
+        leaseId: leaseId.uuid,
+        userEmail: leaseId.userEmail,
+      });
+      return true;
+    }
+
+    // Processing returned non-200 - leave message in queue
+    logger.warn('Delayed message processing returned error', {
+      leaseId: leaseId.uuid,
+      statusCode: result.statusCode,
+      body: result.body,
+    });
+    return false;
+  } catch (error) {
+    // Processing threw - leave message in queue
+    logger.error('Error processing delayed message', {
+      error: error instanceof Error ? error.message : String(error),
+      leaseId: leaseId.uuid,
+    });
+    return false;
+  }
+};
+
+/**
+ * Processes the delay queue - checks for messages and processes if conditions are met.
+ * Called by scheduled queue check and AccountCleanupSucceeded triggers.
+ */
+const processDelayQueue = async (
+  context: Context,
+  triggerType: 'scheduled' | 'cleanup'
+): Promise<ApproverResponse> => {
+  // Check if within business hours first (before making SQS calls)
+  const businessHoursResult = await checkBusinessHoursNow();
+  if (!businessHoursResult.isWithinBusinessHours) {
+    logger.info('Outside business hours - skipping queue processing', {
+      londonTime: businessHoursResult.londonTime,
+      nextProcessingTime: businessHoursResult.nextProcessingTime,
+      triggerType,
+    });
+    return {
+      statusCode: 200,
+      body: 'Outside business hours - queue processing skipped',
+    };
+  }
+
+  // Check account availability
+  const availableAccounts = await checkAccountAvailability();
+  if (availableAccounts === 0) {
+    logger.info('No accounts available - skipping queue processing', {
+      triggerType,
+    });
+    return {
+      statusCode: 200,
+      body: 'No accounts available - queue processing skipped',
+    };
+  }
+
+  // Check if SQS service is configured
+  if (!sqsService) {
+    logger.warn('SQS service not configured - cannot process queue');
+    return {
+      statusCode: 200,
+      body: 'SQS service not configured',
+    };
+  }
+
+  // Log queue depth before processing (AC4)
+  let depthBefore = 0;
+  const depthBeforeResult = await sqsService.getQueueDepth();
+  if (depthBeforeResult.success) {
+    depthBefore = depthBeforeResult.approximateNumberOfMessages ?? 0;
+    logger.info('Queue depth before processing', {
+      approximateNumberOfMessages: depthBefore,
+      triggerType,
+    });
+  }
+
+  // Receive oldest message from queue
+  const receiveResult = await sqsService.receiveMessages(1, 300);
+  if (!receiveResult.success) {
+    logger.error('Failed to receive messages from queue', {
+      error: receiveResult.error,
+      triggerType,
+    });
+    return {
+      statusCode: 500,
+      body: `Failed to receive messages: ${receiveResult.error}`,
+    };
+  }
+
+  if (receiveResult.messages.length === 0) {
+    logger.info('No messages in delay queue', {
+      triggerType,
+    });
+    return {
+      statusCode: 200,
+      body: 'No messages in queue',
+    };
+  }
+
+  // Process the oldest message (messages are already sorted by SentTimestamp)
+  const message = receiveResult.messages[0]!;
+  const success = await processDelayedMessage(message, context);
+
+  // Log queue depth after processing (AC4)
+  const depthAfterResult = await sqsService.getQueueDepth();
+  if (depthAfterResult.success) {
+    logger.info('Queue depth after processing', {
+      approximateNumberOfMessages: depthAfterResult.approximateNumberOfMessages,
+      depthBefore,
+      processed: success ? 1 : 0,
+      triggerType,
+    });
+  }
+
+  return {
+    statusCode: 200,
+    body: success ? 'Processed 1 message from queue' : 'Message processing failed - will retry',
+  };
+};
+
+/**
+ * Handles scheduled queue check events (from EventBridge Scheduler every 30 minutes).
+ */
+const handleScheduledQueueCheck = async (
+  event: EventBridgeEvent<string, unknown>,
+  context: Context
+): Promise<ApproverResponse> => {
+  logger.info('Scheduled queue check triggered', {
+    source: event.source,
+    detailType: event['detail-type'],
+    timestamp: new Date().toISOString(),
+  });
+
+  return processDelayQueue(context, 'scheduled');
+};
+
+/**
+ * Handles AccountCleanupSucceeded events - an account became available.
+ */
+const handleAccountCleanupSucceeded = async (
+  event: EventBridgeEvent<string, unknown>,
+  context: Context
+): Promise<ApproverResponse> => {
+  const detail = event.detail as { accountId?: string } | undefined;
+
+  logger.info('Account cleanup succeeded - checking delay queue', {
+    accountId: detail?.accountId,
+    source: event.source,
+    timestamp: new Date().toISOString(),
+  });
+
+  return processDelayQueue(context, 'cleanup');
+};
+
+/**
  * Processes LeaseRequested events using the state machine for decision orchestration.
  * Side effects (EventBridge emission) are handled in this handler, not in the state machine.
  *
@@ -637,14 +867,26 @@ export const handler = async (
   // Initialize idempotency if configured
   initializeIdempotency();
 
-  // Only process LeaseRequested events
+  // Route based on event type
+  // 1. Scheduled queue check (from EventBridge Scheduler every 30 minutes)
+  if (event.source === 'scheduled.queue-check') {
+    return handleScheduledQueueCheck(event, context);
+  }
+
+  // 2. Account cleanup succeeded - an account became available
+  if (event['detail-type'] === 'AccountCleanupSucceeded') {
+    return handleAccountCleanupSucceeded(event, context);
+  }
+
+  // 3. LeaseRequested - main approval flow
   if (event['detail-type'] !== 'LeaseRequested') {
-    logger.info('Ignoring non-LeaseRequested event', {
+    logger.info('Ignoring unrecognized event', {
       detailType: event['detail-type'],
+      source: event.source,
     });
     return {
       statusCode: 200,
-      body: 'Ignored - not a LeaseRequested event',
+      body: 'Ignored - unrecognized event type',
     };
   }
 

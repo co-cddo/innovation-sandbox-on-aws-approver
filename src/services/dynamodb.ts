@@ -14,6 +14,20 @@ import type { LeaseHistoryRecord } from '../scoring/types.js';
 export interface DynamoDBServiceConfig {
   /** ISB Leases table name */
   tableName: string;
+  /** ISB SandboxAccounts table name (optional, for queue processing) */
+  accountsTableName?: string;
+}
+
+/**
+ * Available account result.
+ */
+export interface AvailableAccountsResult {
+  /** Whether the query was successful */
+  success: boolean;
+  /** Number of available accounts */
+  count: number;
+  /** Error message if failed */
+  error?: string;
 }
 
 /**
@@ -40,6 +54,14 @@ export interface DynamoDBService {
    * @returns Array of lease history records for the organization
    */
   getOrgLeaseHistory: (domain: string, excludeEmail?: string) => Promise<LeaseHistoryRecord[]>;
+
+  /**
+   * Get the count of available sandbox accounts from ISB SandboxAccounts table.
+   * Used to determine if delayed requests can be processed (Story 4.2).
+   *
+   * @returns Count of accounts with status = 'Available'
+   */
+  getAvailableAccountsCount: () => Promise<AvailableAccountsResult>;
 }
 
 /**
@@ -54,7 +76,7 @@ export const createDynamoDBService = (
   client: DynamoDBDocumentClient,
   config: DynamoDBServiceConfig
 ): DynamoDBService => {
-  const { tableName } = config;
+  const { tableName, accountsTableName } = config;
 
   /**
    * Get user lease history from ISB Leases table.
@@ -123,7 +145,52 @@ export const createDynamoDBService = (
       }));
   };
 
-  return { getUserLeaseHistory, getOrgLeaseHistory };
+  /**
+   * Get the count of available sandbox accounts from ISB SandboxAccounts table.
+   * Returns count of accounts with status = 'Available'.
+   * Returns 0 on failure (pessimistic fallback).
+   */
+  const getAvailableAccountsCount = async (): Promise<AvailableAccountsResult> => {
+    if (!accountsTableName) {
+      return {
+        success: false,
+        count: 0,
+        error: 'Accounts table not configured',
+      };
+    }
+
+    try {
+      // Scan for available accounts (small table, acceptable at scale)
+      const command = new ScanCommand({
+        TableName: accountsTableName,
+        FilterExpression: '#status = :available',
+        ExpressionAttributeNames: {
+          '#status': 'status',
+        },
+        ExpressionAttributeValues: {
+          ':available': 'Available',
+        },
+        Select: 'COUNT',
+      });
+
+      const response = await client.send(command);
+      const count = response.Count ?? 0;
+
+      return {
+        success: true,
+        count,
+      };
+    } catch (error) {
+      // Pessimistic fallback - assume no accounts available on error
+      return {
+        success: false,
+        count: 0,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  };
+
+  return { getUserLeaseHistory, getOrgLeaseHistory, getAvailableAccountsCount };
 };
 
 /**

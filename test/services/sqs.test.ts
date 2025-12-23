@@ -5,7 +5,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import {
+  SQSClient,
+  SendMessageCommand,
+  ReceiveMessageCommand,
+  DeleteMessageCommand,
+  GetQueueAttributesCommand,
+} from '@aws-sdk/client-sqs';
 import {
   createSQSService,
   type DelayedLeaseMessage,
@@ -181,6 +187,196 @@ describe('SQS Service', () => {
       const callArgs = mockSend.mock.calls[0] as unknown[];
       const sentCommand = callArgs[0] as SendMessageCommand;
       expect(sentCommand.input.QueueUrl).toBe(queueUrl);
+    });
+  });
+
+  describe('receiveMessages', () => {
+    it('should receive messages from queue successfully', async () => {
+      const testMessage = createTestMessage();
+      mockSend.mockResolvedValueOnce({
+        Messages: [
+          {
+            MessageId: 'msg-receive-1',
+            ReceiptHandle: 'receipt-handle-123',
+            Body: JSON.stringify(testMessage),
+            Attributes: {
+              SentTimestamp: '1705363200000', // 2024-01-16T00:00:00.000Z
+            },
+          },
+        ],
+      });
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' }, mockLogger);
+      const result = await service.receiveMessages(1, 300);
+
+      expect(result.success).toBe(true);
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]?.messageId).toBe('msg-receive-1');
+      expect(result.messages[0]?.receiptHandle).toBe('receipt-handle-123');
+      expect(result.messages[0]?.body.leaseId.uuid).toBe('test-lease-123');
+    });
+
+    it('should return empty array when no messages', async () => {
+      mockSend.mockResolvedValueOnce({
+        Messages: [],
+      });
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' }, mockLogger);
+      const result = await service.receiveMessages();
+
+      expect(result.success).toBe(true);
+      expect(result.messages).toHaveLength(0);
+    });
+
+    it('should sort messages by SentTimestamp (oldest first)', async () => {
+      mockSend.mockResolvedValueOnce({
+        Messages: [
+          {
+            MessageId: 'msg-newer',
+            ReceiptHandle: 'receipt-2',
+            Body: JSON.stringify(createTestMessage()),
+            Attributes: { SentTimestamp: '1705449600000' }, // 2024-01-17T00:00:00.000Z
+          },
+          {
+            MessageId: 'msg-older',
+            ReceiptHandle: 'receipt-1',
+            Body: JSON.stringify(createTestMessage()),
+            Attributes: { SentTimestamp: '1705363200000' }, // 2024-01-16T00:00:00.000Z
+          },
+        ],
+      });
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' });
+      const result = await service.receiveMessages(10);
+
+      expect(result.messages[0]?.messageId).toBe('msg-older');
+      expect(result.messages[1]?.messageId).toBe('msg-newer');
+    });
+
+    it('should handle receive failure', async () => {
+      mockSend.mockRejectedValueOnce(new Error('Network error'));
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' }, mockLogger);
+      const result = await service.receiveMessages();
+
+      expect(result.success).toBe(false);
+      expect(result.messages).toHaveLength(0);
+      expect(result.error).toBe('Network error');
+    });
+
+    it('should use correct visibility timeout', async () => {
+      mockSend.mockResolvedValueOnce({ Messages: [] });
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' });
+      await service.receiveMessages(1, 600);
+
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      const callArgs = mockSend.mock.calls[0] as unknown[];
+      const sentCommand = callArgs[0] as ReceiveMessageCommand;
+      expect(sentCommand.input.VisibilityTimeout).toBe(600);
+    });
+
+    it('should handle malformed message body', async () => {
+      mockSend.mockResolvedValueOnce({
+        Messages: [
+          {
+            MessageId: 'msg-malformed',
+            ReceiptHandle: 'receipt-malformed',
+            Body: 'not valid json',
+          },
+        ],
+      });
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' });
+      const result = await service.receiveMessages();
+
+      expect(result.success).toBe(true);
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]?.body.reason).toBe('Unparseable message');
+    });
+  });
+
+  describe('deleteMessage', () => {
+    it('should delete message successfully', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' }, mockLogger);
+      const result = await service.deleteMessage('receipt-handle-123');
+
+      expect(result.success).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should handle delete failure', async () => {
+      mockSend.mockRejectedValueOnce(new Error('Invalid receipt handle'));
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' }, mockLogger);
+      const result = await service.deleteMessage('invalid-handle');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Invalid receipt handle');
+    });
+
+    it('should use correct receipt handle', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' });
+      await service.deleteMessage('my-receipt-handle');
+
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      const callArgs = mockSend.mock.calls[0] as unknown[];
+      const sentCommand = callArgs[0] as DeleteMessageCommand;
+      expect(sentCommand.input.ReceiptHandle).toBe('my-receipt-handle');
+    });
+  });
+
+  describe('getQueueDepth', () => {
+    it('should return queue depth successfully', async () => {
+      mockSend.mockResolvedValueOnce({
+        Attributes: {
+          ApproximateNumberOfMessages: '5',
+        },
+      });
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' }, mockLogger);
+      const result = await service.getQueueDepth();
+
+      expect(result.success).toBe(true);
+      expect(result.approximateNumberOfMessages).toBe(5);
+    });
+
+    it('should return 0 when attribute not present', async () => {
+      mockSend.mockResolvedValueOnce({
+        Attributes: {},
+      });
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' });
+      const result = await service.getQueueDepth();
+
+      expect(result.success).toBe(true);
+      expect(result.approximateNumberOfMessages).toBe(0);
+    });
+
+    it('should handle get depth failure', async () => {
+      mockSend.mockRejectedValueOnce(new Error('Queue not found'));
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' }, mockLogger);
+      const result = await service.getQueueDepth();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Queue not found');
+    });
+
+    it('should request correct attribute', async () => {
+      mockSend.mockResolvedValueOnce({ Attributes: {} });
+
+      const service = createSQSService(mockClient, { queueUrl: 'https://sqs.example.com/queue' });
+      await service.getQueueDepth();
+
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      const callArgs = mockSend.mock.calls[0] as unknown[];
+      const sentCommand = callArgs[0] as GetQueueAttributesCommand;
+      expect(sentCommand.input.AttributeNames).toEqual(['ApproximateNumberOfMessages']);
     });
   });
 });
