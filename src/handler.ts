@@ -2,6 +2,7 @@ import { EventBridgeClient } from '@aws-sdk/client-eventbridge';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { S3Client } from '@aws-sdk/client-s3';
 // makeIdempotent import prepared for future full integration (Story 2.4 deferred handler wrapping)
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { makeIdempotent as _makeIdempotent } from '@aws-lambda-powertools/idempotency';
@@ -11,7 +12,12 @@ import { createEventBridgeService, type EventBridgeService } from './services/ev
 import { createIsbLambdaService, type IsbLambdaService } from './services/isb-lambda.js';
 import { createDynamoDBService, type DynamoDBService } from './services/dynamodb.js';
 import { extractDomain } from './lib/domain.js';
+import { isVerifiedGovDomain } from './lib/domain-verification.js';
 import type { LeaseHistoryRecord } from './scoring/types.js';
+import {
+  createDomainAllowlistService,
+  type DomainAllowlistService,
+} from './services/domain-allowlist.js';
 import {
   createPersistenceLayer,
   createIdempotencyConfig,
@@ -94,6 +100,22 @@ const dynamoDBConfig = {
 // Create DynamoDB service (can be overridden in tests via dependency injection)
 let dynamoDBService: DynamoDBService | undefined = dynamoDBConfig.tableName
   ? createDynamoDBService(dynamoDBDocClient, dynamoDBConfig)
+  : undefined;
+
+// S3 client for domain allowlist (ukps-domains)
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || 'us-west-2',
+});
+
+// Domain allowlist service configuration
+const domainAllowlistConfig = {
+  bucketName: process.env.DOMAIN_ALLOWLIST_BUCKET || '',
+  objectKey: process.env.DOMAIN_ALLOWLIST_KEY || 'user_domains.json',
+};
+
+// Create domain allowlist service (can be overridden in tests via dependency injection)
+let domainAllowlistService: DomainAllowlistService | undefined = domainAllowlistConfig.bucketName
+  ? createDomainAllowlistService(s3Client, domainAllowlistConfig)
   : undefined;
 
 // State machine configuration
@@ -182,6 +204,24 @@ export const resetDynamoDBService = (): void => {
 };
 
 /**
+ * Allows overriding the domain allowlist service for testing purposes.
+ */
+export const setDomainAllowlistService = (
+  service: DomainAllowlistService | undefined
+): void => {
+  domainAllowlistService = service;
+};
+
+/**
+ * Resets to the default domain allowlist service (for test cleanup).
+ */
+export const resetDomainAllowlistService = (): void => {
+  domainAllowlistService = domainAllowlistConfig.bucketName
+    ? createDomainAllowlistService(s3Client, domainAllowlistConfig)
+    : undefined;
+};
+
+/**
  * Allows overriding the state machine orchestrator for testing purposes.
  */
 export const setOrchestrator = (newOrchestrator: StateMachineOrchestrator): void => {
@@ -260,12 +300,55 @@ const queryOrgHistory = async (userEmail: string): Promise<LeaseHistoryRecord[]>
 };
 
 /**
+ * Checks if a domain is in the verified local authority domains allowlist.
+ * Returns false (pessimistic) if the service is not configured or query fails.
+ * This implements AC5: skip bonus on failure, don't fail the whole request.
+ */
+const checkDomainVerification = async (domain: string): Promise<boolean> => {
+  if (!domainAllowlistService) {
+    logger.warn('Domain allowlist service not configured - skipping domain verification', {
+      domain,
+    });
+    return false;
+  }
+
+  try {
+    const result = await domainAllowlistService.getLocalAuthorityDomains();
+
+    // Log warning if stale cache was used (AC6)
+    if (result.usedStaleCache) {
+      logger.warn('Using stale domain cache after S3 error', {
+        domain,
+        staleReason: result.staleReason,
+      });
+    }
+
+    const isVerified = isVerifiedGovDomain(domain, result.domains);
+    logger.info('Domain verification result', {
+      domain,
+      isVerified,
+      allowlistSize: result.domains.length,
+      usedStaleCache: result.usedStaleCache,
+    });
+    return isVerified;
+  } catch (error) {
+    // Pessimistic fallback - skip bonus if S3 fails (AC5)
+    logger.error('Failed to verify domain - using pessimistic fallback', {
+      error: error instanceof Error ? error.message : String(error),
+      domain,
+    });
+    return false;
+  }
+};
+
+/**
  * Prepares the initial state context from a validated event.
  */
 const prepareContext = (
   event: LeaseRequestedEvent,
   userLeaseHistory: LeaseHistoryRecord[],
-  orgLeaseHistory: LeaseHistoryRecord[]
+  orgLeaseHistory: LeaseHistoryRecord[],
+  isVerifiedDomain: boolean
 ): StateContext => {
   const { detail } = event;
   const { leaseId, templateId, budgetAmount, leaseDurationHours, requiresManualApproval, comments } =
@@ -282,6 +365,7 @@ const prepareContext = (
     comments,
     userLeaseHistory,
     orgLeaseHistory,
+    isVerifiedGovDomain: isVerifiedDomain,
   };
 };
 
@@ -402,8 +486,16 @@ export const handler = async (
     const userLeaseHistory = await queryUserHistory(leaseId.userEmail);
     const orgLeaseHistory = await queryOrgHistory(leaseId.userEmail);
 
+    // Check domain verification (uses domain already extracted for logging)
+    const isVerifiedDomain = await checkDomainVerification(domain);
+
     // Prepare context and run state machine
-    const initialContext = prepareContext(validatedEvent, userLeaseHistory, orgLeaseHistory);
+    const initialContext = prepareContext(
+      validatedEvent,
+      userLeaseHistory,
+      orgLeaseHistory,
+      isVerifiedDomain
+    );
     const result = orchestrator.run(ApprovalState.RECEIVED, initialContext);
 
     // Capture score for error handling

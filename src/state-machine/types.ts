@@ -114,6 +114,8 @@ export interface StateContext {
   userLeaseHistory: LeaseHistoryRecord[];
   /** Organization (domain) lease history for org reputation rules */
   orgLeaseHistory: LeaseHistoryRecord[];
+  /** Whether domain is in verified gov domains list (from S3 cache) */
+  isVerifiedGovDomain: boolean;
 
   // Processing state (populated during processing)
   /** Calculated risk score */
@@ -189,6 +191,7 @@ export const createInitialContext = (): StateContext => ({
   requiresManualApproval: false,
   userLeaseHistory: [],
   orgLeaseHistory: [],
+  isVerifiedGovDomain: false,
   score: 0,
   scoreBreakdown: [],
   stateHistory: [],

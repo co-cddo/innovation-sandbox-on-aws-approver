@@ -174,8 +174,9 @@ export const createStateHandlers = (
       // Real history data from handler (Story 3.1 user, Story 3.2 org)
       userLeaseHistory: context.userLeaseHistory,
       orgLeaseHistory: context.orgLeaseHistory,
-      // Stub until implemented (Story 3.3 domain verification, Story 3.4 AI)
-      isVerifiedGovDomain: false,
+      // Domain verification from S3 cache (Story 3.3)
+      isVerifiedGovDomain: context.isVerifiedGovDomain,
+      // Stub until implemented (Story 3.4 AI)
       aiAnalysis: undefined,
     });
 

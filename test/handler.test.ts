@@ -7,10 +7,13 @@ import {
   resetIsbLambdaService,
   setDynamoDBService,
   resetDynamoDBService,
+  setDomainAllowlistService,
+  resetDomainAllowlistService,
   setOrchestrator,
   resetOrchestrator,
 } from '../src/handler.js';
 import type { DynamoDBService } from '../src/services/dynamodb.js';
+import type { DomainAllowlistService } from '../src/services/domain-allowlist.js';
 import type { EventBridgeEvent, Context } from 'aws-lambda';
 import type { EventBridgeService } from '../src/services/eventbridge.js';
 import type { IsbLambdaService } from '../src/services/isb-lambda.js';
@@ -54,6 +57,14 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
     from: vi.fn().mockReturnValue({}),
   },
   QueryCommand: vi.fn(),
+}));
+
+// Mock the S3 client to prevent real AWS calls
+vi.mock('@aws-sdk/client-s3', () => ({
+  S3Client: vi.fn().mockImplementation(() => ({
+    send: vi.fn().mockResolvedValue({}),
+  })),
+  GetObjectCommand: vi.fn(),
 }));
 
 // Import the mocked logger for assertions
@@ -130,6 +141,7 @@ describe('handler', () => {
     resetEventBridgeService();
     resetIsbLambdaService();
     resetDynamoDBService();
+    resetDomainAllowlistService();
     resetOrchestrator();
   });
 
@@ -931,6 +943,221 @@ describe('handler', () => {
       expect(mockLogger.appendKeys).toHaveBeenCalledWith(
         expect.objectContaining({
           domain: 'example.gov.uk',
+        })
+      );
+    });
+  });
+
+  describe('Domain verification integration (Story 3.3)', () => {
+    it('should verify domain using allowlist service (AC1, AC2)', async () => {
+      const mockAllowlistService: DomainAllowlistService = {
+        getLocalAuthorityDomains: vi.fn().mockResolvedValue({
+          domains: ['example.gov.uk', 'council.gov.uk'],
+          usedStaleCache: false,
+        }),
+        clearCache: vi.fn(),
+      };
+      setDomainAllowlistService(mockAllowlistService);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      expect(mockAllowlistService.getLocalAuthorityDomains).toHaveBeenCalled();
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Domain verification result',
+        expect.objectContaining({
+          domain: 'example.gov.uk',
+          isVerified: true,
+          allowlistSize: 2,
+          usedStaleCache: false,
+        })
+      );
+    });
+
+    it('should pass isVerifiedGovDomain=true to state machine when domain is verified (AC3)', async () => {
+      const mockAllowlistService: DomainAllowlistService = {
+        getLocalAuthorityDomains: vi.fn().mockResolvedValue({
+          domains: ['example.gov.uk'],
+          usedStaleCache: false,
+        }),
+        clearCache: vi.fn(),
+      };
+      setDomainAllowlistService(mockAllowlistService);
+
+      // Create mock orchestrator to verify context passed
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 0,
+            decision: 'approved',
+            isVerifiedGovDomain: true,
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      // Verify orchestrator was called with isVerifiedGovDomain: true
+      expect(mockOrchestrator.run).toHaveBeenCalledWith(
+        ApprovalState.RECEIVED,
+        expect.objectContaining({
+          isVerifiedGovDomain: true,
+        })
+      );
+    });
+
+    it('should pass isVerifiedGovDomain=false when domain is not in allowlist (AC4)', async () => {
+      const mockAllowlistService: DomainAllowlistService = {
+        getLocalAuthorityDomains: vi.fn().mockResolvedValue({
+          domains: ['other-council.gov.uk'],
+          usedStaleCache: false,
+        }),
+        clearCache: vi.fn(),
+      };
+      setDomainAllowlistService(mockAllowlistService);
+
+      // Create mock orchestrator to verify context passed
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'approved',
+            isVerifiedGovDomain: false,
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      // Verify orchestrator was called with isVerifiedGovDomain: false
+      expect(mockOrchestrator.run).toHaveBeenCalledWith(
+        ApprovalState.RECEIVED,
+        expect.objectContaining({
+          isVerifiedGovDomain: false,
+        })
+      );
+    });
+
+    it('should use pessimistic fallback when allowlist service is not configured', async () => {
+      // Set allowlist service to undefined to simulate not configured
+      setDomainAllowlistService(undefined);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed with pessimistic fallback (no bonus)
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Domain allowlist service not configured - skipping domain verification',
+        expect.objectContaining({
+          domain: 'example.gov.uk',
+        })
+      );
+    });
+
+    it('should use pessimistic fallback on S3 error (AC5)', async () => {
+      const mockAllowlistService: DomainAllowlistService = {
+        getLocalAuthorityDomains: vi.fn().mockRejectedValue(new Error('S3 bucket not found')),
+        clearCache: vi.fn(),
+      };
+      setDomainAllowlistService(mockAllowlistService);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed with pessimistic fallback (no bonus)
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to verify domain - using pessimistic fallback',
+        expect.objectContaining({
+          error: 'S3 bucket not found',
+          domain: 'example.gov.uk',
+        })
+      );
+    });
+
+    it('should pass isVerifiedGovDomain=false on S3 error for pessimistic scoring', async () => {
+      const mockAllowlistService: DomainAllowlistService = {
+        getLocalAuthorityDomains: vi.fn().mockRejectedValue(new Error('S3 unavailable')),
+        clearCache: vi.fn(),
+      };
+      setDomainAllowlistService(mockAllowlistService);
+
+      // Create mock orchestrator to verify context passed
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'approved',
+            isVerifiedGovDomain: false,
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      // Verify orchestrator was called with isVerifiedGovDomain: false (pessimistic)
+      expect(mockOrchestrator.run).toHaveBeenCalledWith(
+        ApprovalState.RECEIVED,
+        expect.objectContaining({
+          isVerifiedGovDomain: false,
+        })
+      );
+    });
+
+    it('should log warning when stale cache is used (AC6)', async () => {
+      const mockAllowlistService: DomainAllowlistService = {
+        getLocalAuthorityDomains: vi.fn().mockResolvedValue({
+          domains: ['example.gov.uk'],
+          usedStaleCache: true,
+          staleReason: 'S3 temporarily unavailable',
+        }),
+        clearCache: vi.fn(),
+      };
+      setDomainAllowlistService(mockAllowlistService);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      // Should log warning about stale cache
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Using stale domain cache after S3 error',
+        expect.objectContaining({
+          domain: 'example.gov.uk',
+          staleReason: 'S3 temporarily unavailable',
+        })
+      );
+      // Domain should still be verified (from stale cache)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Domain verification result',
+        expect.objectContaining({
+          domain: 'example.gov.uk',
+          isVerified: true,
+          usedStaleCache: true,
         })
       );
     });
