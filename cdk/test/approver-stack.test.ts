@@ -1,4 +1,4 @@
-import { describe, it, beforeAll, expect } from 'vitest';
+import { describe, it, beforeAll } from 'vitest';
 import * as cdk from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import { ApproverStack } from '../lib/approver-stack.js';
