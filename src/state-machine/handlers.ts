@@ -14,7 +14,14 @@ import {
   type StateHandlerResult,
   type StateHandler,
   type StateMachineConfig,
+  type RuleResult,
 } from './types.js';
+import {
+  createScoringContext,
+  createScoringEngine,
+  type ScoringEngine,
+} from '../scoring/index.js';
+import type { StateMachineLogger } from './orchestrator.js';
 
 /**
  * Default configuration - can be overridden via environment or DI
@@ -24,12 +31,52 @@ const DEFAULT_CONFIG: StateMachineConfig = {
 };
 
 /**
+ * Create a no-op logger for default case.
+ */
+const createNoOpLogger = (): StateMachineLogger => ({
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+});
+
+/**
+ * Handler configuration options.
+ */
+export interface HandlerConfig {
+  /** State machine config (threshold) */
+  stateMachineConfig?: StateMachineConfig;
+  /** Optional scoring engine (created internally if not provided) */
+  scoringEngine?: ScoringEngine;
+  /** Logger for scoring engine */
+  logger?: StateMachineLogger;
+}
+
+/**
  * Creates state handlers with the given configuration.
  * Uses factory pattern for dependency injection of config.
  */
 export const createStateHandlers = (
-  config: StateMachineConfig = DEFAULT_CONFIG
-): Record<ApprovalState, StateHandler> => ({
+  config: StateMachineConfig | HandlerConfig = DEFAULT_CONFIG
+): Record<ApprovalState, StateHandler> => {
+  // Normalize config to HandlerConfig
+  const handlerConfig: HandlerConfig =
+    'autoApproveThreshold' in config ? { stateMachineConfig: config } : config;
+
+  const stateMachineConfig = handlerConfig.stateMachineConfig ?? DEFAULT_CONFIG;
+  const logger = handlerConfig.logger ?? createNoOpLogger();
+
+  // Create scoring engine if not provided
+  const scoringEngine =
+    handlerConfig.scoringEngine ??
+    createScoringEngine(
+      {
+        weights: {},
+        threshold: stateMachineConfig.autoApproveThreshold,
+      },
+      logger
+    );
+
+  return {
   /**
    * RECEIVED state handler.
    * Initial state - validates that we have a context and transitions to VALIDATING.
@@ -79,26 +126,40 @@ export const createStateHandlers = (
 
   /**
    * SCORING state handler.
-   * Calculates the risk score.
-   * STUB: Returns score 0 - full scoring engine comes in Story 2.3.
+   * Calculates the risk score using the 16-rule scoring engine.
    */
   [ApprovalState.SCORING]: (context: StateContext): StateHandlerResult => {
-    // STUB: Score is always 0 until Story 2.3 implements the scoring engine
-    const score = 0;
-    const scoreBreakdown = [
-      {
-        rule: 'stub',
-        points: 0,
-        triggered: true,
-        reason: 'Stub scoring - full engine not implemented',
-      },
-    ];
+    // Create scoring context from state context
+    const scoringContext = createScoringContext({
+      leaseId: context.leaseId,
+      userEmail: context.userEmail,
+      templateId: context.templateId,
+      budgetAmount: context.budgetAmount,
+      leaseDurationHours: context.leaseDurationHours,
+      requestTimestamp: new Date(), // Use current time for scoring
+      // Stub data sources (Epic 3 adds real data)
+      userLeaseHistory: [],
+      orgLeaseHistory: [],
+      isVerifiedGovDomain: false,
+      aiAnalysis: undefined,
+    });
+
+    // Run the scoring engine
+    const result = scoringEngine.calculateScore(scoringContext);
+
+    // Convert ScoringRuleResult to RuleResult for state context
+    const scoreBreakdown: RuleResult[] = result.breakdown.map((r) => ({
+      rule: r.ruleId,
+      points: r.points,
+      triggered: r.triggered,
+      reason: r.reason,
+    }));
 
     return {
       nextState: ApprovalState.DECIDING,
       context: {
         ...context,
-        score,
+        score: result.totalScore,
         scoreBreakdown,
       },
     };
@@ -110,7 +171,7 @@ export const createStateHandlers = (
    */
   [ApprovalState.DECIDING]: (context: StateContext): StateHandlerResult => {
     const { score, requiresManualApproval } = context;
-    const threshold = config.autoApproveThreshold;
+    const threshold = stateMachineConfig.autoApproveThreshold;
 
     // If manual approval was explicitly requested, escalate
     if (requiresManualApproval) {
@@ -209,7 +270,7 @@ export const createStateHandlers = (
       },
     };
   },
-});
+};};
 
 /**
  * Get the handler for a specific state.
@@ -217,7 +278,7 @@ export const createStateHandlers = (
  */
 export const getStateHandler = (
   state: ApprovalState,
-  config: StateMachineConfig = DEFAULT_CONFIG
+  config: StateMachineConfig | HandlerConfig = DEFAULT_CONFIG
 ): StateHandler => {
   const handlers = createStateHandlers(config);
   return handlers[state];

@@ -53,7 +53,7 @@ development_status:
   epic-2: in-progress
   2-1-minimal-vertical-slice-event-to-approval: done
   2-2-state-machine-with-decision-orchestration: done
-  2-3-scoring-engine-with-16-configurable-rules: backlog
+  2-3-scoring-engine-with-16-configurable-rules: done
   2-4-idempotency-dlq-and-fail-closed-error-handling: backlog
   2-5-e2e-milestone-core-flow-validation: backlog
   epic-2-retrospective: optional

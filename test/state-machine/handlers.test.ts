@@ -1,11 +1,12 @@
-import { describe, it, expect } from 'vitest';
-import { createStateHandlers, getStateHandler } from '../../src/state-machine/handlers.js';
+import { describe, it, expect, vi } from 'vitest';
+import { createStateHandlers, getStateHandler, type HandlerConfig } from '../../src/state-machine/handlers.js';
 import {
   ApprovalState,
   createInitialContext,
   type StateContext,
   type StateMachineConfig,
 } from '../../src/state-machine/types.js';
+import type { StateMachineLogger } from '../../src/state-machine/orchestrator.js';
 
 describe('createStateHandlers', () => {
   it('should create handlers for all states', () => {
@@ -27,6 +28,29 @@ describe('createStateHandlers', () => {
     Object.values(handlers).forEach((handler) => {
       expect(typeof handler).toBe('function');
     });
+  });
+
+  it('should accept HandlerConfig with custom logger', () => {
+    const mockLogger: StateMachineLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const handlerConfig: HandlerConfig = {
+      stateMachineConfig: { autoApproveThreshold: 15 },
+      logger: mockLogger,
+    };
+    const handlers = createStateHandlers(handlerConfig);
+
+    expect(handlers[ApprovalState.RECEIVED]).toBeDefined();
+    expect(handlers[ApprovalState.SCORING]).toBeDefined();
+  });
+
+  it('should accept empty HandlerConfig and use defaults', () => {
+    const handlerConfig: HandlerConfig = {};
+    const handlers = createStateHandlers(handlerConfig);
+
+    expect(handlers[ApprovalState.RECEIVED]).toBeDefined();
   });
 });
 
@@ -166,33 +190,42 @@ describe('SCORING handler', () => {
     expect(result.nextState).toBe(ApprovalState.DECIDING);
   });
 
-  it('should set score to 0 (stub)', () => {
+  it('should calculate score using scoring engine (first-time user)', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
       userEmail: 'user@example.gov.uk',
       templateId: 'web-hosting',
+      budgetAmount: 0,
+      leaseDurationHours: 0,
     };
 
     const result = handlers[ApprovalState.SCORING](context);
 
-    expect(result.context.score).toBe(0);
+    // First-time user with no budget/duration = score of 5
+    expect(result.context.score).toBe(5);
   });
 
-  it('should populate scoreBreakdown with stub rule', () => {
+  it('should populate scoreBreakdown with 16 rules', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
       userEmail: 'user@example.gov.uk',
       templateId: 'web-hosting',
+      budgetAmount: 0,
+      leaseDurationHours: 0,
     };
 
     const result = handlers[ApprovalState.SCORING](context);
 
-    expect(result.context.scoreBreakdown).toHaveLength(1);
-    expect(result.context.scoreBreakdown[0]!.rule).toBe('stub');
-    expect(result.context.scoreBreakdown[0]!.points).toBe(0);
-    expect(result.context.scoreBreakdown[0]!.triggered).toBe(true);
+    // Should have 16 rules in breakdown
+    expect(result.context.scoreBreakdown).toHaveLength(16);
+
+    // First-time user rule should be triggered
+    const firstTimeRule = result.context.scoreBreakdown.find((r) => r.rule === 'first_time_user');
+    expect(firstTimeRule).toBeDefined();
+    expect(firstTimeRule!.triggered).toBe(true);
+    expect(firstTimeRule!.points).toBe(5);
   });
 
   it('should be a pure function (no mutation)', () => {

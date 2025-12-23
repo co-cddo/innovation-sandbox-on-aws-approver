@@ -180,7 +180,7 @@ describe('handler', () => {
         leaseId: '123e4567-e89b-12d3-a456-426614174000',
         userEmail: 'user@example.gov.uk',
         approvedBy: 'approver-service@system',
-        score: 0,
+        score: expect.any(Number), // Score calculated by scoring engine
         reason: expect.stringContaining('below threshold'), // State machine provides decision reason
       });
     });
@@ -198,7 +198,7 @@ describe('handler', () => {
           leaseId: '123e4567-e89b-12d3-a456-426614174000',
           userEmail: 'user@example.gov.uk',
           approvedBy: 'approver-service@system',
-          score: 0,
+          score: expect.any(Number), // Score calculated by scoring engine
         })
       );
     });
