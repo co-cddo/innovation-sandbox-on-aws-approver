@@ -31,6 +31,12 @@ import {
   type ReceivedMessage,
 } from './services/sqs.js';
 import {
+  createSlackService,
+  type SlackService,
+  type EscalationNotificationParams,
+} from './services/slack.js';
+import { getSlackWebhookUrl } from './lib/secrets.js';
+import {
   createBusinessHoursChecker,
   isQueueExpired,
   type BusinessHoursResult,
@@ -187,6 +193,13 @@ let sqsService: SQSService | undefined = sqsConfig.queueUrl
       logger as unknown as import('./services/sqs.js').SQSLogger
     )
   : undefined;
+
+// Slack service configuration (Story 5.2)
+// ISB Console URL for deep links in notifications
+const isbConsoleUrl = process.env.ISB_CONSOLE_URL || '';
+
+// Slack service (initialized lazily on first escalation)
+let slackService: SlackService | undefined;
 
 // Bank holiday service for business hours checking
 let bankHolidayService: BankHolidayService = createBankHolidayService();
@@ -369,6 +382,21 @@ export const setBankHolidayService = (service: BankHolidayService): void => {
 export const resetBankHolidayService = (): void => {
   bankHolidayService = createBankHolidayService();
   businessHoursChecker = createBusinessHoursChecker(bankHolidayService);
+};
+
+/**
+ * Allows overriding the Slack service for testing purposes (Story 5.2).
+ */
+export const setSlackService = (service: SlackService | undefined): void => {
+  slackService = service;
+};
+
+/**
+ * Resets the Slack service to undefined (for test cleanup).
+ * The service is lazily initialized on first escalation.
+ */
+export const resetSlackService = (): void => {
+  slackService = undefined;
 };
 
 /**
@@ -670,6 +698,72 @@ const updateLeaseComments = async (
     logger.warn('Error updating lease comments', {
       leaseId: leaseId.uuid,
       userEmail: leaseId.userEmail,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+/**
+ * Sends a Slack notification for an escalated request (Story 5.2).
+ * Initializes Slack service lazily on first use.
+ * Fails silently to avoid blocking the approval flow (AC6).
+ *
+ * @param params - Escalation notification parameters
+ */
+const notifySlackEscalation = async (
+  params: EscalationNotificationParams
+): Promise<void> => {
+  // If Slack service is already set (e.g., via dependency injection for testing),
+  // skip configuration checks and use it directly
+  if (!slackService) {
+    // Check if ISB console URL is configured
+    if (!isbConsoleUrl) {
+      logger.warn('ISB_CONSOLE_URL not configured - skipping Slack notification', {
+        leaseId: params.leaseId,
+      });
+      return;
+    }
+
+    // Check if SQS service is available for queue depth
+    if (!sqsService) {
+      logger.warn('SQS service not configured - skipping Slack notification', {
+        leaseId: params.leaseId,
+      });
+      return;
+    }
+
+    // Initialize Slack service lazily
+    const webhookResult = await getSlackWebhookUrl();
+    if (!webhookResult.success) {
+      logger.warn('Failed to get Slack webhook URL - skipping notification', {
+        leaseId: params.leaseId,
+        error: webhookResult.error,
+      });
+      return;
+    }
+
+    slackService = createSlackService(
+      webhookResult.webhookUrl!,
+      isbConsoleUrl,
+      sqsService,
+      logger as unknown as import('./services/slack.js').SlackLogger,
+      stateMachineConfig.autoApproveThreshold
+    );
+  }
+
+  try {
+    const result = await slackService.notifyEscalation(params);
+    if (!result.success) {
+      logger.warn('Slack notification failed - request still escalated', {
+        leaseId: params.leaseId,
+        error: result.error,
+        statusCode: result.statusCode,
+      });
+    }
+  } catch (error) {
+    // Log and continue - AC6 requires graceful failure
+    logger.warn('Error sending Slack notification - request still escalated', {
+      leaseId: params.leaseId,
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -1244,8 +1338,8 @@ export const handler = async (
         reason,
       });
 
-      // TODO: In Story 5.2, this will send Slack notification
-      // For now, treat as approved for backward compatibility with Story 2.1
+      // Temporary: Auto-approve escalated requests for backward compatibility
+      // This will be removed once manual review workflow is complete
       const approverEmail = 'ndx+try-automated-approver@dsit.gov.uk';
       const approvalResult = await isbLambdaService.approveLease({
         leaseId,
@@ -1276,7 +1370,7 @@ export const handler = async (
         );
       }
 
-      logger.info('Escalated lease approved via ISB Lambda (stub)', {
+      logger.info('Escalated lease approved via ISB Lambda (temporary)', {
         action: 'escalated_approved',
         timestamp: new Date().toISOString(),
         leaseId: leaseId.uuid,
@@ -1284,7 +1378,7 @@ export const handler = async (
         approvedBy: approverEmail,
         score,
         scoreBreakdown: result.context.scoreBreakdown,
-        reason: 'Escalated - manual review pending (stub: auto-approved)',
+        reason: 'Escalated - manual review pending (temp: auto-approved)',
       });
 
       // Update lease comments (Story 5.1 AC4)
@@ -1296,6 +1390,17 @@ export const handler = async (
         referenceNumber
       );
       await updateLeaseComments(leaseId, escalatedMessage);
+
+      // Send Slack notification (Story 5.2)
+      // AC6: Fails silently - request remains escalated regardless of notification status
+      await notifySlackEscalation({
+        leaseId: leaseId.uuid,
+        userEmail: leaseId.userEmail,
+        score,
+        scoreBreakdown,
+        templateId,
+        referenceNumber,
+      });
 
       return {
         statusCode: 200,

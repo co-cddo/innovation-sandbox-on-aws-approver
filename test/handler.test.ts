@@ -17,11 +17,14 @@ import {
   resetSQSService,
   setBankHolidayService,
   resetBankHolidayService,
+  setSlackService,
+  resetSlackService,
 } from '../src/handler.js';
 import type { DynamoDBService } from '../src/services/dynamodb.js';
 import type { DomainAllowlistService } from '../src/services/domain-allowlist.js';
 import type { BedrockService } from '../src/services/bedrock.js';
 import type { SQSService } from '../src/services/sqs.js';
+import type { SlackService } from '../src/services/slack.js';
 import type { EventBridgeEvent, Context } from 'aws-lambda';
 import type { EventBridgeService } from '../src/services/eventbridge.js';
 import type { IsbLambdaService } from '../src/services/isb-lambda.js';
@@ -175,6 +178,7 @@ describe('handler', () => {
     resetOrchestrator();
     resetSQSService();
     resetBankHolidayService();
+    resetSlackService();
   });
 
   describe('LeaseRequested events', () => {
@@ -1018,6 +1022,124 @@ describe('handler', () => {
       );
       // Escalated requests call ISB Lambda for approval (stub auto-approval)
       expect(mockApproveLease).toHaveBeenCalled();
+    });
+
+    it('should send Slack notification when escalated and service is configured (Story 5.2)', async () => {
+      const mockNotifyEscalation = vi.fn().mockResolvedValue({ success: true, statusCode: 200 });
+      const mockSlackService: SlackService = {
+        notifyEscalation: mockNotifyEscalation,
+      };
+      setSlackService(mockSlackService);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.ESCALATED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 25,
+            scoreBreakdown: [
+              { ruleId: 'first_time_user', name: 'First Time User', points: 5, triggered: true },
+              { ruleId: 'group_mailbox_detected', name: 'Group Mailbox', points: 20, triggered: true },
+            ],
+            decision: 'escalated',
+            reason: 'Score 25 meets or exceeds threshold 20',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(mockNotifyEscalation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          leaseId: '123e4567-e89b-12d3-a456-426614174000',
+          userEmail: 'user@example.gov.uk',
+          score: 25,
+          templateId: 'web-hosting',
+        })
+      );
+    });
+
+    it('should continue processing even if Slack notification fails (AC6)', async () => {
+      const mockNotifyEscalation = vi.fn().mockResolvedValue({ success: false, error: 'Webhook error' });
+      const mockSlackService: SlackService = {
+        notifyEscalation: mockNotifyEscalation,
+      };
+      setSlackService(mockSlackService);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.ESCALATED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 25,
+            decision: 'escalated',
+            reason: 'Score 25 meets or exceeds threshold 20',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Request should still succeed even though Slack notification failed
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('OK');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Slack notification failed - request still escalated',
+        expect.objectContaining({
+          leaseId: '123e4567-e89b-12d3-a456-426614174000',
+        })
+      );
+    });
+
+    it('should continue processing even if Slack notification throws (AC6)', async () => {
+      const mockNotifyEscalation = vi.fn().mockRejectedValue(new Error('Network error'));
+      const mockSlackService: SlackService = {
+        notifyEscalation: mockNotifyEscalation,
+      };
+      setSlackService(mockSlackService);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.ESCALATED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 25,
+            decision: 'escalated',
+            reason: 'Score 25 meets or exceeds threshold 20',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Request should still succeed even though Slack notification threw
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('OK');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Error sending Slack notification - request still escalated',
+        expect.objectContaining({
+          leaseId: '123e4567-e89b-12d3-a456-426614174000',
+        })
+      );
     });
 
     it('should throw ProcessingError when ISB Lambda fails for escalated request (fail-closed)', async () => {

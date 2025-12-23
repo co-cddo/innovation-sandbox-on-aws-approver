@@ -28,6 +28,9 @@ export default [
         afterEach: 'readonly',
         beforeAll: 'readonly',
         afterAll: 'readonly',
+        // Node.js 20 globals
+        fetch: 'readonly',
+        AbortSignal: 'readonly',
       },
     },
     plugins: {
