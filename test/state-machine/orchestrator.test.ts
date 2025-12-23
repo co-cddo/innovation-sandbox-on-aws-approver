@@ -59,6 +59,7 @@ describe('orchestrator.run', () => {
         templateId: 'web-hosting',
         budgetAmount: 50,
         leaseDurationHours: 24,
+        isVerifiedGovDomain: true,
       };
 
       const result = orchestrator.run(ApprovalState.RECEIVED, context);
@@ -311,6 +312,8 @@ describe('orchestrator.run', () => {
         leaseId: 'abc-123',
         userEmail: 'user@example.gov.uk',
         templateId: 'web-hosting',
+        isVerifiedGovDomain: true,
+        isEndOfWindow: false,
       };
 
       orchestrator.run(ApprovalState.RECEIVED, context);
@@ -413,6 +416,8 @@ describe('orchestrator.run', () => {
         leaseId: 'abc-123',
         userEmail: 'user@example.gov.uk',
         templateId: 'web-hosting',
+        isVerifiedGovDomain: true,
+        isEndOfWindow: false,
       };
 
       // Should complete successfully with default limit
@@ -436,6 +441,8 @@ describe('orchestrator.run', () => {
         leaseId: 'abc-123',
         userEmail: 'user@example.gov.uk',
         templateId: 'web-hosting',
+        isVerifiedGovDomain: true,
+        isEndOfWindow: false,
       };
 
       const result = orchestrator.run(ApprovalState.VALIDATING, context);

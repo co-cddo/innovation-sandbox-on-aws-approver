@@ -212,7 +212,7 @@ const calculateEndOfWindow = (date: Date): boolean => {
 
 /**
  * Rule 10: end_of_window
- * -weight (bonus) for request in final 2 hours (5-7pm London)
+ * +weight (penalty) for request in final 2 hours (5-7pm London)
  * Uses pre-calculated isEndOfWindow from context if available (from business hours check),
  * otherwise calculates internally for backwards compatibility.
  */
@@ -222,7 +222,7 @@ export const endOfWindowRule: ScoringRuleFn = (context, weight) => {
 
   return {
     ruleId: 'end_of_window',
-    points: inEndOfWindow ? weight : 0, // weight is negative for bonus
+    points: inEndOfWindow ? weight : 0,
     triggered: inEndOfWindow,
     reason: inEndOfWindow ? 'Request in final 2 hours of business day' : undefined,
   };
@@ -269,28 +269,22 @@ export const cooldownViolationRule: ScoringRuleFn = (context, weight) => {
 
 /**
  * Rule 12: outside_target_audience
- * +weight if AI determines domain is not local gov
- * Skips if no AI analysis available
+ * +weight if domain is NOT in the local authority allowlist (S3 domain list)
+ *
+ * Uses the S3-cached ukps-domains list which is filtered to local_authority only.
+ * If isVerifiedGovDomain is false, the domain is outside our target audience
+ * (either central government, NHS, police, or not in the list at all).
  */
 export const outsideTargetAudienceRule: ScoringRuleFn = (context, weight) => {
-  // Skip if no AI analysis available
-  if (!context.aiAnalysis) {
-    return {
-      ruleId: 'outside_target_audience',
-      points: 0,
-      triggered: false,
-      fallbackUsed: true,
-      reason: 'AI analysis not available',
-    };
-  }
-
-  const isOutside = context.aiAnalysis.isOutsideTargetAudience;
+  // If domain is verified as local authority, it's NOT outside target audience
+  // If domain is NOT verified, it IS outside target audience
+  const isOutside = !context.isVerifiedGovDomain;
 
   return {
     ruleId: 'outside_target_audience',
     points: isOutside ? weight : 0,
     triggered: isOutside,
-    reason: isOutside ? 'Domain identified as outside target audience' : undefined,
+    reason: isOutside ? 'Domain not in local authority allowlist' : undefined,
   };
 };
 

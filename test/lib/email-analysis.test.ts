@@ -157,10 +157,8 @@ describe('Email Analysis', () => {
       const result = analyzeEmailPattern('user@council.gov.uk');
 
       expect(result).toHaveProperty('isGroupMailbox');
-      expect(result).toHaveProperty('isOutsideTargetAudience');
       expect(result).toHaveProperty('confidence');
       expect(typeof result.isGroupMailbox).toBe('boolean');
-      expect(typeof result.isOutsideTargetAudience).toBe('boolean');
       expect(typeof result.confidence).toBe('number');
     });
 
@@ -178,18 +176,10 @@ describe('Email Analysis', () => {
       expect(result.confidence).toBe(0.5); // Lower confidence for non-matches
     });
 
-    it('should always return false for isOutsideTargetAudience (pessimistic)', () => {
-      // Pessimistic approach: don't penalize without AI confidence
-      const result = analyzeEmailPattern('user@gmail.com');
-
-      expect(result.isOutsideTargetAudience).toBe(false);
-    });
-
     it('should handle gov domain emails', () => {
       const result = analyzeEmailPattern('john.smith@council.gov.uk');
 
       expect(result.isGroupMailbox).toBe(false);
-      expect(result.isOutsideTargetAudience).toBe(false);
     });
   });
 

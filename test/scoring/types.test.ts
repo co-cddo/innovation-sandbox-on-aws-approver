@@ -65,15 +65,15 @@ describe('scoring types', () => {
       expect(DEFAULT_RULE_WEIGHTS.first_time_user).toBe(5);
       expect(DEFAULT_RULE_WEIGHTS.first_time_suspicious).toBe(20);
       expect(DEFAULT_RULE_WEIGHTS.cooldown_violation).toBe(10);
-      expect(DEFAULT_RULE_WEIGHTS.outside_target_audience).toBe(10);
+      expect(DEFAULT_RULE_WEIGHTS.outside_target_audience).toBe(50);
       expect(DEFAULT_RULE_WEIGHTS.group_mailbox_detected).toBe(20);
       expect(DEFAULT_RULE_WEIGHTS.org_recent_negative).toBe(3);
       expect(DEFAULT_RULE_WEIGHTS.template_hopper).toBe(2);
+      expect(DEFAULT_RULE_WEIGHTS.end_of_window).toBe(2);
 
       // Bonus rules (negative = less scrutiny)
       expect(DEFAULT_RULE_WEIGHTS.verified_gov_domain).toBe(-5);
       expect(DEFAULT_RULE_WEIGHTS.familiar_template).toBe(-1);
-      expect(DEFAULT_RULE_WEIGHTS.end_of_window).toBe(-2);
       expect(DEFAULT_RULE_WEIGHTS.manual_early_termination).toBe(-2);
       expect(DEFAULT_RULE_WEIGHTS.org_clean_record).toBe(-2);
 

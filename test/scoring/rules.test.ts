@@ -178,7 +178,7 @@ describe('scoring rules', () => {
     it('should return weight for first time + group mailbox', () => {
       const context = createBaseContext({
         userLeaseHistory: [],
-        aiAnalysis: { isGroupMailbox: true, isOutsideTargetAudience: false, confidence: 0.9 },
+        aiAnalysis: { isGroupMailbox: true, confidence: 0.9 },
       });
       const result = firstTimeSuspiciousRule(context, 20);
       expect(result.points).toBe(20);
@@ -190,7 +190,7 @@ describe('scoring rules', () => {
         userLeaseHistory: [
           createLease({ uuid: 'old', status: 'Active' }),
         ],
-        aiAnalysis: { isGroupMailbox: true, isOutsideTargetAudience: false, confidence: 0.9 },
+        aiAnalysis: { isGroupMailbox: true, confidence: 0.9 },
       });
       const result = firstTimeSuspiciousRule(context, 20);
       expect(result.points).toBe(0);
@@ -368,13 +368,13 @@ describe('scoring rules', () => {
   });
 
   describe('Rule 10: end_of_window', () => {
-    it('should return bonus for request in final 2 hours (5-7pm London)', () => {
+    it('should return penalty for request in final 2 hours (5-7pm London)', () => {
       // 5:30pm London = 17:30 GMT
       const context = createBaseContext({
         requestTimestamp: new Date('2025-01-15T17:30:00Z'),
       });
-      const result = endOfWindowRule(context, -2);
-      expect(result.points).toBe(-2);
+      const result = endOfWindowRule(context, 2);
+      expect(result.points).toBe(2);
       expect(result.triggered).toBe(true);
     });
 
@@ -383,7 +383,7 @@ describe('scoring rules', () => {
       const context = createBaseContext({
         requestTimestamp: new Date('2025-01-15T14:00:00Z'),
       });
-      const result = endOfWindowRule(context, -2);
+      const result = endOfWindowRule(context, 2);
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
     });
@@ -393,8 +393,8 @@ describe('scoring rules', () => {
       const context = createBaseContext({
         requestTimestamp: new Date('2025-06-15T17:00:00Z'),
       });
-      const result = endOfWindowRule(context, -2);
-      expect(result.points).toBe(-2);
+      const result = endOfWindowRule(context, 2);
+      expect(result.points).toBe(2);
       expect(result.triggered).toBe(true);
     });
 
@@ -404,8 +404,8 @@ describe('scoring rules', () => {
         requestTimestamp: new Date('2025-01-15T14:00:00Z'),
         isEndOfWindow: true,
       });
-      const result = endOfWindowRule(context, -2);
-      expect(result.points).toBe(-2);
+      const result = endOfWindowRule(context, 2);
+      expect(result.points).toBe(2);
       expect(result.triggered).toBe(true);
     });
 
@@ -415,7 +415,7 @@ describe('scoring rules', () => {
         requestTimestamp: new Date('2025-01-15T17:30:00Z'),
         isEndOfWindow: false,
       });
-      const result = endOfWindowRule(context, -2);
+      const result = endOfWindowRule(context, 2);
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
     });
@@ -426,8 +426,8 @@ describe('scoring rules', () => {
         requestTimestamp: new Date('2025-01-15T17:30:00Z'),
         isEndOfWindow: undefined,
       });
-      const result = endOfWindowRule(context, -2);
-      expect(result.points).toBe(-2);
+      const result = endOfWindowRule(context, 2);
+      expect(result.points).toBe(2);
       expect(result.triggered).toBe(true);
     });
   });
@@ -494,27 +494,16 @@ describe('scoring rules', () => {
   });
 
   describe('Rule 12: outside_target_audience', () => {
-    it('should skip when no AI analysis available', () => {
-      const context = createBaseContext({ aiAnalysis: undefined });
-      const result = outsideTargetAudienceRule(context, 10);
-      expect(result.points).toBe(0);
-      expect(result.triggered).toBe(false);
-      expect(result.fallbackUsed).toBe(true);
-    });
-
-    it('should return weight for outside target audience', () => {
-      const context = createBaseContext({
-        aiAnalysis: { isGroupMailbox: false, isOutsideTargetAudience: true, confidence: 0.9 },
-      });
+    it('should return weight when domain is NOT in local authority allowlist', () => {
+      const context = createBaseContext({ isVerifiedGovDomain: false });
       const result = outsideTargetAudienceRule(context, 10);
       expect(result.points).toBe(10);
       expect(result.triggered).toBe(true);
+      expect(result.reason).toBe('Domain not in local authority allowlist');
     });
 
-    it('should return 0 for target audience', () => {
-      const context = createBaseContext({
-        aiAnalysis: { isGroupMailbox: false, isOutsideTargetAudience: false, confidence: 0.9 },
-      });
+    it('should return 0 when domain IS in local authority allowlist', () => {
+      const context = createBaseContext({ isVerifiedGovDomain: true });
       const result = outsideTargetAudienceRule(context, 10);
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
@@ -733,7 +722,7 @@ describe('scoring rules', () => {
     it('should return weight for group mailbox detected (returning user)', () => {
       const context = createBaseContext({
         userLeaseHistory: [createLease()], // Has history = not first-time
-        aiAnalysis: { isGroupMailbox: true, isOutsideTargetAudience: false, confidence: 0.9 },
+        aiAnalysis: { isGroupMailbox: true, confidence: 0.9 },
       });
       const result = groupMailboxDetectedRule(context, 20);
       expect(result.points).toBe(20);
@@ -742,7 +731,7 @@ describe('scoring rules', () => {
 
     it('should return 0 for individual mailbox', () => {
       const context = createBaseContext({
-        aiAnalysis: { isGroupMailbox: false, isOutsideTargetAudience: false, confidence: 0.9 },
+        aiAnalysis: { isGroupMailbox: false, confidence: 0.9 },
       });
       const result = groupMailboxDetectedRule(context, 20);
       expect(result.points).toBe(0);
@@ -753,7 +742,7 @@ describe('scoring rules', () => {
       // First-time user (empty history) with group mailbox
       const context = createBaseContext({
         userLeaseHistory: [], // No history = first-time
-        aiAnalysis: { isGroupMailbox: true, isOutsideTargetAudience: false, confidence: 0.9 },
+        aiAnalysis: { isGroupMailbox: true, confidence: 0.9 },
       });
       const result = groupMailboxDetectedRule(context, 20);
 

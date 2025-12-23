@@ -328,15 +328,19 @@ describe('SCORING handler', () => {
       templateId: 'web-hosting',
       budgetAmount: 0,
       leaseDurationHours: 0,
+      isVerifiedGovDomain: true,
+      isEndOfWindow: false, // Explicitly set to avoid time-dependent test
     };
 
     const result = handlers[ApprovalState.SCORING](context);
 
-    // First-time user with no budget/duration = score of 5
-    expect(result.context.score).toBe(5);
+    // first_time_user: +5, verified_gov_domain: -5
+    // org_clean_record: 0 (requires 5+ org leases)
+    // Total: 0
+    expect(result.context.score).toBe(0);
   });
 
-  it('should populate scoreBreakdown with 16 rules', () => {
+  it('should populate scoreBreakdown with 18 rules', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',

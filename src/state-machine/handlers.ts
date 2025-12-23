@@ -194,7 +194,7 @@ export const createStateHandlers = (
 
   /**
    * SCORING state handler.
-   * Calculates the risk score using the 16-rule scoring engine.
+   * Calculates the risk score using the 18-rule scoring engine.
    */
   [ApprovalState.SCORING]: (context: StateContext): StateHandlerResult => {
     // Create scoring context from state context

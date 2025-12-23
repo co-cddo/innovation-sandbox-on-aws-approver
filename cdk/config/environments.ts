@@ -38,7 +38,7 @@ export const DEFAULT_CONFIG: ApproverConfig = {
   businessHoursStart: 7,
   businessHoursEnd: 19,
   businessHoursTz: 'Europe/London',
-  isbConsoleUrl: 'https://isb-console.example.com', // Placeholder until AppConfig integration
+  isbConsoleUrl: 'https://ndx.digital.cabinet-office.gov.uk', // ISB Console URL
   isbLeasesTableName: 'ndx-try-isb-data-LeaseTable473C6DF2-1RC3238PVASE1',
   isbAccountsTableName: 'ndx-try-isb-data-SandboxAccountTableEFB9C069-198TPLJI6Z9KV',
   isbLeasesLambdaName: 'ISB-LeasesLambdaFunction-ndx',

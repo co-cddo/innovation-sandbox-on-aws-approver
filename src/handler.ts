@@ -482,13 +482,11 @@ const analyzeEmailWithAI = async (email: string): Promise<AIAnalysisResult | und
         email,
         fallbackReason: result.fallbackReason,
         isGroupMailbox: result.analysis.isGroupMailbox,
-        isOutsideTargetAudience: result.analysis.isOutsideTargetAudience,
       });
     } else {
       logger.info('AI email analysis completed', {
         email,
         isGroupMailbox: result.analysis.isGroupMailbox,
-        isOutsideTargetAudience: result.analysis.isOutsideTargetAudience,
         confidence: result.analysis.confidence,
       });
     }
@@ -565,10 +563,10 @@ const checkBusinessHoursNow = async (): Promise<BusinessHoursResult> => {
       nextProcessingTime: result.nextProcessingTime,
     });
 
-    // Log end-of-window bonus if applicable (AC6)
+    // Log end-of-window penalty if applicable (AC6)
     if (result.isEndOfWindow) {
-      logger.info('End-of-window bonus applicable', {
-        endOfWindowBonus: true,
+      logger.info('End-of-window penalty applicable', {
+        endOfWindowPenalty: true,
         londonHour: result.londonHour,
       });
     }
@@ -1327,7 +1325,7 @@ export const handler = async (
     }
 
     if (decision === 'escalated') {
-      // Log escalation
+      // Log escalation for manual review
       logger.info('Request escalated for manual review', {
         action: 'escalated',
         timestamp: new Date().toISOString(),
@@ -1336,49 +1334,6 @@ export const handler = async (
         score,
         scoreBreakdown: result.context.scoreBreakdown,
         reason,
-      });
-
-      // Temporary: Auto-approve escalated requests for backward compatibility
-      // This will be removed once manual review workflow is complete
-      const approverEmail = 'ndx+try-automated-approver@dsit.gov.uk';
-      const approvalResult = await isbLambdaService.approveLease({
-        leaseId,
-        approverEmail,
-      });
-
-      if (!approvalResult.success) {
-        logger.error('ISB Lambda approval failed for escalated request', {
-          leaseId: leaseId.uuid,
-          userEmail: leaseId.userEmail,
-          statusCode: approvalResult.statusCode,
-          error: approvalResult.error,
-        });
-
-        await emitEscalationOnError(
-          leaseId,
-          `ISB Lambda approval failed (escalated): ${approvalResult.error}`,
-          'ISB_APPROVAL_FAILED',
-          score
-        );
-
-        throw new ProcessingError(
-          approvalResult.error ?? 'ISB approval failed',
-          'ISB_APPROVAL_FAILED',
-          leaseId.uuid,
-          leaseId.userEmail,
-          score
-        );
-      }
-
-      logger.info('Escalated lease approved via ISB Lambda (temporary)', {
-        action: 'escalated_approved',
-        timestamp: new Date().toISOString(),
-        leaseId: leaseId.uuid,
-        userEmail: leaseId.userEmail,
-        approvedBy: approverEmail,
-        score,
-        scoreBreakdown: result.context.scoreBreakdown,
-        reason: 'Escalated - manual review pending (temp: auto-approved)',
       });
 
       // Update lease comments (Story 5.1 AC4)

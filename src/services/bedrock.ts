@@ -54,7 +54,6 @@ export interface BedrockAnalysisResult {
 interface BedrockResponse {
   isGroupMailbox: boolean;
   confidence: 'high' | 'medium' | 'low';
-  isLocalGovernment: boolean;
   reasoning?: string;
 }
 
@@ -90,20 +89,27 @@ export interface BedrockService {
 }
 
 /**
- * Build the analysis prompt for Bedrock
+ * Build the analysis prompt for Bedrock (group mailbox detection only)
  */
 const buildPrompt = (email: string): string => {
   return `Analyze this email address: ${email}
 
-Determine:
-1. Is this likely a group/shared mailbox? (team@, info@, contact@, admin@, etc.)
-2. Does the domain appear to be UK local government?
+Is this likely a group/shared mailbox?
+
+Group mailbox indicators:
+- Generic prefixes: team@, info@, contact@, admin@, support@, help@, enquiries@, noreply@
+- Role-based: hr@, finance@, legal@, sales@, marketing@
+- Department/function names that suggest shared access
+- Plus-addressed emails like prefix+something@ where prefix is generic
+
+Personal email indicators:
+- First name, last name, or combinations (john.smith@, j.smith@, smithj@)
+- Employee ID patterns
 
 Respond in JSON format only:
 {
   "isGroupMailbox": boolean,
   "confidence": "high" | "medium" | "low",
-  "isLocalGovernment": boolean,
   "reasoning": "brief explanation"
 }`;
 };
@@ -152,7 +158,6 @@ const parseBedrockResponse = (responseText: string): AIAnalysisResult => {
 
   return {
     isGroupMailbox: parsed.isGroupMailbox,
-    isOutsideTargetAudience: parsed.isLocalGovernment === false,
     confidence: parseConfidence(parsed.confidence ?? 'low'),
   };
 };
@@ -248,7 +253,6 @@ export const createBedrockService = (
       logger?.info('Bedrock email analysis completed', {
         email,
         isGroupMailbox: analysis.isGroupMailbox,
-        isOutsideTargetAudience: analysis.isOutsideTargetAudience,
         confidence: analysis.confidence,
       });
 

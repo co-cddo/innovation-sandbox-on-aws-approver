@@ -87,8 +87,8 @@ describe('LeaseRequestedDetailSchema', () => {
     const result = LeaseRequestedDetailSchema.safeParse(minimalDetail);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.budgetAmount).toBe(100); // default
-      expect(result.data.leaseDurationHours).toBe(24); // default
+      expect(result.data.budgetAmount).toBe(0); // default (no penalty if missing)
+      expect(result.data.leaseDurationHours).toBe(0); // default (no penalty if missing)
       expect(result.data.requiresManualApproval).toBe(false); // default
       expect(result.data.templateId).toBe('unknown'); // default
     }

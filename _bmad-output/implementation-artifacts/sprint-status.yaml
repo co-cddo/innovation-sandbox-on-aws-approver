@@ -81,5 +81,5 @@ development_status:
   5-2-slack-workflow-webhook-notifications: done
   5-3-cloudwatch-structured-logging-and-metrics: done
   5-4-per-rule-trigger-tracking-and-audit-trail: done
-  5-5-e2e-milestone-full-system-validation: backlog
+  5-5-e2e-milestone-full-system-validation: ready-for-dev
   epic-5-retrospective: optional

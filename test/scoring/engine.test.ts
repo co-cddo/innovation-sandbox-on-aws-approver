@@ -37,7 +37,7 @@ describe('scoring engine', () => {
   });
 
   describe('calculateScore', () => {
-    it('should run all 16 rules and return breakdown', () => {
+    it('should run all 18 rules and return breakdown', () => {
       const config: ScoringEngineConfig = {
         weights: {},
         threshold: 20,
@@ -74,15 +74,21 @@ describe('scoring engine', () => {
         budgetAmount: 100, // 10 units * 1 = 10
         leaseDurationHours: 24, // 3 units * 1 = 3
         requestTimestamp: new Date('2025-01-15T14:00:00Z'), // Not end of window
+        isVerifiedGovDomain: true, // Verified domain
+        orgLeaseHistory: [
+          { uuid: 'recent', userEmail: 'other@example.gov.uk', status: 'Expired', originalLeaseTemplateUuid: 'x', created: '2025-01-10T10:00:00Z' },
+        ], // Recent negative prevents org_clean_record bonus
       });
 
       const result = engine.calculateScore(context);
 
       // first_time_user: +5
+      // verified_gov_domain: -5 (gov domain bonus)
       // budget_amount: +10 (100/10 = 10 units)
       // duration_requested: +3 (24/8 = 3 units)
-      // Total expected: 18
-      expect(result.totalScore).toBe(18);
+      // org_recent_negative: +3 (recent expired lease)
+      // Total expected: 16
+      expect(result.totalScore).toBe(16);
     });
 
     it('should use default weights when not overridden', () => {
@@ -99,15 +105,21 @@ describe('scoring engine', () => {
         budgetAmount: 10, // 1 unit
         leaseDurationHours: 8, // 1 unit
         requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        isVerifiedGovDomain: true, // Verified domain
+        orgLeaseHistory: [
+          { uuid: 'recent', userEmail: 'other@example.gov.uk', status: 'Expired', originalLeaseTemplateUuid: 'x', created: '2025-01-10T10:00:00Z' },
+        ],
       });
 
       const result = engine.calculateScore(context);
 
       // first_time_user: +5
+      // verified_gov_domain: -5
       // budget_amount: +1
       // duration_requested: +1
-      // Total: 7
-      expect(result.totalScore).toBe(7);
+      // org_recent_negative: +3
+      // Total: 5
+      expect(result.totalScore).toBe(5);
     });
 
     it('should override default weights with custom weights', () => {
@@ -126,15 +138,21 @@ describe('scoring engine', () => {
         budgetAmount: 10, // 1 unit
         leaseDurationHours: 8, // 1 unit
         requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        isVerifiedGovDomain: true,
+        orgLeaseHistory: [
+          { uuid: 'recent', userEmail: 'other@example.gov.uk', status: 'Expired', originalLeaseTemplateUuid: 'x', created: '2025-01-10T10:00:00Z' },
+        ],
       });
 
       const result = engine.calculateScore(context);
 
       // first_time_user: +10 (overridden)
+      // verified_gov_domain: -5
       // budget_amount: +1
       // duration_requested: +1
-      // Total: 12
-      expect(result.totalScore).toBe(12);
+      // org_recent_negative: +3
+      // Total: 10
+      expect(result.totalScore).toBe(10);
     });
 
     it('should include timing in result', () => {
@@ -195,7 +213,7 @@ describe('scoring engine', () => {
       };
       const engine = createScoringEngine(config, mockLogger);
 
-      // No AI analysis = fallback for rules 4, 12, 16
+      // No AI analysis = fallback for rules 4, 16 (outside_target_audience uses S3 list, not AI)
       const context = createScoringContext({
         leaseId: 'test-123',
         userEmail: 'user@example.gov.uk',
@@ -211,10 +229,9 @@ describe('scoring engine', () => {
       const fallbackRules = result.breakdown.filter((r) => r.fallbackUsed);
       expect(fallbackRules.length).toBeGreaterThan(0);
 
-      // Rules 4, 12, 16 should have fallback
+      // Rules 4 and 16 use AI analysis (outside_target_audience uses S3 domain list now)
       const fallbackRuleIds = fallbackRules.map((r) => r.ruleId);
       expect(fallbackRuleIds).toContain('first_time_suspicious');
-      expect(fallbackRuleIds).toContain('outside_target_audience');
       expect(fallbackRuleIds).toContain('group_mailbox_detected');
     });
 
@@ -344,13 +361,17 @@ describe('scoring engine', () => {
         templateId: 'web-hosting',
         budgetAmount: 0,
         leaseDurationHours: 0,
-        requestTimestamp: new Date(),
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'), // 2pm London, outside end-of-window
+        isVerifiedGovDomain: true,
       });
 
       const result = engine.calculateScore(context);
 
-      // Only first_time_user should trigger
-      expect(result.totalScore).toBe(5);
+      // first_time_user: +5
+      // verified_gov_domain: -5 (bonus for verified domain)
+      // org_clean_record: 0 (requires 5+ org leases)
+      // Total: 0
+      expect(result.totalScore).toBe(0);
     });
 
     it('should handle negative score when bonuses exceed penalties', () => {
@@ -367,7 +388,7 @@ describe('scoring engine', () => {
         templateId: 'web-hosting',
         budgetAmount: 0,
         leaseDurationHours: 0,
-        requestTimestamp: new Date('2025-01-15T17:30:00Z'), // End of window bonus
+        requestTimestamp: new Date('2025-01-15T17:30:00Z'), // End of window penalty (+2)
         isVerifiedGovDomain: true,
         userLeaseHistory: [
           { uuid: 'old', userEmail: 'user@example.gov.uk', status: 'ManuallyTerminated', originalLeaseTemplateUuid: 'web-hosting', created: '2025-01-01T10:00:00Z' },
@@ -380,13 +401,13 @@ describe('scoring engine', () => {
 
       const result = engine.calculateScore(context);
 
-      // Bonuses should push score negative:
+      // Bonuses should push score negative despite end_of_window penalty:
       // verified_gov_domain: -5
       // familiar_template: -1
-      // end_of_window: -2
+      // end_of_window: +2 (penalty)
       // manual_early_termination: -4 (2 * -2)
-      // org_clean_record: -2
-      // Total: -14
+      // org_clean_record: 0 (needs 5+ org leases)
+      // Total: -8
       expect(result.totalScore).toBeLessThan(0);
     });
   });

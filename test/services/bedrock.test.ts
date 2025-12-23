@@ -43,7 +43,6 @@ describe('BedrockService', () => {
       const bedrockResponse = {
         isGroupMailbox: true,
         confidence: 'high',
-        isLocalGovernment: true,
         reasoning: 'Email starts with team@ prefix',
       };
 
@@ -64,7 +63,6 @@ describe('BedrockService', () => {
       expect(result.usedFallback).toBe(false);
       expect(result.analysis.isGroupMailbox).toBe(true);
       expect(result.analysis.confidence).toBe(0.9); // high = 0.9
-      expect(result.analysis.isOutsideTargetAudience).toBe(false); // isLocalGovernment: true
       expect(mockSend).toHaveBeenCalledTimes(1);
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Bedrock email analysis completed',
@@ -76,7 +74,7 @@ describe('BedrockService', () => {
     });
 
     it('should parse response with markdown code blocks', async () => {
-      const responseText = '```json\n{"isGroupMailbox": false, "confidence": "medium", "isLocalGovernment": true}\n```';
+      const responseText = '```json\n{"isGroupMailbox": false, "confidence": "medium"}\n```';
 
       mockSend.mockResolvedValueOnce({
         body: new globalThis.TextEncoder().encode(
@@ -98,7 +96,7 @@ describe('BedrockService', () => {
     });
 
     it('should handle response with surrounding text', async () => {
-      const responseText = 'Here is my analysis:\n\n{"isGroupMailbox": true, "confidence": "low", "isLocalGovernment": false}\n\nLet me know if you need more info.';
+      const responseText = 'Here is my analysis:\n\n{"isGroupMailbox": true, "confidence": "low"}\n\nLet me know if you need more info.';
 
       mockSend.mockResolvedValueOnce({
         body: new globalThis.TextEncoder().encode(
@@ -116,25 +114,6 @@ describe('BedrockService', () => {
 
       expect(result.usedFallback).toBe(false);
       expect(result.analysis.isGroupMailbox).toBe(true);
-      expect(result.analysis.isOutsideTargetAudience).toBe(true); // isLocalGovernment: false
-    });
-
-    it('should detect outside target audience when not local government', async () => {
-      mockSend.mockResolvedValueOnce({
-        body: new globalThis.TextEncoder().encode(
-          JSON.stringify({
-            output: {
-              message: {
-                content: [{ text: '{"isGroupMailbox": false, "confidence": "high", "isLocalGovernment": false}' }],
-              },
-            },
-          })
-        ),
-      });
-
-      const result = await service.analyzeEmail('user@company.com');
-
-      expect(result.analysis.isOutsideTargetAudience).toBe(true);
     });
   });
 
@@ -209,7 +188,7 @@ describe('BedrockService', () => {
           JSON.stringify({
             output: {
               message: {
-                content: [{ text: '{"confidence": "high", "isLocalGovernment": true}' }],
+                content: [{ text: '{"confidence": "high"}' }],
               },
             },
           })
@@ -250,28 +229,6 @@ describe('BedrockService', () => {
       expect(result.fallbackReason).toContain('No text content');
     });
 
-    it('should handle missing isLocalGovernment field (pessimistic)', async () => {
-      // When isLocalGovernment is undefined, we assume they ARE local gov (pessimistic approach)
-      // isOutsideTargetAudience = (undefined === false) = false
-      mockSend.mockResolvedValueOnce({
-        body: new globalThis.TextEncoder().encode(
-          JSON.stringify({
-            output: {
-              message: {
-                content: [{ text: '{"isGroupMailbox": false, "confidence": "high"}' }],
-              },
-            },
-          })
-        ),
-      });
-
-      const result = await service.analyzeEmail('user@council.gov.uk');
-
-      // Should NOT use fallback - isLocalGovernment is optional
-      expect(result.usedFallback).toBe(false);
-      // Pessimistic: undefined !== false, so isOutsideTargetAudience = false (assume they're local gov)
-      expect(result.analysis.isOutsideTargetAudience).toBe(false);
-    });
   });
 
   describe('circuit breaker integration (AC5)', () => {
@@ -306,7 +263,7 @@ describe('BedrockService', () => {
           JSON.stringify({
             output: {
               message: {
-                content: [{ text: '{"isGroupMailbox": false, "confidence": "high", "isLocalGovernment": true}' }],
+                content: [{ text: '{"isGroupMailbox": false, "confidence": "high"}' }],
               },
             },
           })
@@ -338,7 +295,7 @@ describe('BedrockService', () => {
           JSON.stringify({
             output: {
               message: {
-                content: [{ text: '{"isGroupMailbox": false, "confidence": "high", "isLocalGovernment": true}' }],
+                content: [{ text: '{"isGroupMailbox": false, "confidence": "high"}' }],
               },
             },
           })
@@ -395,7 +352,7 @@ describe('BedrockService', () => {
           JSON.stringify({
             output: {
               message: {
-                content: [{ text: '{"isGroupMailbox": true, "confidence": "high", "isLocalGovernment": true}' }],
+                content: [{ text: '{"isGroupMailbox": true, "confidence": "high"}' }],
               },
             },
           })
@@ -412,7 +369,7 @@ describe('BedrockService', () => {
           JSON.stringify({
             output: {
               message: {
-                content: [{ text: '{"isGroupMailbox": true, "confidence": "medium", "isLocalGovernment": true}' }],
+                content: [{ text: '{"isGroupMailbox": true, "confidence": "medium"}' }],
               },
             },
           })
@@ -429,7 +386,7 @@ describe('BedrockService', () => {
           JSON.stringify({
             output: {
               message: {
-                content: [{ text: '{"isGroupMailbox": true, "confidence": "low", "isLocalGovernment": true}' }],
+                content: [{ text: '{"isGroupMailbox": true, "confidence": "low"}' }],
               },
             },
           })
@@ -446,7 +403,7 @@ describe('BedrockService', () => {
           JSON.stringify({
             output: {
               message: {
-                content: [{ text: '{"isGroupMailbox": true, "confidence": "unknown", "isLocalGovernment": true}' }],
+                content: [{ text: '{"isGroupMailbox": true, "confidence": "unknown"}' }],
               },
             },
           })

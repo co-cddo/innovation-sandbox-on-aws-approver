@@ -166,6 +166,14 @@ describe('handler', () => {
     setIsbLambdaService(mockIsbLambdaService);
     // Use mock bank holiday service to ensure consistent business hours (always within)
     setBankHolidayService(createMockBankHolidayService([]));
+    // Default domain allowlist includes test domains as verified
+    setDomainAllowlistService({
+      getLocalAuthorityDomains: vi.fn().mockResolvedValue({
+        domains: ['example.gov.uk', 'council.gov.uk'],
+        usedStaleCache: false,
+      }),
+      clearCache: vi.fn(),
+    });
   });
 
   afterEach(() => {
@@ -1020,8 +1028,8 @@ describe('handler', () => {
           score: 25,
         })
       );
-      // Escalated requests call ISB Lambda for approval (stub auto-approval)
-      expect(mockApproveLease).toHaveBeenCalled();
+      // Escalated requests do NOT call ISB Lambda - they remain pending for manual review
+      expect(mockApproveLease).not.toHaveBeenCalled();
     });
 
     it('should send Slack notification when escalated and service is configured (Story 5.2)', async () => {
@@ -1142,7 +1150,11 @@ describe('handler', () => {
       );
     });
 
-    it('should throw ProcessingError when ISB Lambda fails for escalated request (fail-closed)', async () => {
+    it('should return 200 OK for escalated request without calling ISB Lambda', async () => {
+      // After removing temporary auto-approval, escalated requests should:
+      // 1. Update lease comments
+      // 2. Send Slack notification
+      // 3. Return 200 OK (no ISB Lambda call)
       const mockOrchestrator: StateMachineOrchestrator = {
         run: vi.fn().mockReturnValue({
           finalState: ApprovalState.ESCALATED,
@@ -1155,47 +1167,31 @@ describe('handler', () => {
             score: 25,
             decision: 'escalated',
             reason: 'Score 25 meets or exceeds threshold 20',
+            scoreBreakdown: [{ ruleId: 'group_mailbox_detected', points: 20, triggered: true }],
           },
         }),
       };
       setOrchestrator(mockOrchestrator);
-      mockApproveLease.mockResolvedValueOnce({ success: false, statusCode: 500, error: 'ISB unavailable' });
 
       const event = createValidLeaseRequestedEvent();
-      await expect(handler(event, mockContext)).rejects.toThrow('ISB unavailable');
+      const result = await handler(event, mockContext);
 
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'ISB Lambda approval failed for escalated request',
+      // Should return 200 OK
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('OK');
+
+      // Should NOT call ISB Lambda for escalated requests
+      expect(mockApproveLease).not.toHaveBeenCalled();
+
+      // Should log escalation
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Request escalated for manual review',
         expect.objectContaining({
-          error: 'ISB unavailable',
+          action: 'escalated',
+          leaseId: '123e4567-e89b-12d3-a456-426614174000',
+          score: 25,
         })
       );
-      expect(mockEmitLeaseEscalated).toHaveBeenCalled();
-    });
-
-    it('should throw ProcessingError when ISB Lambda throws for escalated request', async () => {
-      const mockOrchestrator: StateMachineOrchestrator = {
-        run: vi.fn().mockReturnValue({
-          finalState: ApprovalState.ESCALATED,
-          success: true,
-          context: {
-            ...createInitialContext(),
-            leaseId: '123e4567-e89b-12d3-a456-426614174000',
-            userEmail: 'user@example.gov.uk',
-            templateId: 'web-hosting',
-            score: 25,
-            decision: 'escalated',
-            reason: 'Score 25 meets or exceeds threshold 20',
-          },
-        }),
-      };
-      setOrchestrator(mockOrchestrator);
-      mockApproveLease.mockRejectedValueOnce(new Error('Network error'));
-
-      const event = createValidLeaseRequestedEvent();
-      await expect(handler(event, mockContext)).rejects.toThrow('Network error');
-
-      expect(mockEmitLeaseEscalated).toHaveBeenCalled();
     });
 
     it('should return 500 for denied decision (not yet implemented)', async () => {
@@ -1932,7 +1928,6 @@ describe('handler', () => {
         analyzeEmail: vi.fn().mockResolvedValue({
           analysis: {
             isGroupMailbox: false,
-            isOutsideTargetAudience: false,
             confidence: 0.9,
           },
           usedFallback: false,
@@ -1951,7 +1946,6 @@ describe('handler', () => {
         expect.objectContaining({
           email: 'user@example.gov.uk',
           isGroupMailbox: false,
-          isOutsideTargetAudience: false,
           confidence: 0.9,
         })
       );
@@ -1962,7 +1956,6 @@ describe('handler', () => {
         analyzeEmail: vi.fn().mockResolvedValue({
           analysis: {
             isGroupMailbox: true,
-            isOutsideTargetAudience: false,
             confidence: 0.9,
           },
           usedFallback: false,
@@ -1997,7 +1990,6 @@ describe('handler', () => {
     it('should pass aiAnalysis to state machine context (AC3)', async () => {
       const mockAiAnalysis = {
         isGroupMailbox: true,
-        isOutsideTargetAudience: false,
         confidence: 0.7,
       };
       const mockBedrockService: BedrockService = {
@@ -2046,7 +2038,6 @@ describe('handler', () => {
         analyzeEmail: vi.fn().mockResolvedValue({
           analysis: {
             isGroupMailbox: true, // Rule-based fallback detected 'team' prefix
-            isOutsideTargetAudience: false,
             confidence: 0.7,
           },
           usedFallback: true,
@@ -2084,7 +2075,6 @@ describe('handler', () => {
         analyzeEmail: vi.fn().mockResolvedValue({
           analysis: {
             isGroupMailbox: false,
-            isOutsideTargetAudience: false,
             confidence: 0.5,
           },
           usedFallback: true,
@@ -2150,7 +2140,6 @@ describe('handler', () => {
         analyzeEmail: vi.fn().mockResolvedValue({
           analysis: {
             isGroupMailbox: true, // Detected 'info' prefix
-            isOutsideTargetAudience: false,
             confidence: 0.7, // Medium confidence from rule-based
           },
           usedFallback: true,
@@ -2179,7 +2168,6 @@ describe('handler', () => {
         'AI email analysis used fallback',
         expect.objectContaining({
           isGroupMailbox: true,
-          isOutsideTargetAudience: false,
         })
       );
     });

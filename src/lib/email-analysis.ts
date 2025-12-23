@@ -84,20 +84,14 @@ export const isLikelyUKGovernment = (email: string): boolean => {
  * Used as fallback when Bedrock AI is unavailable.
  *
  * @param email - Email address to analyze
- * @returns AIAnalysisResult consistent with Bedrock response shape
+ * @returns AIAnalysisResult with group mailbox detection
  */
 export const analyzeEmailPattern = (email: string): AIAnalysisResult => {
   const isGroupMailbox = isLikelyGroupMailbox(email);
-  // Note: isLikelyUKGovernment is available but intentionally not used here.
-  // Domain verification is handled by ukps-domains allowlist (Story 3.3).
-  // Rule-based fallback takes pessimistic approach: don't penalize without AI confidence.
 
   return {
     isGroupMailbox,
-    // For rule-based fallback, we're less confident about local gov detection
-    // because ukps-domains is the authoritative source (handled separately in Story 3.3)
-    isOutsideTargetAudience: false, // Pessimistic: don't penalize without AI confidence
-    confidence: isGroupMailbox ? 0.7 : 0.5, // Medium confidence for rule-based
+    confidence: isGroupMailbox ? 0.7 : 0.5,
   };
 };
 

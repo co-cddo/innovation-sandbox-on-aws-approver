@@ -43,10 +43,10 @@ export const LeaseRequestedDetailSchema = z.object({
   ...data,
   // Normalize template: prefer leaseTemplateId > originalLeaseTemplateUuid > templateId
   templateId: data.leaseTemplateId ?? data.originalLeaseTemplateUuid ?? data.templateId ?? 'unknown',
-  // Normalize budget: prefer maxSpend over budgetAmount (default 100)
-  budgetAmount: data.maxSpend ?? data.budgetAmount ?? 100,
-  // Normalize duration: prefer leaseDurationInHours > expiresInHours > leaseDurationHours (default 24)
-  leaseDurationHours: data.leaseDurationInHours ?? data.expiresInHours ?? data.leaseDurationHours ?? 24,
+  // Normalize budget: prefer maxSpend over budgetAmount (default 0 - no penalty if missing)
+  budgetAmount: data.maxSpend ?? data.budgetAmount ?? 0,
+  // Normalize duration: prefer leaseDurationInHours > expiresInHours > leaseDurationHours (default 0 - no penalty if missing)
+  leaseDurationHours: data.leaseDurationInHours ?? data.expiresInHours ?? data.leaseDurationHours ?? 0,
 }));
 
 export type LeaseRequestedDetail = z.infer<typeof LeaseRequestedDetailSchema>;

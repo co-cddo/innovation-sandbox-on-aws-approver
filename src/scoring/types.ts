@@ -67,15 +67,15 @@ export const DEFAULT_RULE_WEIGHTS: RuleWeights = {
   first_time_user: 5, // +5 for no previous leases
   first_time_suspicious: 20, // +20 for first lease + group mailbox
   cooldown_violation: 10, // +10 for request within 1hr of previous lease end
-  outside_target_audience: 10, // +10 for non-local-gov domain (AI)
+  outside_target_audience: 50, // +50 for non-local-gov domain
   group_mailbox_detected: 20, // +20 for detected group mailbox (AI)
   org_recent_negative: 3, // +3 for same domain issues in last 30 days
   template_hopper: 2, // +2 for 3+ leases never repeating template
+  end_of_window: 2, // +2 for request in final 2 hours (5-7pm London)
 
   // Bonus rules (negative = less scrutiny)
   verified_gov_domain: -5, // -5 for domain in ukps-domains allowlist
   familiar_template: -1, // -1 for previously used template successfully
-  end_of_window: -2, // -2 for request in final 2 hours (5-7pm London)
   manual_early_termination: -2, // -2 each early termination (responsible)
   org_clean_record: -2, // -2 for domain clean for 90 days
 
@@ -108,13 +108,12 @@ export interface LeaseHistoryRecord {
 }
 
 /**
- * AI analysis result (from Bedrock) - optional, only available in Epic 3+.
+ * AI analysis result (from Bedrock) - group mailbox detection only.
+ * Target audience is determined by S3 domain allowlist (isVerifiedGovDomain).
  */
 export interface AIAnalysisResult {
   /** Whether email appears to be a group mailbox */
   isGroupMailbox: boolean;
-  /** Whether domain appears outside target audience */
-  isOutsideTargetAudience: boolean;
   /** Confidence level 0-1 */
   confidence: number;
 }
