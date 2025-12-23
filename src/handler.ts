@@ -32,6 +32,7 @@ import {
 } from './services/sqs.js';
 import {
   createBusinessHoursChecker,
+  isQueueExpired,
   type BusinessHoursResult,
 } from './lib/business-hours.js';
 import {
@@ -188,6 +189,9 @@ let businessHoursChecker = createBusinessHoursChecker(bankHolidayService);
 const stateMachineConfig: StateMachineConfig = {
   autoApproveThreshold: parseInt(process.env.AUTO_APPROVE_THRESHOLD || '20', 10),
 };
+
+// Queue expiry configuration (default: 5 business days)
+const queueExpiryDays = parseInt(process.env.QUEUE_EXPIRY_DAYS || '5', 10);
 
 // Create orchestrator (can be overridden in tests via dependency injection)
 let orchestrator: StateMachineOrchestrator = createStateMachineOrchestrator({
@@ -716,6 +720,113 @@ const processDelayedMessage = async (
 };
 
 /**
+ * Generates a reference number in ISB-YYYY-NNNN format.
+ * Uses the leaseId UUID to create a deterministic short reference.
+ *
+ * NOTE: This format supports max 10,000 unique references per year.
+ * The same leaseId will always generate the same reference number.
+ * For high-volume scenarios, collision risk increases (birthday paradox).
+ * Acceptable for current low-volume use case.
+ */
+const generateReferenceNumber = (leaseId: string): string => {
+  const year = new Date().getFullYear();
+  // Use last 4 hex chars of UUID for deterministic reference
+  const shortRef = leaseId.replace(/-/g, '').slice(-4).toUpperCase();
+  // Convert hex to decimal and pad to 4 digits
+  const numRef = (parseInt(shortRef, 16) % 10000).toString().padStart(4, '0');
+  return `ISB-${year}-${numRef}`;
+};
+
+/**
+ * Processes an expired message from the delay queue.
+ * Emits a LeaseDenied event and updates lease comments, then deletes the message.
+ * Returns true if expiry was successful, false otherwise.
+ */
+const processExpiredMessage = async (
+  message: ReceivedMessage
+): Promise<boolean> => {
+  const { body, receiptHandle } = message;
+  const { leaseId, receivedAt } = body;
+  const currentTime = new Date().toISOString();
+  const referenceNumber = generateReferenceNumber(leaseId.uuid);
+
+  logger.info('Processing expired message', {
+    action: 'expired',
+    leaseId: leaseId.uuid,
+    userEmail: leaseId.userEmail,
+    queuedAt: receivedAt,
+    expiredAt: currentTime,
+    businessDaysInQueue: queueExpiryDays,
+    reason: 'queue_timeout',
+    referenceNumber,
+  });
+
+  try {
+    // Emit LeaseDenied event with queue_timeout reason
+    await eventBridgeService.emitLeaseDenied({
+      leaseId,
+      reason: 'queue_timeout',
+      deniedBy: 'system',
+    });
+
+    logger.info('LeaseDenied event emitted for expired request', {
+      leaseId: leaseId.uuid,
+      userEmail: leaseId.userEmail,
+      reason: 'queue_timeout',
+    });
+
+    // Note: Lease comments update is implemented in Story 5.1
+    // For now, just log the intended message
+    const expiryMessage = [
+      `Your lease request has expired after ${queueExpiryDays} business days in queue.`,
+      'This may have occurred because no sandbox accounts were available.',
+      'Please submit a new request if you still need access.',
+      `Reference: ${referenceNumber}`,
+    ].join('\n');
+
+    logger.info('Expiry message for lease comments (Story 5.1)', {
+      leaseId: leaseId.uuid,
+      referenceNumber,
+      expiryMessage,
+    });
+
+    // Delete the message from the queue
+    if (!sqsService) {
+      logger.error('SQS service not available for message deletion');
+      return false;
+    }
+
+    const deleteResult = await sqsService.deleteMessage(receiptHandle);
+    if (!deleteResult.success) {
+      logger.error('Failed to delete expired message', {
+        error: deleteResult.error,
+        leaseId: leaseId.uuid,
+      });
+      return false;
+    }
+
+    logger.info('Expired message processed and deleted', {
+      action: 'expired',
+      leaseId: leaseId.uuid,
+      userEmail: leaseId.userEmail,
+      queuedAt: receivedAt,
+      expiredAt: currentTime,
+      businessDaysInQueue: queueExpiryDays,
+      reason: 'queue_timeout',
+      referenceNumber,
+    });
+
+    return true;
+  } catch (error) {
+    logger.error('Error processing expired message', {
+      error: error instanceof Error ? error.message : String(error),
+      leaseId: leaseId.uuid,
+    });
+    return false;
+  }
+};
+
+/**
  * Processes the delay queue - checks for messages and processes if conditions are met.
  * Called by scheduled queue check and AccountCleanupSucceeded triggers.
  */
@@ -794,7 +905,26 @@ const processDelayQueue = async (
 
   // Process the oldest message (messages are already sorted by SentTimestamp)
   const message = receiveResult.messages[0]!;
-  const success = await processDelayedMessage(message, context);
+
+  // Get bank holidays for expiry check
+  const bankHolidays = await bankHolidayService.getBankHolidays();
+
+  // Check if the message has expired (> 5 business days in queue)
+  const queuedAt = new Date(message.body.receivedAt);
+  const isExpired = isQueueExpired(queuedAt, queueExpiryDays, bankHolidays);
+
+  let success: boolean;
+  let action: string;
+
+  if (isExpired) {
+    // Message has expired - expire it without processing
+    success = await processExpiredMessage(message);
+    action = 'expired';
+  } else {
+    // Message is still valid - process it
+    success = await processDelayedMessage(message, context);
+    action = 'processed';
+  }
 
   // Log queue depth after processing (AC4)
   const depthAfterResult = await sqsService.getQueueDepth();
@@ -802,9 +932,17 @@ const processDelayQueue = async (
     logger.info('Queue depth after processing', {
       approximateNumberOfMessages: depthAfterResult.approximateNumberOfMessages,
       depthBefore,
-      processed: success ? 1 : 0,
+      action,
+      success: success ? 1 : 0,
       triggerType,
     });
+  }
+
+  if (action === 'expired') {
+    return {
+      statusCode: 200,
+      body: success ? 'Expired 1 stale message from queue' : 'Failed to expire stale message',
+    };
   }
 
   return {

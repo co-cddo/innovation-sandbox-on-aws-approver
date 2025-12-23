@@ -12,6 +12,8 @@ import {
   getNextBusinessHoursStart,
   checkBusinessHours,
   createBusinessHoursChecker,
+  countBusinessDays,
+  isQueueExpired,
 } from '../../src/lib/business-hours.js';
 import { createMockBankHolidayService } from '../../src/services/bank-holidays.js';
 
@@ -320,5 +322,120 @@ describe('edge cases', () => {
 
     expect(result.isWithinBusinessHours).toBe(true);
     expect(result.isEndOfWindow).toBe(true);
+  });
+});
+
+describe('countBusinessDays', () => {
+
+  it('should count 5 business days in a week with no bank holidays', () => {
+    // Monday to Friday (5 business days)
+    const start = new Date('2025-01-13T00:00:00.000Z'); // Monday
+    const end = new Date('2025-01-17T23:59:59.000Z'); // Friday
+    const result = countBusinessDays(start, end, new Set<string>());
+    expect(result).toBe(4); // Tue, Wed, Thu, Fri (excluding Mon since we start counting from day after)
+  });
+
+  it('should return 0 when end is before start', () => {
+    const start = new Date('2025-01-15T00:00:00.000Z');
+    const end = new Date('2025-01-14T00:00:00.000Z');
+    const result = countBusinessDays(start, end, new Set<string>());
+    expect(result).toBe(0);
+  });
+
+  it('should return 0 when end equals start', () => {
+    const date = new Date('2025-01-15T00:00:00.000Z');
+    const result = countBusinessDays(date, date, new Set<string>());
+    expect(result).toBe(0);
+  });
+
+  it('should exclude weekends', () => {
+    // Friday to Monday (spans a weekend)
+    const start = new Date('2025-01-17T00:00:00.000Z'); // Friday
+    const end = new Date('2025-01-20T23:59:59.000Z'); // Monday
+    const result = countBusinessDays(start, end, new Set<string>());
+    expect(result).toBe(1); // Only Monday is counted (Sat/Sun excluded)
+  });
+
+  it('should exclude bank holidays', () => {
+    // Wednesday to Friday with Thursday as bank holiday
+    const start = new Date('2025-01-15T00:00:00.000Z'); // Wednesday
+    const end = new Date('2025-01-17T23:59:59.000Z'); // Friday
+    const bankHolidays = new Set(['2025-01-16']); // Thursday
+    const result = countBusinessDays(start, end, bankHolidays);
+    expect(result).toBe(1); // Only Friday (Thursday excluded)
+  });
+
+  it('should count business days across multiple weeks', () => {
+    // Monday Jan 13 to Friday Jan 24 (10 business days total, but we count from day after)
+    const start = new Date('2025-01-13T00:00:00.000Z'); // Monday
+    const end = new Date('2025-01-24T23:59:59.000Z'); // Friday
+    const result = countBusinessDays(start, end, new Set<string>());
+    // Tue-Fri week 1 = 4, Mon-Fri week 2 = 5 = 9 days
+    expect(result).toBe(9);
+  });
+
+  it('should exclude both weekends and bank holidays', () => {
+    // Monday to next Monday with Friday as bank holiday
+    const start = new Date('2025-01-13T00:00:00.000Z'); // Monday
+    const end = new Date('2025-01-20T23:59:59.000Z'); // Monday
+    const bankHolidays = new Set(['2025-01-17']); // Friday
+    const result = countBusinessDays(start, end, bankHolidays);
+    // Tue, Wed, Thu (Fri=holiday), Mon = 4 days
+    expect(result).toBe(4);
+  });
+
+  it('should handle spanning Christmas holiday period', () => {
+    // Dec 23 to Dec 29 with Dec 25, 26 as bank holidays
+    const start = new Date('2025-12-23T00:00:00.000Z'); // Tuesday
+    const end = new Date('2025-12-29T23:59:59.000Z'); // Monday
+    const bankHolidays = new Set(['2025-12-25', '2025-12-26']); // Thu, Fri
+    const result = countBusinessDays(start, end, bankHolidays);
+    // Wed (24th), Mon (29th) = 2 days (25th, 26th holidays, 27-28 weekend)
+    expect(result).toBe(2);
+  });
+});
+
+describe('isQueueExpired', () => {
+
+  it('should return false when request has been in queue for less than max days', () => {
+    // Queued on Monday, current is Wednesday (2 business days)
+    const queuedAt = new Date('2025-01-13T10:00:00.000Z'); // Monday
+    const currentDate = new Date('2025-01-15T10:00:00.000Z'); // Wednesday
+    const result = isQueueExpired(queuedAt, 5, new Set<string>(), currentDate);
+    expect(result).toBe(false);
+  });
+
+  it('should return false when request has been in queue for exactly max days', () => {
+    // Queued on Monday, current is Monday+5 business days = next Monday
+    const queuedAt = new Date('2025-01-13T10:00:00.000Z'); // Monday
+    const currentDate = new Date('2025-01-20T10:00:00.000Z'); // Next Monday (5 business days later)
+    const result = isQueueExpired(queuedAt, 5, new Set<string>(), currentDate);
+    expect(result).toBe(false); // Exactly 5, not > 5
+  });
+
+  it('should return true when request has been in queue for more than max days', () => {
+    // Queued on Monday, current is Tuesday next week (6 business days)
+    const queuedAt = new Date('2025-01-13T10:00:00.000Z'); // Monday
+    const currentDate = new Date('2025-01-21T10:00:00.000Z'); // Tuesday next week
+    const result = isQueueExpired(queuedAt, 5, new Set<string>(), currentDate);
+    expect(result).toBe(true);
+  });
+
+  it('should account for weekends when checking expiry', () => {
+    // Queued on Friday, current is next Friday (5 business days but 7 calendar days)
+    const queuedAt = new Date('2025-01-17T10:00:00.000Z'); // Friday
+    const currentDate = new Date('2025-01-24T10:00:00.000Z'); // Next Friday
+    const result = isQueueExpired(queuedAt, 5, new Set<string>(), currentDate);
+    expect(result).toBe(false); // Mon, Tue, Wed, Thu, Fri = 5 business days, exactly at limit
+  });
+
+  it('should account for bank holidays when checking expiry', () => {
+    // Queued on Monday, current is next Monday with one bank holiday
+    const queuedAt = new Date('2025-01-13T10:00:00.000Z'); // Monday
+    const currentDate = new Date('2025-01-21T10:00:00.000Z'); // Tuesday next week
+    const bankHolidays = new Set(['2025-01-16']); // Thursday
+    // Business days: Tue, Wed, Fri, Mon, Tue = 5 (Thu excluded)
+    const result = isQueueExpired(queuedAt, 5, bankHolidays, currentDate);
+    expect(result).toBe(false); // Exactly 5
   });
 });

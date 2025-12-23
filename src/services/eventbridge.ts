@@ -7,7 +7,7 @@
  */
 
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
-import type { LeaseApprovedDetail, LeaseEscalatedDetail, LeaseId } from '../lib/types.js';
+import type { LeaseApprovedDetail, LeaseEscalatedDetail, LeaseDeniedDetail, LeaseId } from '../lib/types.js';
 
 /**
  * EventBridge service configuration
@@ -38,11 +38,21 @@ export interface EmitLeaseEscalatedParams {
 }
 
 /**
+ * Parameters for emitting a lease denied event (queue timeout, etc.)
+ */
+export interface EmitLeaseDeniedParams {
+  readonly leaseId: LeaseId;
+  readonly reason: string;
+  readonly deniedBy: string;
+}
+
+/**
  * EventBridge service interface for type-safe dependency injection
  */
 export interface EventBridgeService {
   emitLeaseApproved(params: EmitLeaseApprovedParams): Promise<void>;
   emitLeaseEscalated(params: EmitLeaseEscalatedParams): Promise<void>;
+  emitLeaseDenied(params: EmitLeaseDeniedParams): Promise<void>;
 }
 
 /**
@@ -136,6 +146,39 @@ export const createEventBridgeService = (
       const failedEntry = response.Entries?.[0];
       throw new Error(
         `Failed to emit LeaseEscalated event: ${failedEntry?.ErrorCode ?? 'Unknown'} - ${failedEntry?.ErrorMessage ?? 'No error message'}`
+      );
+    }
+  },
+
+  emitLeaseDenied: async (params: EmitLeaseDeniedParams): Promise<void> => {
+    const detail: LeaseDeniedDetail = {
+      leaseId: {
+        userEmail: params.leaseId.userEmail,
+        uuid: params.leaseId.uuid,
+      },
+      reason: params.reason,
+      deniedBy: params.deniedBy,
+      timestamp: new Date().toISOString(),
+    };
+
+    const command = new PutEventsCommand({
+      Entries: [
+        {
+          Source: config.source,
+          DetailType: 'LeaseDenied',
+          Detail: JSON.stringify(detail),
+          EventBusName: config.eventBusName,
+        },
+      ],
+    });
+
+    const response = await client.send(command);
+
+    // Check for partial failures - EventBridge can return success but fail to deliver
+    if (response.FailedEntryCount && response.FailedEntryCount > 0) {
+      const failedEntry = response.Entries?.[0];
+      throw new Error(
+        `Failed to emit LeaseDenied event: ${failedEntry?.ErrorCode ?? 'Unknown'} - ${failedEntry?.ErrorMessage ?? 'No error message'}`
       );
     }
   },

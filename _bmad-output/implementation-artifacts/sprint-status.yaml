@@ -68,11 +68,11 @@ development_status:
   epic-3-retrospective: done
 
   # Epic 4: Timing & Queue Management
-  epic-4: in-progress
+  epic-4: done
   4-1-business-hours-detection: done
   4-2-delayed-processing-with-30-minute-schedule: done
   4-3-rate-limiting-per-user-and-organization: done
-  4-4-queue-expiry-after-5-business-days: backlog
+  4-4-queue-expiry-after-5-business-days: done
   epic-4-retrospective: optional
 
   # Epic 5: Communications & Operations

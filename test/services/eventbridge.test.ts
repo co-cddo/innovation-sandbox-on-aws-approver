@@ -311,4 +311,87 @@ describe('EventBridge Service', () => {
       );
     });
   });
+
+  describe('emitLeaseDenied', () => {
+    const deniedParams = {
+      leaseId: {
+        userEmail: 'user@example.gov.uk',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+      },
+      reason: 'queue_timeout',
+      deniedBy: 'system',
+    };
+
+    it('sends a PutEventsCommand with correct parameters', async () => {
+      const service = createEventBridgeService(mockClient, config);
+
+      await service.emitLeaseDenied(deniedParams);
+
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      const callArgs = mockSend.mock.calls[0] as unknown[];
+      const sentCommand = callArgs[0];
+      expect(sentCommand).toBeInstanceOf(PutEventsCommand);
+    });
+
+    it('includes correct event entry structure', async () => {
+      const service = createEventBridgeService(mockClient, config);
+
+      await service.emitLeaseDenied(deniedParams);
+
+      const callArgs = mockSend.mock.calls[0] as unknown[];
+      const sentCommand = callArgs[0] as PutEventsCommand;
+      const entries = sentCommand.input.Entries ?? [];
+
+      expect(entries).toHaveLength(1);
+      expect(entries[0]?.Source).toBe(config.source);
+      expect(entries[0]?.DetailType).toBe('LeaseDenied');
+      expect(entries[0]?.EventBusName).toBe(config.eventBusName);
+    });
+
+    it('includes correct detail payload', async () => {
+      const service = createEventBridgeService(mockClient, config);
+
+      await service.emitLeaseDenied(deniedParams);
+
+      const callArgs = mockSend.mock.calls[0] as unknown[];
+      const sentCommand = callArgs[0] as PutEventsCommand;
+      const entries = sentCommand.input.Entries ?? [];
+      const detail = JSON.parse(entries[0]?.Detail ?? '{}');
+
+      expect(detail.leaseId.userEmail).toBe(deniedParams.leaseId.userEmail);
+      expect(detail.leaseId.uuid).toBe(deniedParams.leaseId.uuid);
+      expect(detail.reason).toBe('queue_timeout');
+      expect(detail.deniedBy).toBe('system');
+      expect(detail.timestamp).toBeDefined();
+    });
+
+    it('throws error when FailedEntryCount is greater than 0', async () => {
+      mockSend.mockResolvedValue({
+        FailedEntryCount: 1,
+        Entries: [
+          {
+            ErrorCode: 'InternalException',
+            ErrorMessage: 'Service unavailable',
+          },
+        ],
+      });
+
+      const service = createEventBridgeService(mockClient, config);
+
+      await expect(service.emitLeaseDenied(deniedParams)).rejects.toThrow(
+        'Failed to emit LeaseDenied event: InternalException - Service unavailable'
+      );
+    });
+
+    it('propagates client errors', async () => {
+      const error = new Error('EventBridge unavailable');
+      mockSend.mockRejectedValue(error);
+
+      const service = createEventBridgeService(mockClient, config);
+
+      await expect(service.emitLeaseDenied(deniedParams)).rejects.toThrow(
+        'EventBridge unavailable'
+      );
+    });
+  });
 });

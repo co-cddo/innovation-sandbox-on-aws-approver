@@ -106,3 +106,17 @@ export const LeaseEscalatedDetailSchema = z.object({
 });
 
 export type LeaseEscalatedDetail = z.infer<typeof LeaseEscalatedDetailSchema>;
+
+/**
+ * LeaseDenied event detail for emission (queue timeout, etc.)
+ * Uses composite leaseId to match ISB's expected format
+ */
+export const LeaseDeniedDetailSchema = z.object({
+  // Composite leaseId matching ISB format for lease lookup
+  leaseId: LeaseIdSchema,
+  reason: z.string(),
+  deniedBy: z.string(),
+  timestamp: z.string(),
+});
+
+export type LeaseDeniedDetail = z.infer<typeof LeaseDeniedDetailSchema>;

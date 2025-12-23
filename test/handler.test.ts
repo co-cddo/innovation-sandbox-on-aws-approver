@@ -95,12 +95,14 @@ vi.mock('@aws-sdk/client-sqs', () => ({
 // Import the mocked logger for assertions
 import { logger as mockLogger } from '../src/lib/logger.js';
 
-// Mock EventBridge service for testing (used for escalation events only)
+// Mock EventBridge service for testing (used for escalation and denial events)
 // Note: emitLeaseApproved is no longer used - approvals go via ISB Lambda directly
 const mockEmitLeaseEscalated = vi.fn().mockResolvedValue(undefined);
+const mockEmitLeaseDenied = vi.fn().mockResolvedValue(undefined);
 const mockEventBridgeService: EventBridgeService = {
   emitLeaseApproved: vi.fn().mockResolvedValue(undefined), // Kept for interface compliance
   emitLeaseEscalated: mockEmitLeaseEscalated,
+  emitLeaseDenied: mockEmitLeaseDenied, // Added for Story 4.4 queue expiry
 };
 
 // Mock ISB Lambda service for testing (used for actual approvals)
@@ -518,13 +520,21 @@ describe('handler', () => {
       setOrchestrator(mockOrchestrator);
 
       // Create a delayed message with a valid LeaseRequested event
+      // Use recent dates within 5 business days to avoid queue expiry (Story 4.4)
+      const recentDate = new Date();
+      recentDate.setHours(recentDate.getHours() - 2); // 2 hours ago
+      const recentDateISO = recentDate.toISOString();
+      const processAfterDate = new Date(recentDate);
+      processAfterDate.setHours(processAfterDate.getHours() + 1);
+      const processAfterISO = processAfterDate.toISOString();
+
       const originalEvent = {
         version: '0',
         id: 'original-event-id',
         'detail-type': 'LeaseRequested',
         source: 'innovation-sandbox',
         account: '123456789012',
-        time: '2024-01-01T09:00:00Z',
+        time: recentDateISO,
         region: 'us-east-1',
         resources: [],
         detail: {
@@ -550,11 +560,11 @@ describe('handler', () => {
               body: {
                 leaseId: { userEmail: 'delayed@example.gov.uk', uuid: delayedLeaseUuid },
                 originalEvent,
-                receivedAt: '2024-01-01T09:00:00Z',
-                processAfter: '2024-01-01T10:00:00Z',
+                receivedAt: recentDateISO,
+                processAfter: processAfterISO,
                 reason: 'Outside business hours',
               },
-              sentTimestamp: 1704099600000,
+              sentTimestamp: recentDate.getTime(),
             },
           ],
         }),
@@ -589,13 +599,21 @@ describe('handler', () => {
       setDynamoDBService(mockDynamoDBService);
 
       // Create a delayed message with an INVALID event (will fail validation)
+      // Use recent dates within 5 business days to avoid queue expiry (Story 4.4)
+      const recentDate = new Date();
+      recentDate.setHours(recentDate.getHours() - 2); // 2 hours ago
+      const recentDateISO = recentDate.toISOString();
+      const processAfterDate = new Date(recentDate);
+      processAfterDate.setHours(processAfterDate.getHours() + 1);
+      const processAfterISO = processAfterDate.toISOString();
+
       const invalidOriginalEvent = {
         version: '0',
         id: 'original-event-id',
         'detail-type': 'LeaseRequested',
         source: 'innovation-sandbox',
         account: '123456789012',
-        time: '2024-01-01T09:00:00Z',
+        time: recentDateISO,
         region: 'us-east-1',
         resources: [],
         detail: {
@@ -615,11 +633,11 @@ describe('handler', () => {
               body: {
                 leaseId: { userEmail: 'invalid@example.gov.uk', uuid: 'invalid-lease-uuid' },
                 originalEvent: invalidOriginalEvent,
-                receivedAt: '2024-01-01T09:00:00Z',
-                processAfter: '2024-01-01T10:00:00Z',
+                receivedAt: recentDateISO,
+                processAfter: processAfterISO,
                 reason: 'Outside business hours',
               },
-              sentTimestamp: 1704099600000,
+              sentTimestamp: recentDate.getTime(),
             },
           ],
         }),
@@ -634,6 +652,171 @@ describe('handler', () => {
       expect(result.body).toBe('Message processing failed - will retry');
       // Message should NOT be deleted since processing failed
       expect(mockDeleteMessage).not.toHaveBeenCalled();
+    });
+
+    it('should expire message after 5+ business days in queue (Story 4.4)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // Mock EventBridge service for emitLeaseDenied
+      setEventBridgeService({
+        emitLeaseApproved: vi.fn().mockResolvedValue(undefined),
+        emitLeaseEscalated: vi.fn().mockResolvedValue(undefined),
+        emitLeaseDenied: vi.fn().mockResolvedValue(undefined),
+      });
+
+      // Create a message that was queued 10+ days ago (definitely > 5 business days)
+      const oldDate = new Date();
+      oldDate.setDate(oldDate.getDate() - 15); // 15 days ago
+      const oldDateISO = oldDate.toISOString();
+
+      const expiredLeaseUuid = '22222222-2222-2222-2222-222222222222';
+      const originalEvent = {
+        version: '0',
+        id: 'original-event-id',
+        'detail-type': 'LeaseRequested',
+        source: 'innovation-sandbox',
+        account: '123456789012',
+        time: oldDateISO,
+        region: 'us-east-1',
+        resources: [],
+        detail: {
+          leaseId: {
+            userEmail: 'expired@example.gov.uk',
+            uuid: expiredLeaseUuid,
+          },
+          templateId: 'web-hosting',
+          budgetAmount: 50,
+          leaseDurationHours: 48,
+          requiresManualApproval: false,
+        },
+      };
+
+      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: true });
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({
+          success: true,
+          messages: [
+            {
+              messageId: 'msg-expired-1',
+              receiptHandle: 'receipt-handle-expired',
+              body: {
+                leaseId: { userEmail: 'expired@example.gov.uk', uuid: expiredLeaseUuid },
+                originalEvent,
+                receivedAt: oldDateISO,
+                processAfter: oldDateISO,
+                reason: 'Outside business hours',
+              },
+              sentTimestamp: oldDate.getTime(),
+            },
+          ],
+        }),
+        deleteMessage: mockDeleteMessage,
+        getQueueDepth: vi.fn()
+          .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 })
+          .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 0 }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Expired 1 stale message from queue');
+      expect(mockDeleteMessage).toHaveBeenCalledWith('receipt-handle-expired');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Expired message processed and deleted',
+        expect.objectContaining({
+          leaseId: expiredLeaseUuid,
+          userEmail: 'expired@example.gov.uk',
+          reason: 'queue_timeout',
+        })
+      );
+    });
+
+    it('should emit LeaseDenied event when expiring message (Story 4.4)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // Track emitLeaseDenied calls
+      const mockEmitLeaseDenied = vi.fn().mockResolvedValue(undefined);
+      setEventBridgeService({
+        emitLeaseApproved: vi.fn().mockResolvedValue(undefined),
+        emitLeaseEscalated: vi.fn().mockResolvedValue(undefined),
+        emitLeaseDenied: mockEmitLeaseDenied,
+      });
+
+      // Create a message that was queued 10+ days ago
+      const oldDate = new Date();
+      oldDate.setDate(oldDate.getDate() - 15);
+      const oldDateISO = oldDate.toISOString();
+
+      const expiredLeaseUuid = '33333333-3333-3333-3333-333333333333';
+      const originalEvent = {
+        version: '0',
+        id: 'original-event-id',
+        'detail-type': 'LeaseRequested',
+        source: 'innovation-sandbox',
+        account: '123456789012',
+        time: oldDateISO,
+        region: 'us-east-1',
+        resources: [],
+        detail: {
+          leaseId: {
+            userEmail: 'expired2@example.gov.uk',
+            uuid: expiredLeaseUuid,
+          },
+          templateId: 'web-hosting',
+        },
+      };
+
+      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: true });
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({
+          success: true,
+          messages: [
+            {
+              messageId: 'msg-expired-2',
+              receiptHandle: 'receipt-handle-expired-2',
+              body: {
+                leaseId: { userEmail: 'expired2@example.gov.uk', uuid: expiredLeaseUuid },
+                originalEvent,
+                receivedAt: oldDateISO,
+                processAfter: oldDateISO,
+                reason: 'Outside business hours',
+              },
+              sentTimestamp: oldDate.getTime(),
+            },
+          ],
+        }),
+        deleteMessage: mockDeleteMessage,
+        getQueueDepth: vi.fn()
+          .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 })
+          .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 0 }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      await handler(event, mockContext);
+
+      expect(mockEmitLeaseDenied).toHaveBeenCalledWith(
+        expect.objectContaining({
+          leaseId: {
+            userEmail: 'expired2@example.gov.uk',
+            uuid: expiredLeaseUuid,
+          },
+          reason: 'queue_timeout',
+          deniedBy: 'system',
+        })
+      );
     });
 
     it('should handle SQS receive failure gracefully', async () => {
