@@ -1,7 +1,7 @@
 /**
  * Scoring Engine Types and Interfaces
  *
- * Defines types for the 16-rule scoring engine per architecture.md.
+ * Defines types for the 18-rule scoring engine per architecture.md.
  * All rules are pure functions for testability and determinism.
  */
 
@@ -21,7 +21,7 @@ export type LeaseStatus =
   | 'Ejected';
 
 /**
- * All 16 rule identifiers as a const array for iteration and validation.
+ * All 18 rule identifiers as a const array for iteration and validation.
  */
 export const RULE_IDS = [
   'expired_leases',
@@ -40,10 +40,12 @@ export const RULE_IDS = [
   'org_recent_negative',
   'org_clean_record',
   'group_mailbox_detected',
+  'user_rate_limit',
+  'org_rate_limit',
 ] as const;
 
 /**
- * Rule identifier type - one of the 16 defined rules.
+ * Rule identifier type - one of the 18 defined rules.
  */
 export type RuleId = (typeof RULE_IDS)[number];
 
@@ -55,7 +57,7 @@ export type RuleId = (typeof RULE_IDS)[number];
 export type RuleWeights = Record<RuleId, number>;
 
 /**
- * Default weights for all 16 rules.
+ * Default weights for all 18 rules.
  * These values come from the PRD and can be overridden via RULE_WEIGHTS env var.
  */
 export const DEFAULT_RULE_WEIGHTS: RuleWeights = {
@@ -80,6 +82,10 @@ export const DEFAULT_RULE_WEIGHTS: RuleWeights = {
   // Per-unit rules
   budget_amount: 1, // +1 per $10 of budget
   duration_requested: 1, // +1 per 8 hours of duration
+
+  // Rate limiting rules (Story 4.3)
+  user_rate_limit: 5, // +5 per additional request beyond 2/hour
+  org_rate_limit: 3, // +3 if 5+ different users from org in last hour
 };
 
 /**

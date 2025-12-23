@@ -15,8 +15,8 @@ import {
 
 describe('scoring types', () => {
   describe('RULE_IDS', () => {
-    it('should contain all 16 rule identifiers', () => {
-      expect(RULE_IDS).toHaveLength(16);
+    it('should contain all 18 rule identifiers', () => {
+      expect(RULE_IDS).toHaveLength(18);
     });
 
     it('should contain expected rule names', () => {
@@ -37,6 +37,8 @@ describe('scoring types', () => {
         'org_recent_negative',
         'org_clean_record',
         'group_mailbox_detected',
+        'user_rate_limit',
+        'org_rate_limit',
       ];
 
       expectedRules.forEach((rule) => {
@@ -51,9 +53,9 @@ describe('scoring types', () => {
   });
 
   describe('DEFAULT_RULE_WEIGHTS', () => {
-    it('should have a weight defined for all 16 rules', () => {
+    it('should have a weight defined for all 18 rules', () => {
       const weightKeys = Object.keys(DEFAULT_RULE_WEIGHTS);
-      expect(weightKeys).toHaveLength(16);
+      expect(weightKeys).toHaveLength(18);
     });
 
     it('should have expected default weights for key rules', () => {
@@ -193,7 +195,7 @@ describe('scoring types', () => {
 
     it('should enforce RuleWeights type with all keys', () => {
       const weights: RuleWeights = { ...DEFAULT_RULE_WEIGHTS };
-      expect(Object.keys(weights)).toHaveLength(16);
+      expect(Object.keys(weights)).toHaveLength(18);
     });
 
     it('should define ScoringRuleResult with required fields', () => {

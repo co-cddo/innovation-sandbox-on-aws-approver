@@ -1,12 +1,17 @@
 /**
  * Scoring Rules Implementation
  *
- * All 16 rules as pure functions per architecture.md.
+ * All 18 rules as pure functions per architecture.md.
  * Each rule: (context, weight) => ScoringRuleResult
  */
 
 import type { RuleId, ScoringRuleFn, LeaseHistoryRecord } from './types.js';
 import { isWithinDays } from '../services/dynamodb.js';
+
+/**
+ * One hour in milliseconds for cooldown and rate limit calculations
+ */
+const ONE_HOUR_MS = 60 * 60 * 1000;
 
 /**
  * Successful lease statuses that indicate responsible completion.
@@ -229,7 +234,6 @@ export const endOfWindowRule: ScoringRuleFn = (context, weight) => {
  * Uses 'created' timestamp since we want to detect rapid re-requests
  */
 export const cooldownViolationRule: ScoringRuleFn = (context, weight) => {
-  const ONE_HOUR_MS = 60 * 60 * 1000;
   const history = context.userLeaseHistory;
 
   // No history means no cooldown violation
@@ -418,6 +422,64 @@ export const groupMailboxDetectedRule: ScoringRuleFn = (context, weight) => {
 };
 
 /**
+ * Rule 17: user_rate_limit
+ * +weight per additional request beyond 2 in the last hour
+ * Uses lease history 'created' timestamp to track request frequency
+ */
+export const userRateLimitRule: ScoringRuleFn = (context, weight) => {
+  const oneHourAgo = new Date(context.requestTimestamp.getTime() - ONE_HOUR_MS);
+
+  // Count requests in the last hour from user history
+  const recentCount = context.userLeaseHistory.filter(
+    (lease) => new Date(lease.created) > oneHourAgo
+  ).length;
+
+  // Allow up to 2 requests/hour without penalty
+  const excessRequests = Math.max(0, recentCount - 2);
+  const points = excessRequests * weight;
+
+  return {
+    ruleId: 'user_rate_limit',
+    points,
+    triggered: points > 0,
+    reason:
+      points > 0
+        ? `User submitted ${recentCount} requests in last hour (${excessRequests} over limit)`
+        : `User within rate limit (${recentCount}/2 requests in last hour)`,
+  };
+};
+
+/**
+ * Rule 18: org_rate_limit
+ * +weight (flat) if 5+ different users from same org submitted in last hour
+ * Uses org history to detect coordinated burst activity
+ */
+export const orgRateLimitRule: ScoringRuleFn = (context, weight) => {
+  const oneHourAgo = new Date(context.requestTimestamp.getTime() - ONE_HOUR_MS);
+
+  // Filter org history to last hour
+  const recentOrgRequests = context.orgLeaseHistory.filter(
+    (lease) => new Date(lease.created) > oneHourAgo
+  );
+
+  // Count unique users (org history already excludes current user)
+  const uniqueUsers = new Set(recentOrgRequests.map((lease) => lease.userEmail));
+  const uniqueUserCount = uniqueUsers.size;
+
+  // Apply penalty if 5+ unique users submitted in last hour
+  const triggered = uniqueUserCount >= 5;
+
+  return {
+    ruleId: 'org_rate_limit',
+    points: triggered ? weight : 0,
+    triggered,
+    reason: triggered
+      ? `Organization had ${uniqueUserCount} unique users submit requests in last hour`
+      : `Organization within rate limit (${uniqueUserCount}/5 unique users in last hour)`,
+  };
+};
+
+/**
  * All rules with their IDs for iteration
  */
 export interface RuleDefinition {
@@ -442,4 +504,6 @@ export const ALL_RULES: RuleDefinition[] = [
   { ruleId: 'org_recent_negative', fn: orgRecentNegativeRule },
   { ruleId: 'org_clean_record', fn: orgCleanRecordRule },
   { ruleId: 'group_mailbox_detected', fn: groupMailboxDetectedRule },
+  { ruleId: 'user_rate_limit', fn: userRateLimitRule },
+  { ruleId: 'org_rate_limit', fn: orgRateLimitRule },
 ];

@@ -55,7 +55,7 @@ describe('scoring engine', () => {
 
       const result = engine.calculateScore(context);
 
-      expect(result.breakdown).toHaveLength(16);
+      expect(result.breakdown).toHaveLength(18);
       expect(typeof result.totalScore).toBe('number');
       expect(typeof result.durationMs).toBe('number');
     });

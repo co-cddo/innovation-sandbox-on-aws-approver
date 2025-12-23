@@ -1,7 +1,7 @@
 /**
  * Scoring Engine Orchestrator
  *
- * Runs all 16 rules and returns composite score with breakdown.
+ * Runs all 18 rules and returns composite score with breakdown.
  * Uses factory pattern for dependency injection.
  */
 
@@ -22,7 +22,7 @@ import { ALL_RULES } from './rules.js';
 export interface ScoringEngine {
   /**
    * Calculate the composite score for a lease request.
-   * Runs all 16 rules and returns total score with breakdown.
+   * Runs all 18 rules and returns total score with breakdown.
    *
    * @param context - Scoring context with request and history data
    * @returns ScoringResult with totalScore, breakdown, and timing
@@ -56,7 +56,7 @@ export const createScoringEngine = (
     const startTime = Date.now();
     const breakdown: ScoringRuleResult[] = [];
 
-    // Run all 16 rules
+    // Run all 18 rules
     for (const rule of ALL_RULES) {
       const weight = getWeight(rule.ruleId);
       const result = rule.fn(context, weight);

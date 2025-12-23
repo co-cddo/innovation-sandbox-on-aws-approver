@@ -348,8 +348,8 @@ describe('SCORING handler', () => {
 
     const result = handlers[ApprovalState.SCORING](context);
 
-    // Should have 16 rules in breakdown
-    expect(result.context.scoreBreakdown).toHaveLength(16);
+    // Should have 18 rules in breakdown
+    expect(result.context.scoreBreakdown).toHaveLength(18);
 
     // First-time user rule should be triggered
     const firstTimeRule = result.context.scoreBreakdown.find((r) => r.rule === 'first_time_user');

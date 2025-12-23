@@ -22,6 +22,8 @@ import {
   orgRecentNegativeRule,
   orgCleanRecordRule,
   groupMailboxDetectedRule,
+  userRateLimitRule,
+  orgRateLimitRule,
   ALL_RULES,
 } from '../../src/scoring/rules.js';
 import { createScoringContext, type ScoringContext, type LeaseHistoryRecord } from '../../src/scoring/types.js';
@@ -53,13 +55,13 @@ const createLease = (overrides: Partial<LeaseHistoryRecord> = {}): LeaseHistoryR
 
 describe('scoring rules', () => {
   describe('ALL_RULES array', () => {
-    it('should contain 16 rules', () => {
-      expect(ALL_RULES).toHaveLength(16);
+    it('should contain 18 rules', () => {
+      expect(ALL_RULES).toHaveLength(18);
     });
 
     it('should have unique rule IDs', () => {
       const ruleIds = ALL_RULES.map((r) => r.ruleId);
-      expect(new Set(ruleIds).size).toBe(16);
+      expect(new Set(ruleIds).size).toBe(18);
     });
   });
 
@@ -759,6 +761,223 @@ describe('scoring rules', () => {
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
       expect(result.reason).toBe('Handled by first_time_suspicious rule');
+    });
+  });
+
+  describe('Rule 17: user_rate_limit', () => {
+    it('should return 0 when user has 0 requests in last hour', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        userLeaseHistory: [],
+      });
+      const result = userRateLimitRule(context, 5);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
+    });
+
+    it('should return 0 when user has 1 request in last hour', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        userLeaseHistory: [
+          createLease({ uuid: '1', created: '2025-01-15T13:30:00Z' }), // 30 min ago
+        ],
+      });
+      const result = userRateLimitRule(context, 5);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
+    });
+
+    it('should return 0 when user has 2 requests in last hour (at limit)', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        userLeaseHistory: [
+          createLease({ uuid: '1', created: '2025-01-15T13:30:00Z' }), // 30 min ago
+          createLease({ uuid: '2', created: '2025-01-15T13:45:00Z' }), // 15 min ago
+        ],
+      });
+      const result = userRateLimitRule(context, 5);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
+    });
+
+    it('should return +5 when user has 3 requests in last hour (1 over limit)', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        userLeaseHistory: [
+          createLease({ uuid: '1', created: '2025-01-15T13:15:00Z' }),
+          createLease({ uuid: '2', created: '2025-01-15T13:30:00Z' }),
+          createLease({ uuid: '3', created: '2025-01-15T13:45:00Z' }),
+        ],
+      });
+      const result = userRateLimitRule(context, 5);
+      expect(result.points).toBe(5); // 1 extra * 5
+      expect(result.triggered).toBe(true);
+      expect(result.reason).toContain('3 requests');
+      expect(result.reason).toContain('1 over limit');
+    });
+
+    it('should return +15 when user has 5 requests in last hour (3 over limit)', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        userLeaseHistory: [
+          createLease({ uuid: '1', created: '2025-01-15T13:00:01Z' }), // Just inside 1hr window
+          createLease({ uuid: '2', created: '2025-01-15T13:15:00Z' }),
+          createLease({ uuid: '3', created: '2025-01-15T13:30:00Z' }),
+          createLease({ uuid: '4', created: '2025-01-15T13:45:00Z' }),
+          createLease({ uuid: '5', created: '2025-01-15T13:50:00Z' }),
+        ],
+      });
+      const result = userRateLimitRule(context, 5);
+      expect(result.points).toBe(15); // 3 extra * 5
+      expect(result.triggered).toBe(true);
+    });
+
+    it('should exclude requests exactly 1 hour ago (boundary test)', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        userLeaseHistory: [
+          createLease({ uuid: '1', created: '2025-01-15T13:00:00Z' }), // Exactly 1hr ago - should be excluded
+          createLease({ uuid: '2', created: '2025-01-15T13:00:01Z' }), // 59:59 ago - included
+          createLease({ uuid: '3', created: '2025-01-15T13:30:00Z' }),
+          createLease({ uuid: '4', created: '2025-01-15T13:45:00Z' }),
+        ],
+      });
+      const result = userRateLimitRule(context, 5);
+      // Only 3 requests in window (excluding exactly 1hr ago)
+      expect(result.points).toBe(5); // 1 extra * 5
+      expect(result.triggered).toBe(true);
+    });
+
+    it('should ignore requests older than 1 hour', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        userLeaseHistory: [
+          createLease({ uuid: '1', created: '2025-01-15T10:00:00Z' }), // 4 hours ago
+          createLease({ uuid: '2', created: '2025-01-15T11:00:00Z' }), // 3 hours ago
+          createLease({ uuid: '3', created: '2025-01-15T12:00:00Z' }), // 2 hours ago
+        ],
+      });
+      const result = userRateLimitRule(context, 5);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
+    });
+  });
+
+  describe('Rule 18: org_rate_limit', () => {
+    it('should return 0 when org has no requests in last hour', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [],
+      });
+      const result = orgRateLimitRule(context, 3);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
+    });
+
+    it('should return 0 when org has <5 unique users in last hour', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          createLease({ uuid: '1', userEmail: 'user1@example.gov.uk', created: '2025-01-15T13:30:00Z' }),
+          createLease({ uuid: '2', userEmail: 'user2@example.gov.uk', created: '2025-01-15T13:35:00Z' }),
+          createLease({ uuid: '3', userEmail: 'user3@example.gov.uk', created: '2025-01-15T13:40:00Z' }),
+          createLease({ uuid: '4', userEmail: 'user4@example.gov.uk', created: '2025-01-15T13:45:00Z' }),
+        ],
+      });
+      const result = orgRateLimitRule(context, 3);
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
+    });
+
+    it('should return +3 when org has 5 unique users in last hour', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          createLease({ uuid: '1', userEmail: 'user1@example.gov.uk', created: '2025-01-15T13:30:00Z' }),
+          createLease({ uuid: '2', userEmail: 'user2@example.gov.uk', created: '2025-01-15T13:35:00Z' }),
+          createLease({ uuid: '3', userEmail: 'user3@example.gov.uk', created: '2025-01-15T13:40:00Z' }),
+          createLease({ uuid: '4', userEmail: 'user4@example.gov.uk', created: '2025-01-15T13:45:00Z' }),
+          createLease({ uuid: '5', userEmail: 'user5@example.gov.uk', created: '2025-01-15T13:50:00Z' }),
+        ],
+      });
+      const result = orgRateLimitRule(context, 3);
+      expect(result.points).toBe(3);
+      expect(result.triggered).toBe(true);
+      expect(result.reason).toContain('5 unique users');
+    });
+
+    it('should return +3 when org has >5 unique users in last hour', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          createLease({ uuid: '1', userEmail: 'user1@example.gov.uk', created: '2025-01-15T13:30:00Z' }),
+          createLease({ uuid: '2', userEmail: 'user2@example.gov.uk', created: '2025-01-15T13:32:00Z' }),
+          createLease({ uuid: '3', userEmail: 'user3@example.gov.uk', created: '2025-01-15T13:34:00Z' }),
+          createLease({ uuid: '4', userEmail: 'user4@example.gov.uk', created: '2025-01-15T13:36:00Z' }),
+          createLease({ uuid: '5', userEmail: 'user5@example.gov.uk', created: '2025-01-15T13:38:00Z' }),
+          createLease({ uuid: '6', userEmail: 'user6@example.gov.uk', created: '2025-01-15T13:40:00Z' }),
+          createLease({ uuid: '7', userEmail: 'user7@example.gov.uk', created: '2025-01-15T13:42:00Z' }),
+        ],
+      });
+      const result = orgRateLimitRule(context, 3);
+      expect(result.points).toBe(3); // Flat penalty, not multiplicative
+      expect(result.triggered).toBe(true);
+    });
+
+    it('should count unique users not total requests', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          // user1 has 3 requests
+          createLease({ uuid: '1', userEmail: 'user1@example.gov.uk', created: '2025-01-15T13:30:00Z' }),
+          createLease({ uuid: '2', userEmail: 'user1@example.gov.uk', created: '2025-01-15T13:35:00Z' }),
+          createLease({ uuid: '3', userEmail: 'user1@example.gov.uk', created: '2025-01-15T13:40:00Z' }),
+          // user2 has 2 requests
+          createLease({ uuid: '4', userEmail: 'user2@example.gov.uk', created: '2025-01-15T13:45:00Z' }),
+          createLease({ uuid: '5', userEmail: 'user2@example.gov.uk', created: '2025-01-15T13:50:00Z' }),
+          // Total: 5 requests but only 2 unique users
+        ],
+      });
+      const result = orgRateLimitRule(context, 3);
+      expect(result.points).toBe(0); // Only 2 unique users, not 5
+      expect(result.triggered).toBe(false);
+    });
+
+    it('should exclude requests older than 1 hour', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          // Old requests (>1hr) - should be excluded
+          createLease({ uuid: '1', userEmail: 'user1@example.gov.uk', created: '2025-01-15T12:00:00Z' }),
+          createLease({ uuid: '2', userEmail: 'user2@example.gov.uk', created: '2025-01-15T12:30:00Z' }),
+          createLease({ uuid: '3', userEmail: 'user3@example.gov.uk', created: '2025-01-15T12:45:00Z' }),
+          // Recent requests - only 3 unique users in window
+          createLease({ uuid: '4', userEmail: 'user4@example.gov.uk', created: '2025-01-15T13:30:00Z' }),
+          createLease({ uuid: '5', userEmail: 'user5@example.gov.uk', created: '2025-01-15T13:40:00Z' }),
+          createLease({ uuid: '6', userEmail: 'user6@example.gov.uk', created: '2025-01-15T13:50:00Z' }),
+        ],
+      });
+      const result = orgRateLimitRule(context, 3);
+      expect(result.points).toBe(0); // Only 3 unique users in last hour
+      expect(result.triggered).toBe(false);
+    });
+
+    it('should handle boundary of exactly 1 hour ago', () => {
+      const context = createBaseContext({
+        requestTimestamp: new Date('2025-01-15T14:00:00Z'),
+        orgLeaseHistory: [
+          createLease({ uuid: '1', userEmail: 'user1@example.gov.uk', created: '2025-01-15T13:00:00Z' }), // Exactly 1hr - excluded
+          createLease({ uuid: '2', userEmail: 'user2@example.gov.uk', created: '2025-01-15T13:00:01Z' }), // 59:59 ago - included
+          createLease({ uuid: '3', userEmail: 'user3@example.gov.uk', created: '2025-01-15T13:30:00Z' }),
+          createLease({ uuid: '4', userEmail: 'user4@example.gov.uk', created: '2025-01-15T13:40:00Z' }),
+          createLease({ uuid: '5', userEmail: 'user5@example.gov.uk', created: '2025-01-15T13:50:00Z' }),
+          createLease({ uuid: '6', userEmail: 'user6@example.gov.uk', created: '2025-01-15T13:55:00Z' }),
+        ],
+      });
+      const result = orgRateLimitRule(context, 3);
+      // 5 unique users in window (excluding user1 who was exactly 1hr ago)
+      expect(result.points).toBe(3);
+      expect(result.triggered).toBe(true);
     });
   });
 
