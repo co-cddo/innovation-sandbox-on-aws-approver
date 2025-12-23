@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import type { ApproverConfig } from '../../config/environments.js';
@@ -13,11 +14,20 @@ export interface ApproverLambdaProps {
 
 export class ApproverLambda extends Construct {
   public readonly function: lambda.Function;
+  public readonly logGroup: logs.LogGroup;
 
   constructor(scope: Construct, id: string, props: ApproverLambdaProps) {
     super(scope, id);
 
     const { config, idempotencyTableName, delayQueueUrl, domainListBucketName } = props;
+
+    // Create explicit log group with GDPR-compliant retention (7 years)
+    // Story 5.4: FR55 - GDPR compliance audit trail
+    this.logGroup = new logs.LogGroup(this, 'LogGroup', {
+      logGroupName: '/aws/lambda/approver',
+      retention: logs.RetentionDays.SEVEN_YEARS,
+      removalPolicy: cdk.RemovalPolicy.RETAIN, // Don't delete logs on stack removal
+    });
 
     this.function = new lambda.Function(this, 'Function', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -26,6 +36,7 @@ export class ApproverLambda extends Construct {
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
       architecture: lambda.Architecture.ARM_64,
+      logGroup: this.logGroup, // Associate with explicit log group
       environment: {
         AUTO_APPROVE_THRESHOLD: config.autoApproveThreshold.toString(),
         BUSINESS_HOURS_START: config.businessHoursStart.toString(),

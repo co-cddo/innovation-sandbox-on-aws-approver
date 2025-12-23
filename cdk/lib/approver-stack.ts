@@ -245,5 +245,10 @@ export class ApproverStack extends cdk.Stack {
       value: alarmTopic.topicArn,
       description: 'SNS topic for alarm notifications',
     });
+
+    new cdk.CfnOutput(this, 'LogGroupName', {
+      value: approverLambda.logGroup.logGroupName,
+      description: 'CloudWatch Log Group for approver Lambda (7-year retention)',
+    });
   }
 }

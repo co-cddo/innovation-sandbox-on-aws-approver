@@ -80,6 +80,6 @@ development_status:
   5-1-lease-comments-updates-with-neutral-language: done
   5-2-slack-workflow-webhook-notifications: done
   5-3-cloudwatch-structured-logging-and-metrics: done
-  5-4-per-rule-trigger-tracking-and-audit-trail: backlog
+  5-4-per-rule-trigger-tracking-and-audit-trail: done
   5-5-e2e-milestone-full-system-validation: backlog
   epic-5-retrospective: optional
