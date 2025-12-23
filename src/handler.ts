@@ -3,6 +3,7 @@ import { LambdaClient } from '@aws-sdk/client-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
+import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 // makeIdempotent import prepared for future full integration (Story 2.4 deferred handler wrapping)
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { makeIdempotent as _makeIdempotent } from '@aws-lambda-powertools/idempotency';
@@ -13,11 +14,15 @@ import { createIsbLambdaService, type IsbLambdaService } from './services/isb-la
 import { createDynamoDBService, type DynamoDBService } from './services/dynamodb.js';
 import { extractDomain } from './lib/domain.js';
 import { isVerifiedGovDomain } from './lib/domain-verification.js';
-import type { LeaseHistoryRecord } from './scoring/types.js';
+import type { LeaseHistoryRecord, AIAnalysisResult } from './scoring/types.js';
 import {
   createDomainAllowlistService,
   type DomainAllowlistService,
 } from './services/domain-allowlist.js';
+import {
+  createBedrockService,
+  type BedrockService,
+} from './services/bedrock.js';
 import {
   createPersistenceLayer,
   createIdempotencyConfig,
@@ -117,6 +122,25 @@ const domainAllowlistConfig = {
 let domainAllowlistService: DomainAllowlistService | undefined = domainAllowlistConfig.bucketName
   ? createDomainAllowlistService(s3Client, domainAllowlistConfig)
   : undefined;
+
+// Bedrock client for AI email analysis
+const bedrockClient = new BedrockRuntimeClient({
+  region: process.env.AWS_REGION || 'us-west-2',
+});
+
+// Bedrock service configuration
+const bedrockConfig = {
+  modelId: process.env.BEDROCK_MODEL_ID || 'amazon.nova-micro-v1:0',
+  timeoutMs: parseInt(process.env.BEDROCK_TIMEOUT_MS || '3000', 10),
+};
+
+// Create Bedrock service (can be overridden in tests via dependency injection)
+// Service is always created - it handles circuit breaker and fallback internally
+let bedrockService: BedrockService | undefined = createBedrockService(
+  bedrockClient,
+  bedrockConfig,
+  logger
+);
 
 // State machine configuration
 const stateMachineConfig: StateMachineConfig = {
@@ -222,6 +246,20 @@ export const resetDomainAllowlistService = (): void => {
 };
 
 /**
+ * Allows overriding the Bedrock service for testing purposes.
+ */
+export const setBedrockService = (service: BedrockService | undefined): void => {
+  bedrockService = service;
+};
+
+/**
+ * Resets to the default Bedrock service (for test cleanup).
+ */
+export const resetBedrockService = (): void => {
+  bedrockService = createBedrockService(bedrockClient, bedrockConfig, logger);
+};
+
+/**
  * Allows overriding the state machine orchestrator for testing purposes.
  */
 export const setOrchestrator = (newOrchestrator: StateMachineOrchestrator): void => {
@@ -300,6 +338,51 @@ const queryOrgHistory = async (userEmail: string): Promise<LeaseHistoryRecord[]>
 };
 
 /**
+ * Analyzes an email address using Bedrock AI with circuit breaker and fallback.
+ * Returns AIAnalysisResult or undefined if service is not configured.
+ * This implements AC1, AC4, AC5: AI analysis with timeout and circuit breaker.
+ */
+const analyzeEmailWithAI = async (email: string): Promise<AIAnalysisResult | undefined> => {
+  if (!bedrockService) {
+    logger.warn('Bedrock service not configured - skipping AI analysis', {
+      email,
+    });
+    return undefined;
+  }
+
+  try {
+    const result = await bedrockService.analyzeEmail(email);
+
+    // Log whether fallback was used
+    if (result.usedFallback) {
+      logger.info('AI email analysis used fallback', {
+        email,
+        fallbackReason: result.fallbackReason,
+        isGroupMailbox: result.analysis.isGroupMailbox,
+        isOutsideTargetAudience: result.analysis.isOutsideTargetAudience,
+      });
+    } else {
+      logger.info('AI email analysis completed', {
+        email,
+        isGroupMailbox: result.analysis.isGroupMailbox,
+        isOutsideTargetAudience: result.analysis.isOutsideTargetAudience,
+        confidence: result.analysis.confidence,
+      });
+    }
+
+    return result.analysis;
+  } catch (error) {
+    // This shouldn't happen as the service handles errors internally,
+    // but just in case, log and return undefined (pessimistic fallback)
+    logger.error('Unexpected error in AI email analysis - skipping', {
+      error: error instanceof Error ? error.message : String(error),
+      email,
+    });
+    return undefined;
+  }
+};
+
+/**
  * Checks if a domain is in the verified local authority domains allowlist.
  * Returns false (pessimistic) if the service is not configured or query fails.
  * This implements AC5: skip bonus on failure, don't fail the whole request.
@@ -348,7 +431,8 @@ const prepareContext = (
   event: LeaseRequestedEvent,
   userLeaseHistory: LeaseHistoryRecord[],
   orgLeaseHistory: LeaseHistoryRecord[],
-  isVerifiedDomain: boolean
+  isVerifiedDomain: boolean,
+  aiAnalysis?: AIAnalysisResult
 ): StateContext => {
   const { detail } = event;
   const { leaseId, templateId, budgetAmount, leaseDurationHours, requiresManualApproval, comments } =
@@ -366,6 +450,7 @@ const prepareContext = (
     userLeaseHistory,
     orgLeaseHistory,
     isVerifiedGovDomain: isVerifiedDomain,
+    aiAnalysis,
   };
 };
 
@@ -489,12 +574,16 @@ export const handler = async (
     // Check domain verification (uses domain already extracted for logging)
     const isVerifiedDomain = await checkDomainVerification(domain);
 
+    // Analyze email with AI (uses circuit breaker and fallback)
+    const aiAnalysis = await analyzeEmailWithAI(leaseId.userEmail);
+
     // Prepare context and run state machine
     const initialContext = prepareContext(
       validatedEvent,
       userLeaseHistory,
       orgLeaseHistory,
-      isVerifiedDomain
+      isVerifiedDomain,
+      aiAnalysis
     );
     const result = orchestrator.run(ApprovalState.RECEIVED, initialContext);
 

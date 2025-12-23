@@ -176,8 +176,8 @@ export const createStateHandlers = (
       orgLeaseHistory: context.orgLeaseHistory,
       // Domain verification from S3 cache (Story 3.3)
       isVerifiedGovDomain: context.isVerifiedGovDomain,
-      // Stub until implemented (Story 3.4 AI)
-      aiAnalysis: undefined,
+      // AI analysis from Bedrock or fallback (Story 3.4)
+      aiAnalysis: context.aiAnalysis,
     });
 
     // Run the scoring engine

@@ -695,8 +695,9 @@ describe('scoring rules', () => {
       expect(result.fallbackUsed).toBe(true);
     });
 
-    it('should return weight for group mailbox detected', () => {
+    it('should return weight for group mailbox detected (returning user)', () => {
       const context = createBaseContext({
+        userLeaseHistory: [createLease()], // Has history = not first-time
         aiAnalysis: { isGroupMailbox: true, isOutsideTargetAudience: false, confidence: 0.9 },
       });
       const result = groupMailboxDetectedRule(context, 20);
@@ -711,6 +712,20 @@ describe('scoring rules', () => {
       const result = groupMailboxDetectedRule(context, 20);
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
+    });
+
+    it('should defer to Rule #4 for first-time user with group mailbox (AC2: no double-counting)', () => {
+      // First-time user (empty history) with group mailbox
+      const context = createBaseContext({
+        userLeaseHistory: [], // No history = first-time
+        aiAnalysis: { isGroupMailbox: true, isOutsideTargetAudience: false, confidence: 0.9 },
+      });
+      const result = groupMailboxDetectedRule(context, 20);
+
+      // Rule #16 should NOT fire - Rule #4 (first_time_suspicious) handles it
+      expect(result.points).toBe(0);
+      expect(result.triggered).toBe(false);
+      expect(result.reason).toBe('Handled by first_time_suspicious rule');
     });
   });
 

@@ -3,7 +3,7 @@
  * Implements enum-based state machine pattern per architecture.md
  */
 
-import type { LeaseHistoryRecord } from '../scoring/types.js';
+import type { LeaseHistoryRecord, AIAnalysisResult } from '../scoring/types.js';
 
 /**
  * Approval states for the decision orchestration state machine.
@@ -116,6 +116,8 @@ export interface StateContext {
   orgLeaseHistory: LeaseHistoryRecord[];
   /** Whether domain is in verified gov domains list (from S3 cache) */
   isVerifiedGovDomain: boolean;
+  /** AI analysis result for email patterns (from Bedrock or fallback) */
+  aiAnalysis?: AIAnalysisResult;
 
   // Processing state (populated during processing)
   /** Calculated risk score */

@@ -63,7 +63,7 @@ development_status:
   3-1-dynamodb-user-history-queries: done
   3-2-organization-reputation-tracking: done
   3-3-domain-verification-from-s3-cache: done
-  3-4-bedrock-ai-email-analysis-with-circuit-breaker: backlog
+  3-4-bedrock-ai-email-analysis-with-circuit-breaker: done
   3-5-e2e-milestone-intelligent-scoring-validation: backlog
   epic-3-retrospective: optional
 

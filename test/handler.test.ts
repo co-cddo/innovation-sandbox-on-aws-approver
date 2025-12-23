@@ -9,11 +9,14 @@ import {
   resetDynamoDBService,
   setDomainAllowlistService,
   resetDomainAllowlistService,
+  setBedrockService,
+  resetBedrockService,
   setOrchestrator,
   resetOrchestrator,
 } from '../src/handler.js';
 import type { DynamoDBService } from '../src/services/dynamodb.js';
 import type { DomainAllowlistService } from '../src/services/domain-allowlist.js';
+import type { BedrockService } from '../src/services/bedrock.js';
 import type { EventBridgeEvent, Context } from 'aws-lambda';
 import type { EventBridgeService } from '../src/services/eventbridge.js';
 import type { IsbLambdaService } from '../src/services/isb-lambda.js';
@@ -65,6 +68,14 @@ vi.mock('@aws-sdk/client-s3', () => ({
     send: vi.fn().mockResolvedValue({}),
   })),
   GetObjectCommand: vi.fn(),
+}));
+
+// Mock the Bedrock client to prevent real AWS calls
+vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
+  BedrockRuntimeClient: vi.fn().mockImplementation(() => ({
+    send: vi.fn().mockResolvedValue({}),
+  })),
+  InvokeModelCommand: vi.fn(),
 }));
 
 // Import the mocked logger for assertions
@@ -142,6 +153,7 @@ describe('handler', () => {
     resetIsbLambdaService();
     resetDynamoDBService();
     resetDomainAllowlistService();
+    resetBedrockService();
     resetOrchestrator();
   });
 
@@ -1158,6 +1170,265 @@ describe('handler', () => {
           domain: 'example.gov.uk',
           isVerified: true,
           usedStaleCache: true,
+        })
+      );
+    });
+  });
+
+  describe('Bedrock AI email analysis integration (Story 3.4)', () => {
+    it('should analyze email using Bedrock service (AC1)', async () => {
+      const mockBedrockService: BedrockService = {
+        analyzeEmail: vi.fn().mockResolvedValue({
+          analysis: {
+            isGroupMailbox: false,
+            isOutsideTargetAudience: false,
+            confidence: 0.9,
+          },
+          usedFallback: false,
+        }),
+        getCircuitState: vi.fn().mockReturnValue('CLOSED'),
+        resetCircuitBreaker: vi.fn(),
+      };
+      setBedrockService(mockBedrockService);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      expect(mockBedrockService.analyzeEmail).toHaveBeenCalledWith('user@example.gov.uk');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'AI email analysis completed',
+        expect.objectContaining({
+          email: 'user@example.gov.uk',
+          isGroupMailbox: false,
+          isOutsideTargetAudience: false,
+          confidence: 0.9,
+        })
+      );
+    });
+
+    it('should detect group mailbox patterns (AC2)', async () => {
+      const mockBedrockService: BedrockService = {
+        analyzeEmail: vi.fn().mockResolvedValue({
+          analysis: {
+            isGroupMailbox: true,
+            isOutsideTargetAudience: false,
+            confidence: 0.9,
+          },
+          usedFallback: false,
+        }),
+        getCircuitState: vi.fn().mockReturnValue('CLOSED'),
+        resetCircuitBreaker: vi.fn(),
+      };
+      setBedrockService(mockBedrockService);
+
+      const event = createMockEvent('LeaseRequested', {
+        leaseId: {
+          userEmail: 'team@council.gov.uk',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+        },
+        templateId: 'web-hosting',
+        budgetAmount: 50,
+        leaseDurationHours: 48,
+        requiresManualApproval: false,
+      });
+
+      await handler(event, mockContext);
+
+      expect(mockBedrockService.analyzeEmail).toHaveBeenCalledWith('team@council.gov.uk');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'AI email analysis completed',
+        expect.objectContaining({
+          isGroupMailbox: true,
+        })
+      );
+    });
+
+    it('should pass aiAnalysis to state machine context (AC3)', async () => {
+      const mockAiAnalysis = {
+        isGroupMailbox: true,
+        isOutsideTargetAudience: false,
+        confidence: 0.7,
+      };
+      const mockBedrockService: BedrockService = {
+        analyzeEmail: vi.fn().mockResolvedValue({
+          analysis: mockAiAnalysis,
+          usedFallback: true,
+          fallbackReason: 'Bedrock timeout',
+        }),
+        getCircuitState: vi.fn().mockReturnValue('CLOSED'),
+        resetCircuitBreaker: vi.fn(),
+      };
+      setBedrockService(mockBedrockService);
+
+      // Create mock orchestrator to verify context passed
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 20,
+            decision: 'approved',
+            aiAnalysis: mockAiAnalysis,
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      // Verify orchestrator was called with aiAnalysis in context
+      expect(mockOrchestrator.run).toHaveBeenCalledWith(
+        ApprovalState.RECEIVED,
+        expect.objectContaining({
+          aiAnalysis: mockAiAnalysis,
+        })
+      );
+    });
+
+    it('should use fallback when Bedrock times out (AC4)', async () => {
+      const mockBedrockService: BedrockService = {
+        analyzeEmail: vi.fn().mockResolvedValue({
+          analysis: {
+            isGroupMailbox: true, // Rule-based fallback detected 'team' prefix
+            isOutsideTargetAudience: false,
+            confidence: 0.7,
+          },
+          usedFallback: true,
+          fallbackReason: 'Bedrock timeout',
+        }),
+        getCircuitState: vi.fn().mockReturnValue('CLOSED'),
+        resetCircuitBreaker: vi.fn(),
+      };
+      setBedrockService(mockBedrockService);
+
+      const event = createMockEvent('LeaseRequested', {
+        leaseId: {
+          userEmail: 'team@council.gov.uk',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+        },
+        templateId: 'web-hosting',
+        budgetAmount: 50,
+        leaseDurationHours: 48,
+        requiresManualApproval: false,
+      });
+      await handler(event, mockContext);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'AI email analysis used fallback',
+        expect.objectContaining({
+          email: 'team@council.gov.uk',
+          fallbackReason: 'Bedrock timeout',
+          isGroupMailbox: true,
+        })
+      );
+    });
+
+    it('should use fallback when circuit breaker is open (AC5)', async () => {
+      const mockBedrockService: BedrockService = {
+        analyzeEmail: vi.fn().mockResolvedValue({
+          analysis: {
+            isGroupMailbox: false,
+            isOutsideTargetAudience: false,
+            confidence: 0.5,
+          },
+          usedFallback: true,
+          fallbackReason: 'Circuit breaker open',
+        }),
+        getCircuitState: vi.fn().mockReturnValue('OPEN'),
+        resetCircuitBreaker: vi.fn(),
+      };
+      setBedrockService(mockBedrockService);
+
+      const event = createValidLeaseRequestedEvent();
+      await handler(event, mockContext);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'AI email analysis used fallback',
+        expect.objectContaining({
+          fallbackReason: 'Circuit breaker open',
+        })
+      );
+    });
+
+    it('should skip AI analysis when Bedrock service is not configured', async () => {
+      // Set Bedrock service to undefined
+      setBedrockService(undefined);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed without AI analysis
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Bedrock service not configured - skipping AI analysis',
+        expect.objectContaining({
+          email: 'user@example.gov.uk',
+        })
+      );
+    });
+
+    it('should handle unexpected errors gracefully', async () => {
+      const mockBedrockService: BedrockService = {
+        analyzeEmail: vi.fn().mockRejectedValue(new Error('Unexpected Bedrock error')),
+        getCircuitState: vi.fn().mockReturnValue('CLOSED'),
+        resetCircuitBreaker: vi.fn(),
+      };
+      setBedrockService(mockBedrockService);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed with no AI analysis
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Unexpected error in AI email analysis - skipping',
+        expect.objectContaining({
+          error: 'Unexpected Bedrock error',
+          email: 'user@example.gov.uk',
+        })
+      );
+    });
+
+    it('should use rule-based fallback detection (AC7)', async () => {
+      const mockBedrockService: BedrockService = {
+        analyzeEmail: vi.fn().mockResolvedValue({
+          analysis: {
+            isGroupMailbox: true, // Detected 'info' prefix
+            isOutsideTargetAudience: false,
+            confidence: 0.7, // Medium confidence from rule-based
+          },
+          usedFallback: true,
+          fallbackReason: 'Bedrock unavailable',
+        }),
+        getCircuitState: vi.fn().mockReturnValue('OPEN'),
+        resetCircuitBreaker: vi.fn(),
+      };
+      setBedrockService(mockBedrockService);
+
+      const event = createMockEvent('LeaseRequested', {
+        leaseId: {
+          userEmail: 'info@council.gov.uk',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+        },
+        templateId: 'web-hosting',
+        budgetAmount: 50,
+        leaseDurationHours: 48,
+        requiresManualApproval: false,
+      });
+
+      await handler(event, mockContext);
+
+      // Verify fallback was used and group mailbox was detected
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'AI email analysis used fallback',
+        expect.objectContaining({
+          isGroupMailbox: true,
+          isOutsideTargetAudience: false,
         })
       );
     });

@@ -376,6 +376,8 @@ export const orgCleanRecordRule: ScoringRuleFn = (context, weight) => {
  * Rule 16: group_mailbox_detected
  * +weight if AI detected group email pattern
  * Skips if no AI analysis available
+ * NOTE: If user is first-time, Rule #4 (first_time_suspicious) handles group mailbox instead
+ *       to avoid double-counting the +20 penalty (per AC2)
  */
 export const groupMailboxDetectedRule: ScoringRuleFn = (context, weight) => {
   // Skip if no AI analysis available
@@ -390,6 +392,17 @@ export const groupMailboxDetectedRule: ScoringRuleFn = (context, weight) => {
   }
 
   const isGroup = context.aiAnalysis.isGroupMailbox;
+  const isFirstTime = context.userLeaseHistory.length === 0;
+
+  // If first-time user with group mailbox, Rule #4 handles it (AC2: no double-counting)
+  if (isFirstTime && isGroup) {
+    return {
+      ruleId: 'group_mailbox_detected',
+      points: 0,
+      triggered: false,
+      reason: 'Handled by first_time_suspicious rule',
+    };
+  }
 
   return {
     ruleId: 'group_mailbox_detected',
