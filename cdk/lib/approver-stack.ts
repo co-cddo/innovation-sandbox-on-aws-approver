@@ -97,7 +97,7 @@ export class ApproverStack extends cdk.Stack {
     const isbEventBus = events.EventBus.fromEventBusArn(
       this,
       'ISBEventBus',
-      'arn:aws:events:us-west-2:568672915267:event-bus/InnovationSandboxComputeISBEventBus6697FE33'
+      `arn:aws:events:${this.region}:${this.account}:event-bus/${config.isbEventBusName}`
     );
 
     // LeaseRequested Rule - no source filter to catch events from any source

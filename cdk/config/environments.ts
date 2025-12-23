@@ -11,7 +11,7 @@ export interface ApproverConfig {
   businessHoursEnd: number;
   /** Business hours timezone (default: Europe/London) */
   businessHoursTz: string;
-  /** ISB Console URL for deep links */
+  /** ISB Console URL for deep links (placeholder until AppConfig integration) */
   isbConsoleUrl: string;
   /** ISB Leases DynamoDB table name */
   isbLeasesTableName: string;
@@ -19,6 +19,10 @@ export interface ApproverConfig {
   isbAccountsTableName: string;
   /** ISB Leases Lambda function name for direct approval invocation */
   isbLeasesLambdaName: string;
+  /** ISB Event Bus name for EventBridge integration */
+  isbEventBusName: string;
+  /** KMS key ID for ISB DynamoDB table encryption */
+  isbKmsKeyId: string;
   /** Slack webhook secret ARN (pre-created) */
   slackWebhookSecretArn: string;
   /** Bedrock model ID for AI analysis */
@@ -34,10 +38,12 @@ export const DEFAULT_CONFIG: ApproverConfig = {
   businessHoursStart: 7,
   businessHoursEnd: 19,
   businessHoursTz: 'Europe/London',
-  isbConsoleUrl: 'https://isb-console.example.com', // Will be updated from AppConfig
+  isbConsoleUrl: 'https://isb-console.example.com', // Placeholder until AppConfig integration
   isbLeasesTableName: 'ndx-try-isb-data-LeaseTable473C6DF2-1RC3238PVASE1',
   isbAccountsTableName: 'ndx-try-isb-data-SandboxAccountTableEFB9C069-198TPLJI6Z9KV',
-  isbLeasesLambdaName: 'ISB-LeasesLambdaFunction-ndx', // Cross-stack reference
+  isbLeasesLambdaName: 'ISB-LeasesLambdaFunction-ndx',
+  isbEventBusName: 'InnovationSandboxComputeISBEventBus6697FE33',
+  isbKmsKeyId: '4682f54a-cf9a-4a2f-941c-aba8795ac878',
   slackWebhookSecretArn:
     'arn:aws:secretsmanager:us-west-2:568672915267:secret:/approver/slack-webhook-url-FXJl1d',
   bedrockModelId: 'us.amazon.nova-micro-v1:0', // Inference profile for on-demand throughput

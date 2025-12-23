@@ -41,9 +41,7 @@ export class ApproverLambda extends Construct {
         BEDROCK_MODEL_ID: config.bedrockModelId,
         LOG_LEVEL: config.logLevel,
         RULE_WEIGHTS: config.ruleWeights,
-        // ISB event bus for emitting escalation events
-        EVENT_BUS_NAME: 'InnovationSandboxComputeISBEventBus6697FE33',
-        // ISB Leases Lambda for direct approval invocation
+        EVENT_BUS_NAME: config.isbEventBusName,
         ISB_LEASES_LAMBDA_NAME: config.isbLeasesLambdaName,
       },
       tracing: lambda.Tracing.ACTIVE,
@@ -84,7 +82,7 @@ export class ApproverLambda extends Construct {
         effect: iam.Effect.ALLOW,
         actions: ['events:PutEvents'],
         resources: [
-          `arn:aws:events:us-west-2:${cdk.Stack.of(this).account}:event-bus/InnovationSandboxComputeISBEventBus6697FE33`,
+          `arn:aws:events:us-west-2:${cdk.Stack.of(this).account}:event-bus/${config.isbEventBusName}`,
         ],
       })
     );
@@ -131,7 +129,7 @@ export class ApproverLambda extends Construct {
         actions: ['kms:Decrypt'],
         resources: [
           // ISB data tables are encrypted with this key
-          `arn:aws:kms:us-west-2:${cdk.Stack.of(this).account}:key/4682f54a-cf9a-4a2f-941c-aba8795ac878`,
+          `arn:aws:kms:us-west-2:${cdk.Stack.of(this).account}:key/${config.isbKmsKeyId}`,
         ],
       })
     );

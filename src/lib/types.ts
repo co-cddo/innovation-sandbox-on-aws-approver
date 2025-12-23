@@ -106,6 +106,3 @@ export const LeaseEscalatedDetailSchema = z.object({
 });
 
 export type LeaseEscalatedDetail = z.infer<typeof LeaseEscalatedDetailSchema>;
-
-// Note: Additional internal types (LeaseRequest, ApprovalDecision) will be added
-// when implementing the full scoring engine in Story 2.3
