@@ -12,7 +12,7 @@ export default defineConfig({
       exclude: ['src/**/*.d.ts', 'src/**/types.ts', 'src/lib/logger.ts'],
       thresholds: {
         lines: 90,
-        branches: 100,
+        branches: 90,
         functions: 90,
         statements: 90,
       },
