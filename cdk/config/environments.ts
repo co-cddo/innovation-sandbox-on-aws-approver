@@ -58,9 +58,9 @@ export const DEFAULT_CONFIG: ApproverConfig = {
     templateHopper: 2,
     budgetRequested: 1,
     durationRequested: 1,
-    endOfWindow: -2,
+    endOfWindow: 2, // +2 penalty for end-of-window requests
     cooldownViolation: 10,
-    outsideTargetAudience: 10,
+    outsideTargetAudience: 50, // +50 for non-local-gov domain
     manualEarlyTermination: -2,
     orgRecentNegative: 3,
     orgCleanRecord: -2,

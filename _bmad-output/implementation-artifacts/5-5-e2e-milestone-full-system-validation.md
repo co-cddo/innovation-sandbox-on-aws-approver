@@ -1,6 +1,6 @@
 # Story 5.5: E2E Milestone - Full System Validation
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
