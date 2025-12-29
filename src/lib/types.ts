@@ -23,31 +23,35 @@ export type LeaseId = z.infer<typeof LeaseIdSchema>;
  * LeaseRequested event detail from ISB
  * Flexible schema to handle ISB's actual event format
  */
-export const LeaseRequestedDetailSchema = z.object({
-  // ISB sends leaseId as composite object with userEmail and uuid
-  leaseId: LeaseIdSchema,
-  // ISB uses leaseTemplateId or originalLeaseTemplateUuid, we also accept templateId
-  leaseTemplateId: z.string().optional(),
-  originalLeaseTemplateUuid: z.string().optional(),
-  templateId: z.string().optional(),
-  // Budget: ISB uses maxSpend
-  budgetAmount: z.number().optional(),
-  maxSpend: z.number().optional(),
-  // Duration: ISB uses leaseDurationInHours (note the "In")
-  leaseDurationHours: z.number().optional(),
-  leaseDurationInHours: z.number().optional(),
-  expiresInHours: z.number().optional(),
-  comments: z.string().optional(),
-  requiresManualApproval: z.boolean().optional().default(false),
-}).transform((data) => ({
-  ...data,
-  // Normalize template: prefer leaseTemplateId > originalLeaseTemplateUuid > templateId
-  templateId: data.leaseTemplateId ?? data.originalLeaseTemplateUuid ?? data.templateId ?? 'unknown',
-  // Normalize budget: prefer maxSpend over budgetAmount (default 0 - no penalty if missing)
-  budgetAmount: data.maxSpend ?? data.budgetAmount ?? 0,
-  // Normalize duration: prefer leaseDurationInHours > expiresInHours > leaseDurationHours (default 0 - no penalty if missing)
-  leaseDurationHours: data.leaseDurationInHours ?? data.expiresInHours ?? data.leaseDurationHours ?? 0,
-}));
+export const LeaseRequestedDetailSchema = z
+  .object({
+    // ISB sends leaseId as composite object with userEmail and uuid
+    leaseId: LeaseIdSchema,
+    // ISB uses leaseTemplateId or originalLeaseTemplateUuid, we also accept templateId
+    leaseTemplateId: z.string().optional(),
+    originalLeaseTemplateUuid: z.string().optional(),
+    templateId: z.string().optional(),
+    // Budget: ISB uses maxSpend
+    budgetAmount: z.number().optional(),
+    maxSpend: z.number().optional(),
+    // Duration: ISB uses leaseDurationInHours (note the "In")
+    leaseDurationHours: z.number().optional(),
+    leaseDurationInHours: z.number().optional(),
+    expiresInHours: z.number().optional(),
+    comments: z.string().optional(),
+    requiresManualApproval: z.boolean().optional().default(false),
+  })
+  .transform((data) => ({
+    ...data,
+    // Normalize template: prefer leaseTemplateId > originalLeaseTemplateUuid > templateId
+    templateId:
+      data.leaseTemplateId ?? data.originalLeaseTemplateUuid ?? data.templateId ?? 'unknown',
+    // Normalize budget: prefer maxSpend over budgetAmount (default 0 - no penalty if missing)
+    budgetAmount: data.maxSpend ?? data.budgetAmount ?? 0,
+    // Normalize duration: prefer leaseDurationInHours > expiresInHours > leaseDurationHours (default 0 - no penalty if missing)
+    leaseDurationHours:
+      data.leaseDurationInHours ?? data.expiresInHours ?? data.leaseDurationHours ?? 0,
+  }));
 
 export type LeaseRequestedDetail = z.infer<typeof LeaseRequestedDetailSchema>;
 
@@ -60,10 +64,14 @@ export const LeaseRequestedEventSchema = z.object({
   id: z.string(),
   'detail-type': z.literal('LeaseRequested'),
   // Accept any source starting with InnovationSandbox or innovation-sandbox
-  source: z.string().refine(
-    (s) => s.toLowerCase().startsWith('innovationsandbox') || s.toLowerCase().startsWith('innovation-sandbox'),
-    { message: 'Source must start with InnovationSandbox or innovation-sandbox' }
-  ),
+  source: z
+    .string()
+    .refine(
+      (s) =>
+        s.toLowerCase().startsWith('innovationsandbox') ||
+        s.toLowerCase().startsWith('innovation-sandbox'),
+      { message: 'Source must start with InnovationSandbox or innovation-sandbox' }
+    ),
   account: z.string(),
   time: z.string(),
   region: z.string(),
@@ -120,3 +128,57 @@ export const LeaseDeniedDetailSchema = z.object({
 });
 
 export type LeaseDeniedDetail = z.infer<typeof LeaseDeniedDetailSchema>;
+
+// =============================================================================
+// Account Availability Schemas (Epic 6 - FR58-FR67)
+// =============================================================================
+
+/**
+ * Account status from ISB /api/accounts endpoint
+ */
+export const AccountStatusSchema = z.enum(['Available', 'Active']);
+
+export type AccountStatus = z.infer<typeof AccountStatusSchema>;
+
+/**
+ * Account metadata from ISB
+ */
+export const AccountMetaSchema = z.object({
+  createdTime: z.string(), // ISO 8601
+  lastEditTime: z.string(), // ISO 8601
+});
+
+export type AccountMeta = z.infer<typeof AccountMetaSchema>;
+
+/**
+ * Single account from ISB /api/accounts endpoint
+ */
+export const AccountSchema = z.object({
+  awsAccountId: z.string(),
+  name: z.string(), // e.g., "pool-005"
+  status: AccountStatusSchema,
+  meta: AccountMetaSchema,
+});
+
+export type Account = z.infer<typeof AccountSchema>;
+
+/**
+ * Response from ISB /api/accounts endpoint (single page)
+ */
+export const AccountsPageResponseSchema = z.object({
+  accounts: z.array(AccountSchema),
+  nextPageIdentifier: z.string().nullable(),
+});
+
+export type AccountsPageResponse = z.infer<typeof AccountsPageResponseSchema>;
+
+/**
+ * Result from getAccounts() with pagination info
+ */
+export interface GetAccountsResult {
+  readonly success: boolean;
+  readonly accounts: Account[];
+  readonly totalFetched: number;
+  readonly pagesTraversed: number;
+  readonly error?: string;
+}

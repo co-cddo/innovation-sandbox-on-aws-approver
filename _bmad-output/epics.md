@@ -9,6 +9,13 @@ project_name: 'innovation-sandbox-on-aws-approver'
 user_name: 'Cns'
 date: '2025-12-22'
 workflowComplete: true
+revisions:
+  - date: '2025-12-29'
+    summary: 'Added Epic 6 (FR58-FR67) with 5 elicitation methods: User Personas, Pre-mortem, ADRs, Red Team, 5 Whys'
+    validated: true
+    frsCovered: 67
+    epics: 6
+    stories: 28
 ---
 
 # innovation-sandbox-on-aws-approver - Epic Breakdown
@@ -103,6 +110,18 @@ This document provides the complete epic and story breakdown for innovation-sand
 - FR55: System can retain decision logs for GDPR compliance (audit trail)
 - FR56: System can produce audit trail of all approval/denial decisions
 - FR57: System can flag post-incident whether original score indicated risk
+
+**Account Availability (FR58-FR67)** - *Added 2025-12-29*
+- FR58: System can invoke ISB Lambda to query `/api/accounts` endpoint
+- FR59: System can paginate through all pages of account results (`nextPageIdentifier`)
+- FR60: System can determine if an account is "ready" based on cooldown rules
+- FR61: System can delay processing when no ready accounts are available
+- FR62: System can calculate estimated fulfillment time based on queue position
+- FR63: System can communicate queue position and estimated time to users via lease comments
+- FR64: System can detect "capacity crunch" when all accounts are Active
+- FR65: System can provide extended wait messaging (36-48 hours) when no accounts are Available
+- FR66: System can alert operators via Slack when capacity crunch is detected
+- FR67: System can process queued requests in FIFO order when accounts become ready
 
 ### Non-Functional Requirements
 
@@ -199,6 +218,7 @@ This document provides the complete epic and story breakdown for innovation-sand
 | FR46 | Epic 3 | Circuit Breaker (Bedrock) |
 | FR48-FR51 | Epic 5 | Configuration |
 | FR52-FR57 | Epic 5 | Observability & Compliance |
+| FR58-FR67 | Epic 6 | Account Availability & Cooldown |
 
 ## Epic List
 
@@ -281,6 +301,22 @@ Keep users informed, enable operator review via Slack + ISB console, and provide
 
 ---
 
+### Epic 6: Account Availability & Cooldown
+Ensure leases are only approved when a "ready" sandbox account exists, with proper cooldown enforcement and user communication.
+
+**User Outcome:** Users receive their sandbox only when a properly cleaned account is available; users see queue position and estimated wait time; operators are alerted to capacity crunches.
+
+**Stories:**
+- 6.1: ISB Lambda `/api/accounts` integration with pagination
+- 6.2: Account cooldown logic (24hr cooldown, new account grace period)
+- 6.3: Queue position estimation and user messaging
+- 6.4: Capacity crunch detection and operator alerts
+- 6.5: **E2E Milestone: Account Cooldown Validation** ← `<promise>STOP</promise>`
+
+**FRs covered:** FR58-FR67 (10 FRs)
+
+---
+
 ## Epic Definition of Done
 
 Each epic is complete when:
@@ -298,6 +334,7 @@ Each epic is complete when:
 | 2. Core Flow Validation | Epic 2 | ~30 min | Full scoring loop |
 | 3. Intelligent Scoring Validation | Epic 3 | ~20 min | Bedrock + domain verification |
 | 4. Full System Validation | Epic 5 | ~30 min | Timing, Slack, queues |
+| 5. Account Cooldown Validation | Epic 6 | ~30 min | ISB Lambda, cooldown logic, queue messaging |
 
 **E2E Protocol:** Output `<promise>STOP</promise>` to halt automation loop for interactive testing with Cns via ISB UI.
 
@@ -1475,3 +1512,357 @@ Output `<promise>STOP</promise>` to halt automation loop. Interactive testing wi
 3. Trigger out-of-hours request → verify delay message, wait for 30-min check
 4. Verify CloudWatch logs and metrics
 5. Test full manual approval flow via ISB console
+
+---
+
+## Epic 6: Account Availability & Cooldown
+
+Ensure leases are only approved when a "ready" sandbox account exists, with proper cooldown enforcement and user communication.
+
+**User Outcome:** Users receive their sandbox only when a properly cleaned account is available; users see queue position and estimated wait time; operators are alerted to capacity crunches.
+
+**Prerequisites:**
+- Epic 2 (Core Approval Flow) complete - state machine exists
+- Epic 4 (Timing & Queue Management) complete - delayed processing exists
+- Epic 5 (Communications) complete - Slack and lease comments work
+
+**Note:** The existing `src/services/isb-lambda.ts` already has Lambda invocation patterns for `approveLease()` and `denyLease()`. This epic extends that service with `getAccounts()` - no new IAM permissions or dependencies required.
+
+### Architecture Decision Records
+
+| ADR | Decision | Trade-off |
+|-----|----------|-----------|
+| **ADR-001** | Direct Lambda invoke (not API Gateway) | Coupling for simplicity - reuses existing pattern |
+| **ADR-002** | Query ISB fresh each time (no caching) | ~500ms latency for guaranteed consistency |
+| **ADR-003** | SQS DelayQueue + DynamoDB for queue position | Complexity for FIFO ordering + position queries |
+| **ADR-004** | Best-effort estimate with disclaimer | Honest about uncertainty; "may change based on demand" |
+| **ADR-005** | Check accounts AFTER allow-list, BEFORE scoring | Fail fast on infrastructure constraints |
+
+**State Machine Order:** `ALLOW_LIST_CHECK` → `ACCOUNT_COOLDOWN_CHECK` → `BUSINESS_HOURS` → `SCORING` → `DECIDING`
+
+### Story 6.1: ISB Lambda `/api/accounts` Integration with Pagination
+
+As a **developer**,
+I want **to query the ISB account pool status via direct Lambda invocation**,
+So that **the Approver can check which accounts are available and their readiness state**.
+
+**Acceptance Criteria:**
+
+**Given** the existing `src/services/isb-lambda.ts` service (FR58)
+**When** extending the service
+**Then** add `getAccounts()` method that:
+- Invokes ISB Lambda with `/api/accounts` path (ADR-001: Direct Lambda)
+- Uses same `createApiGatewayEvent()` pattern as existing methods
+- Returns array of account objects
+
+**Given** pagination support is required (FR59)
+**When** the response includes `nextPageIdentifier`
+**Then** continue fetching until `nextPageIdentifier` is null
+**And** aggregate all results into single array
+**And** log total pages fetched for debugging
+
+**Given** the account response schema
+**When** parsing the response
+**Then** extract and validate:
+```typescript
+interface Account {
+  awsAccountId: string;
+  name: string;           // e.g., "pool-005"
+  status: 'Available' | 'Active';
+  meta: {
+    createdTime: string;  // ISO 8601
+    lastEditTime: string; // ISO 8601
+  };
+}
+```
+
+**Given** ISB Lambda invocation fails
+**When** handling the error
+**Then** fail-closed (queue for manual review)
+**And** log error with ISB Lambda response details
+**And** do NOT auto-approve without account check
+
+**Given** unit testing the service
+**When** mocking Lambda client
+**Then** test cases cover:
+- Single page response
+- Multi-page pagination (2-3 pages)
+- Empty results
+- Error response
+- Malformed response
+
+**Given** pagination reliability (Pre-mortem: Pagination Disaster)
+**When** fetching accounts
+**Then** log `totalAccountsFetched` and `pagesTraversed` for debugging
+**And** assert: if `nextPageIdentifier` exists in response, MUST fetch next page
+**And** integration test MUST include 2+ page mock response
+
+**Given** contract testing for ISB events (Pre-mortem: Silent Queue)
+**When** receiving `AccountCleanupSucceeded` events
+**Then** validate event schema matches expected structure
+**And** log correlation ID between event and any queued request processed
+
+---
+
+### Story 6.2: Account Cooldown Logic
+
+As an **operator**,
+I want **leases only approved when a properly cleaned sandbox account is available**,
+So that **users don't encounter leftover resources from previous sessions**.
+
+**Acceptance Criteria:**
+
+**Given** account readiness rules (FR60)
+**When** determining if an account is "ready"
+**Then** an account is ready if:
+```
+status === "Available"
+AND (
+  meta.lastEditTime > 24 hours ago    // Cooled down
+  OR meta.createdTime < 1 hour ago    // Brand new
+)
+```
+
+**Rationale for 24-hour cooldown (5 Whys: Billing Separation):**
+The cooldown period is NOT about cleanup safety - ISB cleanup completes in ~30-60 minutes.
+The 24-hour period ensures **billing separation** between users:
+- AWS Cost Explorer and billing reports aggregate by day
+- A 24-hour gap ensures each user's costs appear on distinct billing days
+- Makes cost attribution and chargebacks unambiguous
+- Prevents billing disputes ("was that charge mine or the previous user's?")
+
+**Given** configurable cooldown parameters
+**When** evaluating readiness
+**Then** read from environment variables:
+- `ACCOUNT_COOLDOWN_HOURS` (default: 24)
+- `NEW_ACCOUNT_GRACE_MINUTES` (default: 60)
+
+**Given** fresh data requirement (ADR-002)
+**When** checking account availability
+**Then** query ISB Lambda fresh each time (no caching)
+**And** accept ~500ms latency for guaranteed consistency
+
+**Given** a pure function implementation (for testability)
+**When** implementing `checkAccountReadiness()`
+**Then** return:
+```typescript
+interface AccountReadinessResult {
+  hasReadyAccount: boolean;
+  readyAccounts: Account[];
+  coolingAccounts: Account[];   // Available but in cooldown
+  activeAccounts: Account[];    // Currently leased
+  estimatedReadyTime: Date | null;
+}
+```
+
+**Given** state machine integration (ADR-005)
+**When** processing a lease request
+**Then** add `ACCOUNT_COOLDOWN_CHECK` state AFTER `ALLOW_LIST_CHECK`, BEFORE `BUSINESS_HOURS`
+**And** if ready account exists → continue to `BUSINESS_HOURS` check
+**And** if no ready account → transition to `DELAYED` with reason `NO_READY_ACCOUNTS`
+
+**Given** no ready accounts available (FR61)
+**When** the check fails
+**Then** do NOT fail or escalate
+**And** queue the request for later processing
+**And** update lease comments with queue status
+
+**Given** unit testing the cooldown logic
+**When** testing edge cases
+**Then** test cases cover:
+- Account exactly at 24hr boundary (should be ready)
+- Account at 23h 59m (should still be cooling)
+- Brand new account at 59 minutes (should be ready)
+- Brand new account at 61 minutes (should use cooldown rule)
+- Mix of ready, cooling, and active accounts
+
+**Given** timezone safety (Pre-mortem: Time Zone Trap)
+**When** comparing timestamps
+**Then** ALL time comparisons MUST use UTC
+**And** `lastEditTime` and `createdTime` parsed as UTC ISO 8601
+**And** "now" timestamp injected via parameter for testability (not inline `Date.now()`)
+**And** test case MUST cover BST/GMT boundary (e.g., 08:00 UTC checked at 08:01 UTC next day)
+
+**Given** stuck queue detection (Pre-mortem: Silent Queue)
+**When** configuring CloudWatch alarms
+**Then** add alarm: `queue_depth > 0 AND ready_accounts > 0` sustained for 30+ minutes
+**And** this indicates queue processor not consuming available accounts
+
+**Given** TOCTOU race condition (Red Team: Time-of-Check to Time-of-Use)
+**When** Approver approves a request but ISB rejects due to account no longer available
+**Then** handle ISB rejection gracefully (don't fail the request permanently)
+**And** re-queue the request with updated queue position
+**And** update lease comments: "Your request is being reprocessed - account assignment in progress"
+**And** log the race condition occurrence for monitoring
+
+---
+
+### Story 6.3: Queue Position Estimation and User Messaging
+
+As a **lease requester**,
+I want **to know my queue position and estimated wait time when no accounts are available**,
+So that **I can plan my work accordingly**.
+
+**Acceptance Criteria:**
+
+**Given** queue position calculation (FR62)
+**When** no ready accounts are available
+**Then** calculate queue position:
+- Query pending requests from delay queue
+- Position = count of requests queued before current + 1
+- Log queue depth for monitoring
+
+**Given** hybrid queue implementation (ADR-003)
+**When** managing the waiting queue
+**Then** use SQS DelayQueue for processing + retry/DLQ
+**And** use DynamoDB for queue position metadata and FIFO ordering
+**And** position stored in DynamoDB survives Lambda cold starts
+
+**Given** estimated fulfillment time calculation (FR62, ADR-004)
+**When** calculating wait estimate
+**Then** consider:
+- Soonest `meta.lastEditTime` + 24 hours from cooling accounts
+- Queue position (each position adds ~4 hours rough estimate)
+**And** return human-readable time estimate
+**And** include disclaimer about uncertainty
+
+**Given** a pure function implementation (for testability)
+**When** implementing `calculateQueueEstimate()`
+**Then** return:
+```typescript
+interface QueueEstimate {
+  position: number;
+  estimatedFulfillmentTime: Date | null;
+  isCapacityCrunch: boolean;
+  message: string;
+}
+```
+
+**Given** user messaging for cooldown delay (FR63)
+**When** updating lease comments
+**Then** set message using jargon-free language:
+```
+Your request has been received. No sandbox sessions are currently available -
+all accounts are undergoing routine maintenance. Based on current queue
+(position {position}) and account availability, your request should be
+fulfilled around {estimated_time}. This estimate may change based on demand.
+Reference: ISB-{YYYY}-{NNNN}
+```
+**And** avoid technical jargon like "cooldown" in user-facing messages
+**And** include disclaimer "estimate may change" (Pre-mortem: Estimate Lie)
+
+**Given** queue persistence concern
+**When** a user's request is queued
+**Then** queue position is stored in DynamoDB (not session-based)
+**And** user can close browser/logout without losing queue position
+**And** this should be clarified in the message if space permits
+
+**Given** FIFO queue processing (FR67)
+**When** an account becomes ready
+**Then** process oldest queued request first
+**And** trigger via `AccountCleanupSucceeded` event (existing mechanism)
+
+---
+
+### Story 6.4: Capacity Crunch Detection and Operator Alerts
+
+As an **operator**,
+I want **to be alerted when all sandbox accounts are in active use**,
+So that **I can provision additional capacity if demand is high**.
+
+**Acceptance Criteria:**
+
+**Given** capacity crunch detection (FR64)
+**When** checking account pool
+**Then** detect capacity crunch if:
+- Zero accounts with `status: "Available"`
+- All accounts are `status: "Active"`
+**And** this is distinct from normal cooldown (where some are Available but cooling)
+
+**Given** capacity crunch user messaging (FR65)
+**When** updating lease comments for capacity crunch
+**Then** set message:
+```
+Your request has been received. All sandbox sessions are currently in active use.
+Based on current demand, your request may take 36-48 hours to fulfill. Our support
+team is aware of high demand and is working to add capacity. You'll be notified
+as soon as a session becomes available.
+Reference: ISB-{YYYY}-{NNNN}
+```
+
+**Given** operator Slack alert for capacity crunch (FR66)
+**When** capacity crunch is detected
+**Then** send Slack notification with:
+```json
+{
+  "alert_type": "capacity_crunch",
+  "active_accounts": "8",
+  "available_accounts": "0",
+  "pending_requests": "5",
+  "soonest_available_hours": "6",
+  "message": "All sandbox accounts are in active use. Soonest availability in ~6 hours. Consider provisioning additional capacity."
+}
+```
+**And** include `soonest_available_hours` based on shortest remaining lease duration (if known) or cooldown estimate
+
+**Given** alert throttling (Pre-mortem: Capacity Crunch Storm)
+**When** capacity crunch persists
+**Then** only send alert once per hour (avoid spam)
+**And** track last alert time in DynamoDB (NOT Lambda memory - lost on cold start)
+**And** check `lastCapacityCrunchAlert` timestamp before sending any alert
+**And** all Lambda invocations (scheduled + event-triggered) share same throttle state
+
+**Given** capacity crunch resolved
+**When** an account becomes available
+**Then** normal processing resumes
+**And** no additional "resolved" alert needed
+
+---
+
+### Story 6.5: E2E Milestone - Account Cooldown Validation
+
+As a **developer**,
+I want **to verify the account cooldown feature works end-to-end**,
+So that **I have confidence the feature is production-ready**.
+
+**Story Type:** Verification/Spike (testing only)
+
+**Acceptance Criteria:**
+
+**Given** Stories 6.1-6.4 are deployed
+**When** testing account cooldown scenarios
+**Then** verify each scenario:
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| Ready account available | Immediate approval (after scoring passes) |
+| All accounts in cooldown | Queue with position and estimated time |
+| Brand new account (<1hr) | Treated as ready, immediate approval |
+| Capacity crunch (all Active) | Queue with 36-48hr message, Slack alert |
+| Account cleanup succeeded | Oldest queued request processed |
+
+**Given** ISB Lambda integration testing
+**When** invoking `/api/accounts`
+**Then** verify pagination works with real data
+**And** response schema matches expectations
+
+**Given** user messaging testing
+**When** checking ISB UI
+**Then** verify lease comments show:
+- Queue position
+- Estimated fulfillment time
+- Correct reference number
+
+**Given** Slack alert testing
+**When** capacity crunch is triggered (if feasible)
+**Then** verify Slack notification sent
+**And** alert contains correct counts
+
+**E2E Protocol:**
+Output `<promise>STOP</promise>` to halt automation loop. Interactive testing with Cns via ISB UI will:
+1. Check current account pool status via ISB admin
+2. If ready accounts exist → trigger request, verify immediate approval
+3. If accounts in cooldown → trigger request, verify queue message with estimated time
+4. Verify CloudWatch logs show account readiness decision
+5. Wait for account to become ready → verify queued request processed
+6. Optional: If all accounts active (real capacity crunch) → verify alert sent

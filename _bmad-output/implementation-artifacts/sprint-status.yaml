@@ -1,4 +1,4 @@
-# generated: 2025-12-22
+# generated: 2025-12-29
 # project: innovation-sandbox-on-aws-approver
 # project_key: isb-approver
 # tracking_system: file-system
@@ -34,7 +34,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - E2E Milestone stories (1.4, 2.5, 3.5, 5.5) require <promise>STOP</promise> for interactive testing
 
-generated: 2025-12-22
+generated: 2025-12-29
 project: innovation-sandbox-on-aws-approver
 project_key: isb-approver
 tracking_system: file-system
@@ -83,3 +83,12 @@ development_status:
   5-4-per-rule-trigger-tracking-and-audit-trail: done
   5-5-e2e-milestone-full-system-validation: done
   epic-5-retrospective: done
+
+  # Epic 6: Account Availability & Cooldown (FR58-FR67, added 2025-12-29)
+  epic-6: in-progress
+  6-1-isb-lambda-accounts-integration-with-pagination: done
+  6-2-account-cooldown-logic-24hr-with-new-account-grace: backlog
+  6-3-queue-position-estimation-and-user-messaging: backlog
+  6-4-capacity-crunch-detection-and-operator-alerts: backlog
+  6-5-e2e-milestone-account-cooldown-validation: backlog
+  epic-6-retrospective: optional

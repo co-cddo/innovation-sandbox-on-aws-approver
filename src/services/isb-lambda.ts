@@ -5,7 +5,8 @@
  */
 
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
-import type { LeaseId } from '../lib/types.js';
+import type { LeaseId, Account, GetAccountsResult } from '../lib/types.js';
+import { AccountsPageResponseSchema } from '../lib/types.js';
 
 /**
  * Parameters for approving a lease via ISB Lambda
@@ -41,11 +42,19 @@ export interface IsbLambdaServiceConfig {
 }
 
 /**
+ * Parameters for getting accounts via ISB Lambda
+ */
+export interface GetAccountsLambdaParams {
+  readonly approverEmail: string;
+}
+
+/**
  * ISB Lambda service interface for type-safe dependency injection
  */
 export interface IsbLambdaService {
   approveLease(params: ApproveLeaseLambdaParams): Promise<IsbLambdaResult>;
   denyLease(params: DenyLeaseLambdaParams): Promise<IsbLambdaResult>;
+  getAccounts(params: GetAccountsLambdaParams): Promise<GetAccountsResult>;
 }
 
 /**
@@ -115,6 +124,34 @@ const createApiGatewayEvent = (
   resource: '/leases/{leaseId}/review',
   isBase64Encoded: false,
 });
+
+/**
+ * Creates the API Gateway event payload for accounts endpoint
+ */
+const createAccountsApiGatewayEvent = (
+  approverJwt: string,
+  pageIdentifier?: string
+): Record<string, unknown> => ({
+  httpMethod: 'GET',
+  path: '/api/accounts',
+  queryStringParameters: pageIdentifier ? { pageIdentifier } : null,
+  headers: {
+    Authorization: `Bearer ${approverJwt}`,
+    'Content-Type': 'application/json',
+  },
+  requestContext: {
+    httpMethod: 'GET',
+    path: '/api/accounts',
+    extendedRequestId: `approver-accounts-${Date.now()}`,
+  },
+  resource: '/api/accounts',
+  isBase64Encoded: false,
+});
+
+/**
+ * Maximum pages to traverse (safety limit to prevent infinite loops)
+ */
+const MAX_PAGINATION_PAGES = 100;
 
 /**
  * Parses the Lambda response
@@ -230,5 +267,115 @@ export const createIsbLambdaService = (
     }
 
     return parseResponse(response.Payload);
+  },
+
+  getAccounts: async (params: GetAccountsLambdaParams): Promise<GetAccountsResult> => {
+    const approverJwt = createApproverJwt(params.approverEmail);
+    const allAccounts: Account[] = [];
+    let pageIdentifier: string | undefined = undefined;
+    let pagesTraversed = 0;
+
+    // Pagination loop - fetch all pages
+    do {
+      pagesTraversed++;
+
+      // Safety: prevent infinite loops (Pre-mortem fix)
+      if (pagesTraversed > MAX_PAGINATION_PAGES) {
+        return {
+          success: false,
+          accounts: allAccounts,
+          totalFetched: allAccounts.length,
+          pagesTraversed,
+          error: `Pagination exceeded ${MAX_PAGINATION_PAGES} pages - possible infinite loop`,
+        };
+      }
+
+      const payload = createAccountsApiGatewayEvent(approverJwt, pageIdentifier);
+
+      const command = new InvokeCommand({
+        FunctionName: config.functionName,
+        Payload: Buffer.from(JSON.stringify(payload)),
+      });
+
+      const response = await client.send(command);
+
+      // Check for Lambda invocation errors
+      if (response.FunctionError) {
+        return {
+          success: false,
+          accounts: allAccounts,
+          totalFetched: allAccounts.length,
+          pagesTraversed,
+          error: `Lambda function error: ${response.FunctionError}`,
+        };
+      }
+
+      // Parse response
+      if (!response.Payload) {
+        return {
+          success: false,
+          accounts: allAccounts,
+          totalFetched: allAccounts.length,
+          pagesTraversed,
+          error: 'Empty response from ISB Lambda',
+        };
+      }
+
+      try {
+        const rawResponse = JSON.parse(Buffer.from(response.Payload).toString());
+        const statusCode = rawResponse.statusCode ?? 500;
+
+        if (statusCode < 200 || statusCode >= 300) {
+          const body =
+            typeof rawResponse.body === 'string' ? JSON.parse(rawResponse.body) : rawResponse.body;
+          const errorMessage =
+            body?.data?.errors?.[0]?.message ?? body?.message ?? 'Unknown error from ISB';
+          return {
+            success: false,
+            accounts: allAccounts,
+            totalFetched: allAccounts.length,
+            pagesTraversed,
+            error: errorMessage,
+          };
+        }
+
+        // Parse body
+        const body =
+          typeof rawResponse.body === 'string' ? JSON.parse(rawResponse.body) : rawResponse.body;
+
+        // Validate response schema
+        const parseResult = AccountsPageResponseSchema.safeParse(body);
+        if (!parseResult.success) {
+          return {
+            success: false,
+            accounts: allAccounts,
+            totalFetched: allAccounts.length,
+            pagesTraversed,
+            error: `Invalid accounts response schema: ${parseResult.error.message}`,
+          };
+        }
+
+        // Add accounts from this page
+        allAccounts.push(...parseResult.data.accounts);
+
+        // Check for next page
+        pageIdentifier = parseResult.data.nextPageIdentifier ?? undefined;
+      } catch (error) {
+        return {
+          success: false,
+          accounts: allAccounts,
+          totalFetched: allAccounts.length,
+          pagesTraversed,
+          error: `Failed to parse ISB Lambda response: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    } while (pageIdentifier);
+
+    return {
+      success: true,
+      accounts: allAccounts,
+      totalFetched: allAccounts.length,
+      pagesTraversed,
+    };
   },
 });

@@ -111,9 +111,16 @@ const mockEventBridgeService: EventBridgeService = {
 // Mock ISB Lambda service for testing (used for actual approvals)
 const mockApproveLease = vi.fn().mockResolvedValue({ success: true, statusCode: 200 });
 const mockDenyLease = vi.fn().mockResolvedValue({ success: true, statusCode: 200 });
+const mockGetAccounts = vi.fn().mockResolvedValue({
+  success: true,
+  accounts: [],
+  totalFetched: 0,
+  pagesTraversed: 1,
+});
 const mockIsbLambdaService: IsbLambdaService = {
   approveLease: mockApproveLease,
   denyLease: mockDenyLease,
+  getAccounts: mockGetAccounts,
 };
 
 // Mock SQS service for testing (used for delay queue operations)

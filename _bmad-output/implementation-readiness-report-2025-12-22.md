@@ -3,6 +3,7 @@ stepsCompleted: [1, 2, 3, 4, 5, 6]
 project_name: 'innovation-sandbox-on-aws-approver'
 user_name: 'Cns'
 date: '2025-12-22'
+revisionDate: '2025-12-29'
 documents:
   prd: '_bmad-output/prd.md'
   architecture: '_bmad-output/architecture.md'
@@ -10,13 +11,20 @@ documents:
   ux: null
 workflowType: 'implementation-readiness'
 requirements:
-  functional: 57
+  functional: 67
   nonFunctional: 28
+revisions:
+  - date: '2025-12-29'
+    summary: 'Added Epic 6 (FR58-FR67) - Account Availability & Cooldown'
+    frsCovered: 67
+    epics: 6
+    stories: 28
 ---
 
 # Implementation Readiness Assessment Report
 
 **Date:** 2025-12-22
+**Revised:** 2025-12-29
 **Project:** innovation-sandbox-on-aws-approver
 
 ## Step 1: Document Discovery
@@ -135,7 +143,19 @@ requirements:
 - **FR56:** System can produce audit trail of all approval/denial decisions with timestamps and attributions
 - **FR57:** System can flag post-incident whether original score indicated risk (lagging validation)
 
-**Total FRs: 57**
+#### Account Availability (FR58-FR67) - *Added 2025-12-29*
+- **FR58:** System can invoke ISB Lambda to query `/api/accounts` endpoint
+- **FR59:** System can paginate through all pages of account results (`nextPageIdentifier`)
+- **FR60:** System can determine if an account is "ready" based on cooldown rules
+- **FR61:** System can delay processing when no ready accounts are available
+- **FR62:** System can calculate estimated fulfillment time based on queue position
+- **FR63:** System can communicate queue position and estimated time to users via lease comments
+- **FR64:** System can detect "capacity crunch" when all accounts are Active
+- **FR65:** System can provide extended wait messaging (36-48 hours) when no accounts are Available
+- **FR66:** System can alert operators via Slack when capacity crunch is detected
+- **FR67:** System can process queued requests in FIFO order when accounts become ready
+
+**Total FRs: 67** (57 original + 10 from 2025-12-29 revision)
 
 ---
 
@@ -249,6 +269,7 @@ requirements:
 | FR46 | Epic 3 | Circuit Breaker (Bedrock) | 1 |
 | FR48-FR51 | Epic 5 | Configuration | 4 |
 | FR52-FR57 | Epic 5 | Observability & Compliance | 6 |
+| FR58-FR67 | Epic 6 | Account Availability & Cooldown | 10 |
 
 ---
 
@@ -313,6 +334,16 @@ requirements:
 | FR55 | Retain decision logs for GDPR | Epic 5 (Story 5.4) | ✅ Covered |
 | FR56 | Produce audit trail | Epic 5 (Story 5.4) | ✅ Covered |
 | FR57 | Flag post-incident risk indication | Epic 5 (Story 5.4) | ✅ Covered |
+| FR58 | Invoke ISB Lambda `/api/accounts` | Epic 6 (Story 6.1) | ✅ Covered |
+| FR59 | Paginate account results | Epic 6 (Story 6.1) | ✅ Covered |
+| FR60 | Determine account readiness (cooldown) | Epic 6 (Story 6.2) | ✅ Covered |
+| FR61 | Delay processing when no accounts ready | Epic 6 (Story 6.2) | ✅ Covered |
+| FR62 | Calculate estimated fulfillment time | Epic 6 (Story 6.3) | ✅ Covered |
+| FR63 | Communicate queue position to users | Epic 6 (Story 6.3) | ✅ Covered |
+| FR64 | Detect capacity crunch | Epic 6 (Story 6.4) | ✅ Covered |
+| FR65 | Extended wait messaging (36-48hrs) | Epic 6 (Story 6.4) | ✅ Covered |
+| FR66 | Alert operators on capacity crunch | Epic 6 (Story 6.4) | ✅ Covered |
+| FR67 | Process queued requests FIFO | Epic 6 (Story 6.3) | ✅ Covered |
 
 ---
 
@@ -337,7 +368,7 @@ requirements:
 
 ### Missing FR Coverage
 
-**None identified.** All 57 FRs have traceable implementation paths in the epics.
+**None identified.** All 67 FRs have traceable implementation paths in the epics.
 
 ---
 
@@ -345,8 +376,8 @@ requirements:
 
 | Metric | Value |
 |--------|-------|
-| Total PRD FRs | 57 |
-| FRs covered in epics | 57 |
+| Total PRD FRs | 67 |
+| FRs covered in epics | 67 |
 | FRs with modifications | 6 (FR39, FR40, FR48-FR51) |
 | FRs missing | 0 |
 | **Coverage percentage** | **100%** |
@@ -358,11 +389,12 @@ requirements:
 | Epic | Stories | FRs Covered | % of Total |
 |------|---------|-------------|------------|
 | Epic 1: Foundation | 4 | Infrastructure (enables all) | - |
-| Epic 2: Core Flow | 5 | 15 | 26% |
-| Epic 3: Intelligent Scoring | 5 | 15 | 26% |
-| Epic 4: Timing & Queues | 4 | 7 | 12% |
-| Epic 5: Communications | 5 | 20 | 35% |
-| **Total** | **23** | **57** | **100%** |
+| Epic 2: Core Flow | 5 | 15 | 22% |
+| Epic 3: Intelligent Scoring | 5 | 15 | 22% |
+| Epic 4: Timing & Queues | 4 | 7 | 10% |
+| Epic 5: Communications | 5 | 20 | 30% |
+| Epic 6: Account Cooldown | 5 | 10 | 15% |
+| **Total** | **28** | **67** | **100%** |
 
 **Epic Coverage Validation: PASS** - All PRD FRs have traceable coverage in epics. Modifications are documented and justified.
 
@@ -553,6 +585,9 @@ Epic 2 (Core Flow)
 | Epic 3 → Epic 2 | ✅ Yes | Scoring engine must exist before enrichment |
 | Epic 4 → Epic 2 | ✅ Yes | Core flow must exist before timing controls |
 | Epic 5 → Epic 2 | ✅ Yes | Decisions must exist before communications |
+| Epic 6 → Epic 2 | ✅ Yes | Core flow must exist before account checks |
+| Epic 6 → Epic 4 | ✅ Yes | Delayed processing must exist for queue management |
+| Epic 6 → Epic 5 | ✅ Yes | Communications must exist for user messaging |
 | Epic 3 ⟂ Epic 4 | ✅ Yes | Independent - can be done in parallel |
 | Epic 3 ⟂ Epic 5 | ⚠️ Partial | 5.1-5.4 can run with Epic 2 outputs |
 
@@ -569,6 +604,7 @@ Epic 2 (Core Flow)
 | Epic 3 | 3.1, 3.2, 3.3, 3.4 independent → 3.5 | ✅ Yes - parallel possible |
 | Epic 4 | 4.1 → 4.2, 4.3 independent, 4.4 → 4.2 | ✅ Yes - mostly parallel |
 | Epic 5 | 5.1, 5.2, 5.3, 5.4 independent → 5.5 | ✅ Yes - parallel possible |
+| Epic 6 | 6.1 → 6.2 → 6.3, 6.4 independent → 6.5 | ✅ Yes - builds on previous |
 
 **No forward dependencies detected.** Story N never references Story N+1.
 
@@ -583,6 +619,7 @@ Epic 2 (Core Flow)
 | Epic 3 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Epic 4 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Epic 5 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Epic 6 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ---
 
@@ -740,9 +777,9 @@ These are intentional architectural decisions, not gaps:
 
 | Artifact | Quality | Notes |
 |----------|---------|-------|
-| PRD | ⭐⭐⭐⭐⭐ | Comprehensive - 57 FRs, 28 NFRs, 4 user journeys |
+| PRD | ⭐⭐⭐⭐⭐ | Comprehensive - 67 FRs, 28 NFRs, 4 user journeys |
 | Architecture | ⭐⭐⭐⭐⭐ | Complete - state machine, DI, circuit breaker, all patterns defined |
-| Epics & Stories | ⭐⭐⭐⭐⭐ | Well-structured - 5 epics, 23 stories, 4 E2E milestones |
+| Epics & Stories | ⭐⭐⭐⭐⭐ | Well-structured - 6 epics, 28 stories, 5 E2E milestones |
 | Test Design | ⭐⭐⭐⭐⭐ | Testability assessment complete, coverage targets defined |
 
 ---
@@ -751,11 +788,11 @@ These are intentional architectural decisions, not gaps:
 
 | Fact | Value |
 |------|-------|
-| Total FRs | 57 |
+| Total FRs | 67 |
 | Total NFRs | 28 |
-| Epics | 5 |
-| Stories | 23 |
-| E2E Milestones | 4 |
+| Epics | 6 |
+| Stories | 28 |
+| E2E Milestones | 5 |
 | FR Coverage | 100% |
 | Critical Issues | 0 |
 | Blocking Issues | 0 |
@@ -771,6 +808,67 @@ This assessment identified **0 critical issues** and **2 minor concerns** across
 ---
 
 **Assessment Completed:** 2025-12-22
+**Revised:** 2025-12-29
 **Assessor:** Implementation Readiness Workflow (BMM)
 **Report:** `_bmad-output/implementation-readiness-report-2025-12-22.md`
+
+---
+
+## 2025-12-29 Revision: Epic 6 Addition
+
+### Epic 6 Quality Assessment
+
+#### Epic 6: Account Availability & Cooldown
+
+| Criterion | Assessment | Notes |
+|-----------|------------|-------|
+| User Value Focus | ✅ PASS | "Users receive sandbox only when properly cleaned account available; see queue position" |
+| Epic Independence | ✅ PASS | Depends on Epics 2, 4, 5 - Final feature epic |
+| Story Sizing | ✅ PASS | 5 appropriately-sized stories |
+| Forward Dependencies | ✅ PASS | No forward dependencies |
+
+**Analysis:** Epic 6 delivers clear end-user value - ensures billing separation and provides queue visibility. The 24-hour cooldown rationale (billing separation, not cleanup safety) was clarified through 5 Whys elicitation.
+
+**Stories Assessment:**
+- 6.1: ISB Lambda `/api/accounts` integration - ✅ Extends existing `isb-lambda.ts` pattern
+- 6.2: Account cooldown logic - ✅ Implements readiness rules with billing separation rationale
+- 6.3: Queue position estimation - ✅ ADR-003/ADR-004: SQS+DynamoDB hybrid with best-effort estimates
+- 6.4: Capacity crunch detection - ✅ Operator alerts with DynamoDB-backed throttling
+- 6.5: E2E Milestone - ✅ Validates account cooldown feature
+
+### Architecture Decision Records (Epic 6)
+
+| ADR | Decision | Trade-off |
+|-----|----------|-----------|
+| **ADR-001** | Direct Lambda invoke (not API Gateway) | Coupling for simplicity - reuses existing pattern |
+| **ADR-002** | Query ISB fresh each time (no caching) | ~500ms latency for guaranteed consistency |
+| **ADR-003** | SQS DelayQueue + DynamoDB for queue position | Complexity for FIFO ordering + position queries |
+| **ADR-004** | Best-effort estimate with disclaimer | Honest about uncertainty; "may change based on demand" |
+| **ADR-005** | Check accounts AFTER allow-list, BEFORE scoring | Fail fast on infrastructure constraints |
+
+### Elicitation Methods Applied (Epic 6)
+
+1. **User Persona Focus Group** - Changed "cooldown" to "routine maintenance" in user messages
+2. **Pre-mortem Analysis** - Added pagination logging, TOCTOU handling, timezone safety
+3. **Architecture Decision Records** - Documented 5 ADRs with trade-offs
+4. **Red Team vs Blue Team** - Applied TOCTOU race condition handling
+5. **5 Whys Deep Dive** - Clarified 24hr cooldown is for billing separation, not cleanup safety
+
+### State Machine Integration
+
+**State Machine Order:** `ALLOW_LIST_CHECK` → `ACCOUNT_COOLDOWN_CHECK` → `BUSINESS_HOURS` → `SCORING` → `DECIDING`
+
+This ensures account availability is checked early (fail fast) before scoring computation.
+
+### Revision Summary
+
+| Metric | Before | After | Delta |
+|--------|--------|-------|-------|
+| Total FRs | 57 | 67 | +10 |
+| Epics | 5 | 6 | +1 |
+| Stories | 23 | 28 | +5 |
+| E2E Milestones | 4 | 5 | +1 |
+| FR Coverage | 100% | 100% | - |
+
+**Revision Status:** ✅ PASS - Epic 6 fully integrated and validated.
 
