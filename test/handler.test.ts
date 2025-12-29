@@ -116,6 +116,18 @@ const mockIsbLambdaService: IsbLambdaService = {
   denyLease: mockDenyLease,
 };
 
+// Mock SQS service for testing (used for delay queue operations)
+const mockSendDelayedRequest = vi.fn().mockResolvedValue({ success: true, messageId: 'test-message-id' });
+const mockReceiveMessages = vi.fn().mockResolvedValue({ success: true, messages: [] });
+const mockDeleteMessage = vi.fn().mockResolvedValue({ success: true });
+const mockGetQueueDepth = vi.fn().mockResolvedValue({ success: true, approximateNumberOfMessages: 0 });
+const mockSQSService: SQSService = {
+  sendDelayedRequest: mockSendDelayedRequest,
+  receiveMessages: mockReceiveMessages,
+  deleteMessage: mockDeleteMessage,
+  getQueueDepth: mockGetQueueDepth,
+};
+
 describe('handler', () => {
   const mockContext: Context = {
     callbackWaitsForEmptyEventLoop: false,
@@ -161,9 +173,13 @@ describe('handler', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Mock time to be within business hours (Tuesday 10am UK time)
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-07T10:00:00Z')); // Tuesday 10am UTC = 10am UK (winter)
     // Inject mock services for testing
     setEventBridgeService(mockEventBridgeService);
     setIsbLambdaService(mockIsbLambdaService);
+    setSQSService(mockSQSService);
     // Use mock bank holiday service to ensure consistent business hours (always within)
     setBankHolidayService(createMockBankHolidayService([]));
     // Default domain allowlist includes test domains as verified
@@ -177,6 +193,8 @@ describe('handler', () => {
   });
 
   afterEach(() => {
+    // Restore real timers
+    vi.useRealTimers();
     // Reset to avoid affecting other tests
     resetEventBridgeService();
     resetIsbLambdaService();
