@@ -271,7 +271,8 @@ describe('ALLOW_LIST_CHECK handler', () => {
 
     const result = handlers[ApprovalState.ALLOW_LIST_CHECK](context);
 
-    expect(result.nextState).toBe(ApprovalState.SCORING);
+    // Now goes to ACCOUNT_COOLDOWN_CHECK before SCORING (Epic 6)
+    expect(result.nextState).toBe(ApprovalState.ACCOUNT_COOLDOWN_CHECK);
     expect(result.context.allowListOverride).toBe(false);
   });
 
@@ -299,6 +300,92 @@ describe('ALLOW_LIST_CHECK handler', () => {
     const originalContext = JSON.parse(JSON.stringify(context));
 
     handlers[ApprovalState.ALLOW_LIST_CHECK](context);
+
+    expect(context).toEqual(originalContext);
+  });
+});
+
+describe('ACCOUNT_COOLDOWN_CHECK handler (Epic 6)', () => {
+  const handlers = createStateHandlers();
+
+  it('should transition to SCORING when hasReadyAccount is true', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+      hasReadyAccount: true,
+      readyAccountCount: 2,
+    };
+
+    const result = handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
+
+    expect(result.nextState).toBe(ApprovalState.SCORING);
+    expect(result.context.reason).toContain('Ready sandbox account available');
+  });
+
+  it('should transition to SCORING when hasReadyAccount is undefined (backwards compatibility)', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+      // hasReadyAccount not set
+    };
+
+    const result = handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
+
+    expect(result.nextState).toBe(ApprovalState.SCORING);
+    expect(result.context.reason).toContain('Account readiness not checked');
+  });
+
+  it('should transition to DELAYED when hasReadyAccount is false', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+      hasReadyAccount: false,
+      readyAccountCount: 0,
+      coolingAccountCount: 3,
+      estimatedAccountReadyTime: '2025-01-02T14:00:00Z',
+    };
+
+    const result = handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
+
+    expect(result.nextState).toBe(ApprovalState.DELAYED);
+    expect(result.context.decision).toBe('delayed');
+    expect(result.context.accountDelayReason).toBe('NO_READY_ACCOUNTS');
+    expect(result.context.reason).toContain('No sandbox accounts currently available');
+    expect(result.context.reason).toContain('2025-01-02T14:00:00Z');
+  });
+
+  it('should set default delay reason when not specified', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+      hasReadyAccount: false,
+    };
+
+    const result = handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
+
+    expect(result.context.accountDelayReason).toBe('NO_READY_ACCOUNTS');
+    expect(result.context.reason).toContain('Estimated availability: unknown');
+  });
+
+  it('should be a pure function (no mutation)', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+      hasReadyAccount: true,
+    };
+    const originalContext = JSON.parse(JSON.stringify(context));
+
+    handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
 
     expect(context).toEqual(originalContext);
   });

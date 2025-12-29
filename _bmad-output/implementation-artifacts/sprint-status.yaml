@@ -87,7 +87,7 @@ development_status:
   # Epic 6: Account Availability & Cooldown (FR58-FR67, added 2025-12-29)
   epic-6: in-progress
   6-1-isb-lambda-accounts-integration-with-pagination: done
-  6-2-account-cooldown-logic-24hr-with-new-account-grace: backlog
+  6-2-account-cooldown-logic-24hr-with-new-account-grace: done
   6-3-queue-position-estimation-and-user-messaging: backlog
   6-4-capacity-crunch-detection-and-operator-alerts: backlog
   6-5-e2e-milestone-account-cooldown-validation: backlog

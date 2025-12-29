@@ -12,6 +12,8 @@ import {
   buildDelayedMessage,
   buildQueuedMessage,
   buildExpiredMessage,
+  buildCooldownDelayMessage,
+  buildReprocessingMessage,
   formatScoreBreakdown,
   ruleResultsToBreakdown,
 } from '../../src/lib/lease-comments.js';
@@ -335,6 +337,59 @@ describe('Lease Comments Message Builders (Story 5.1)', () => {
       const message = buildAutoApprovedMessage(10, ref);
 
       expect(message).toContain(`Reference: ${ref}`);
+    });
+  });
+
+  describe('buildCooldownDelayMessage (Epic 6)', () => {
+    it('should include maintenance explanation and reference', () => {
+      const message = buildCooldownDelayMessage(testReference);
+
+      expect(message).toContain('Your request has been received');
+      expect(message).toContain('routine maintenance');
+      expect(message).toContain('will be processed automatically');
+      expect(message).toContain(`Reference: ${testReference}`);
+    });
+
+    it('should include estimated availability when provided', () => {
+      const estimatedTime = '2025-01-02T14:00:00Z';
+      const message = buildCooldownDelayMessage(testReference, estimatedTime);
+
+      expect(message).toContain(`Estimated availability: ${estimatedTime}`);
+    });
+
+    it('should not include estimated availability when not provided', () => {
+      const message = buildCooldownDelayMessage(testReference);
+
+      expect(message).not.toContain('Estimated availability');
+    });
+
+    it('should use neutral language (no technical jargon)', () => {
+      const message = buildCooldownDelayMessage(testReference);
+
+      // Should NOT contain technical terms
+      expect(message).not.toContain('cooldown');
+      expect(message).not.toContain('billing');
+      expect(message).not.toContain('24 hour');
+    });
+  });
+
+  describe('buildReprocessingMessage (Epic 6)', () => {
+    it('should include reprocessing status and reference', () => {
+      const message = buildReprocessingMessage(testReference);
+
+      expect(message).toContain('reprocessed');
+      expect(message).toContain('Account assignment is in progress');
+      expect(message).toContain('No action is required');
+      expect(message).toContain(`Reference: ${testReference}`);
+    });
+
+    it('should use reassuring language', () => {
+      const message = buildReprocessingMessage(testReference);
+
+      // Should be user-friendly
+      expect(message).not.toContain('race condition');
+      expect(message).not.toContain('TOCTOU');
+      expect(message).not.toContain('error');
     });
   });
 });

@@ -182,12 +182,49 @@ export const createStateHandlers = (
       };
     }
 
-    // Not allow-listed - proceed to scoring
+    // Not allow-listed - proceed to account cooldown check
     return {
-      nextState: ApprovalState.SCORING,
+      nextState: ApprovalState.ACCOUNT_COOLDOWN_CHECK,
       context: {
         ...context,
         allowListOverride: false,
+      },
+    };
+  },
+
+  /**
+   * ACCOUNT_COOLDOWN_CHECK state handler.
+   * Checks if a sandbox account is ready for assignment (Epic 6).
+   * Account readiness data is pre-populated in context by the handler.
+   */
+  [ApprovalState.ACCOUNT_COOLDOWN_CHECK]: (context: StateContext): StateHandlerResult => {
+    const { hasReadyAccount, estimatedAccountReadyTime, accountDelayReason } = context;
+
+    // If account readiness hasn't been checked yet (undefined), proceed to scoring
+    // This allows backwards compatibility and testing without account check setup
+    if (hasReadyAccount === undefined || hasReadyAccount === true) {
+      // Ready account available - proceed to scoring
+      return {
+        nextState: ApprovalState.SCORING,
+        context: {
+          ...context,
+          reason:
+            hasReadyAccount === undefined
+              ? 'Account readiness not checked - proceeding'
+              : 'Ready sandbox account available',
+        },
+      };
+    }
+
+    // No ready accounts - delay the request
+    const estimatedTime = estimatedAccountReadyTime ?? 'unknown';
+    return {
+      nextState: ApprovalState.DELAYED,
+      context: {
+        ...context,
+        decision: 'delayed',
+        accountDelayReason: accountDelayReason ?? 'NO_READY_ACCOUNTS',
+        reason: `No sandbox accounts currently available. Estimated availability: ${estimatedTime}`,
       },
     };
   },

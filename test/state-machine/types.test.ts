@@ -16,6 +16,7 @@ describe('ApprovalState enum', () => {
     expect(ApprovalState.VALIDATING).toBe('VALIDATING');
     expect(ApprovalState.TIMING_CHECK).toBe('TIMING_CHECK');
     expect(ApprovalState.ALLOW_LIST_CHECK).toBe('ALLOW_LIST_CHECK');
+    expect(ApprovalState.ACCOUNT_COOLDOWN_CHECK).toBe('ACCOUNT_COOLDOWN_CHECK'); // Epic 6
     expect(ApprovalState.SCORING).toBe('SCORING');
     expect(ApprovalState.DECIDING).toBe('DECIDING');
     expect(ApprovalState.APPROVED).toBe('APPROVED');
@@ -25,9 +26,9 @@ describe('ApprovalState enum', () => {
     expect(ApprovalState.ERROR).toBe('ERROR');
   });
 
-  it('should have exactly 11 states', () => {
+  it('should have exactly 12 states', () => {
     const stateValues = Object.values(ApprovalState);
-    expect(stateValues).toHaveLength(11);
+    expect(stateValues).toHaveLength(12);
   });
 });
 
@@ -49,6 +50,7 @@ describe('TERMINAL_STATES', () => {
     expect(TERMINAL_STATES).not.toContain(ApprovalState.VALIDATING);
     expect(TERMINAL_STATES).not.toContain(ApprovalState.TIMING_CHECK);
     expect(TERMINAL_STATES).not.toContain(ApprovalState.ALLOW_LIST_CHECK);
+    expect(TERMINAL_STATES).not.toContain(ApprovalState.ACCOUNT_COOLDOWN_CHECK); // Epic 6
     expect(TERMINAL_STATES).not.toContain(ApprovalState.SCORING);
     expect(TERMINAL_STATES).not.toContain(ApprovalState.DECIDING);
   });

@@ -182,3 +182,51 @@ export const buildExpiredMessage = (
     `Reference: ${referenceNumber}`,
   ].join('\n');
 };
+
+/**
+ * Builds the message for a request delayed due to account cooldown (Epic 6).
+ *
+ * Used when no sandbox accounts are currently available because all accounts
+ * are either in use (Active) or in their 24-hour billing separation cooldown.
+ *
+ * @param estimatedAvailability - Estimated time when an account will be ready (optional)
+ * @param referenceNumber - Reference in ISB-YYYY-NNNN format
+ * @returns Formatted message string
+ */
+export const buildCooldownDelayMessage = (
+  referenceNumber: string,
+  estimatedAvailability?: string
+): string => {
+  const lines = [
+    'Your request has been received. All sandbox accounts are currently undergoing',
+    'routine maintenance to ensure a clean environment for each user.',
+  ];
+
+  if (estimatedAvailability) {
+    lines.push(`Estimated availability: ${estimatedAvailability}`);
+  }
+
+  lines.push(
+    'Your request will be processed automatically when an account becomes available.',
+    `Reference: ${referenceNumber}`
+  );
+
+  return lines.join('\n');
+};
+
+/**
+ * Builds the message for a request being reprocessed after TOCTOU race condition (Epic 6).
+ *
+ * Used when the Approver approved a request but ISB rejected it because the
+ * account was no longer available (rare race condition).
+ *
+ * @param referenceNumber - Reference in ISB-YYYY-NNNN format
+ * @returns Formatted message string
+ */
+export const buildReprocessingMessage = (referenceNumber: string): string => {
+  return [
+    'Your request is being reprocessed. Account assignment is in progress.',
+    'This may take a few moments. No action is required on your part.',
+    `Reference: ${referenceNumber}`,
+  ].join('\n');
+};

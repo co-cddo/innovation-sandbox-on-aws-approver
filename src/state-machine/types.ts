@@ -18,6 +18,8 @@ export enum ApprovalState {
   TIMING_CHECK = 'TIMING_CHECK',
   /** Checking if user is on the allow-list for auto-approval bypass */
   ALLOW_LIST_CHECK = 'ALLOW_LIST_CHECK',
+  /** Checking if a sandbox account is ready for assignment (Epic 6) */
+  ACCOUNT_COOLDOWN_CHECK = 'ACCOUNT_COOLDOWN_CHECK',
   /** Running scoring rules */
   SCORING = 'SCORING',
   /** Making approval/denial/escalation decision */
@@ -131,6 +133,20 @@ export interface StateContext {
   isEndOfWindow?: boolean;
   /** Next processing time if delayed (ISO string) */
   nextProcessingTime?: string;
+
+  // Account availability data (populated in ACCOUNT_COOLDOWN_CHECK state - Epic 6)
+  /** Whether at least one sandbox account is ready for assignment */
+  hasReadyAccount?: boolean;
+  /** Count of accounts ready for immediate assignment */
+  readyAccountCount?: number;
+  /** Count of accounts in cooldown period */
+  coolingAccountCount?: number;
+  /** Count of accounts currently in use */
+  activeAccountCount?: number;
+  /** Estimated time when first cooling account will be ready (ISO string) */
+  estimatedAccountReadyTime?: string;
+  /** Delay reason if no accounts available */
+  accountDelayReason?: 'NO_READY_ACCOUNTS' | 'ACCOUNT_FETCH_ERROR';
 
   // Processing state (populated during processing)
   /** Calculated risk score */
