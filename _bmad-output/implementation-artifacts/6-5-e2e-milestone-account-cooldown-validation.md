@@ -90,21 +90,24 @@ So that **I have confidence the feature is production-ready**.
 - [x] 6.2: Account cooldown logic (24hr cooldown, new account grace period)
 - [x] 6.3: Queue position estimation and user messaging
 - [x] 6.4: Capacity crunch detection and operator alerts
+- [x] 6.5 prep: Main handler integration complete (7101945)
 
-### Integration Points Needed for Full E2E
-Note: The core library functions are complete. Full integration requires:
+### Integration Completed
+The main handler (`src/handler.ts`) now:
+1. Calls ISB Lambda to fetch all accounts via `checkAccountReadinessNow()`
+2. Applies 24hr cooldown logic from `checkAccountReadiness()`
+3. Passes account readiness data to state machine context
+4. Uses `buildCooldownDelayMessage()` for account cooldown delays
+5. Differentiates delay reasons in logs and user messages
 
-1. **State Machine Integration** (not yet complete)
-   - Connect `ACCOUNT_COOLDOWN_CHECK` handler to ISB Lambda service
-   - Wire up account readiness check in orchestrator
-
-2. **DynamoDB Queue Persistence** (deferred)
+### Remaining Integration (deferred to future work)
+1. **DynamoDB Queue Persistence**
    - Store queue position for FIFO processing
    - Track lastCapacityCrunchAlert for throttling
 
-3. **Slack Alert Integration** (partial)
+2. **Slack Capacity Crunch Alert**
    - buildCapacityCrunchAlert() ready
-   - Needs wiring to existing Slack service
+   - Needs trigger point when capacity crunch detected
 
 ## Dev Agent Record
 
