@@ -128,13 +128,13 @@ describe('Type structures', () => {
       rule: 'first-time-user',
       points: 5,
       triggered: true,
-      reason: 'No previous leases found',
+      reason: 'No previous sessions found',
     };
 
     expect(result.rule).toBe('first-time-user');
     expect(result.points).toBe(5);
     expect(result.triggered).toBe(true);
-    expect(result.reason).toBe('No previous leases found');
+    expect(result.reason).toBe('No previous sessions found');
   });
 
   it('should allow RuleResult without optional reason', () => {

@@ -635,7 +635,7 @@ describe('scoring rules', () => {
       const result = orgCleanRecordRule(context, -2);
       expect(result.points).toBe(-2);
       expect(result.triggered).toBe(true);
-      expect(result.reason).toContain('5 leases');
+      expect(result.reason).toContain('5 sessions');
     });
 
     it('should return 0 when org has less than 5 leases (even if clean)', () => {
