@@ -1,7 +1,9 @@
-name: Deploy
+name: CI
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
 
 permissions:
@@ -39,10 +41,12 @@ jobs:
         run: npm run test -- --coverage
 
       - name: Configure AWS credentials via OIDC
+        if: github.event_name == 'push'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::568672915267:role/GitHubActions-Approver-InfraDeploy
           aws-region: us-west-2
 
       - name: Deploy CDK stacks
+        if: github.event_name == 'push'
         run: npm run build && npx cdk deploy --all --require-approval never
