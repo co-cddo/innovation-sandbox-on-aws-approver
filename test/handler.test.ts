@@ -43,56 +43,56 @@ vi.mock('../src/lib/logger.ts', () => ({
   },
 }));
 
-// Mock the EventBridge client to prevent real AWS calls
+// Mock the EventBridge client to prevent real AWS calls (Vitest v4 compatible)
 vi.mock('@aws-sdk/client-eventbridge', () => ({
-  EventBridgeClient: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({}),
-  })),
-  PutEventsCommand: vi.fn(),
+  EventBridgeClient: class MockEventBridgeClient {
+    send = vi.fn().mockResolvedValue({});
+  },
+  PutEventsCommand: class MockPutEventsCommand {},
 }));
 
-// Mock the Lambda client to prevent real AWS calls
+// Mock the Lambda client to prevent real AWS calls (Vitest v4 compatible)
 vi.mock('@aws-sdk/client-lambda', () => ({
-  LambdaClient: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({}),
-  })),
-  InvokeCommand: vi.fn(),
+  LambdaClient: class MockLambdaClient {
+    send = vi.fn().mockResolvedValue({});
+  },
+  InvokeCommand: class MockInvokeCommand {},
 }));
 
-// Mock the DynamoDB client to prevent real AWS calls
+// Mock the DynamoDB client to prevent real AWS calls (Vitest v4 compatible)
 vi.mock('@aws-sdk/client-dynamodb', () => ({
-  DynamoDBClient: vi.fn().mockImplementation(() => ({})),
+  DynamoDBClient: class MockDynamoDBClient {},
 }));
 
 vi.mock('@aws-sdk/lib-dynamodb', () => ({
   DynamoDBDocumentClient: {
     from: vi.fn().mockReturnValue({}),
   },
-  QueryCommand: vi.fn(),
+  QueryCommand: class MockQueryCommand {},
 }));
 
-// Mock the S3 client to prevent real AWS calls
+// Mock the S3 client to prevent real AWS calls (Vitest v4 compatible)
 vi.mock('@aws-sdk/client-s3', () => ({
-  S3Client: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({}),
-  })),
-  GetObjectCommand: vi.fn(),
+  S3Client: class MockS3Client {
+    send = vi.fn().mockResolvedValue({});
+  },
+  GetObjectCommand: class MockGetObjectCommand {},
 }));
 
-// Mock the Bedrock client to prevent real AWS calls
+// Mock the Bedrock client to prevent real AWS calls (Vitest v4 compatible)
 vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
-  BedrockRuntimeClient: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({}),
-  })),
-  InvokeModelCommand: vi.fn(),
+  BedrockRuntimeClient: class MockBedrockRuntimeClient {
+    send = vi.fn().mockResolvedValue({});
+  },
+  InvokeModelCommand: class MockInvokeModelCommand {},
 }));
 
-// Mock the SQS client to prevent real AWS calls
+// Mock the SQS client to prevent real AWS calls (Vitest v4 compatible)
 vi.mock('@aws-sdk/client-sqs', () => ({
-  SQSClient: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({}),
-  })),
-  SendMessageCommand: vi.fn(),
+  SQSClient: class MockSQSClient {
+    send = vi.fn().mockResolvedValue({});
+  },
+  SendMessageCommand: class MockSendMessageCommand {},
 }));
 
 // Import the mocked logger for assertions

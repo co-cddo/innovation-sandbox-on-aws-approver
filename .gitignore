@@ -1,6 +1,11 @@
 # Dependencies
 node_modules/
 
+# Yarn PnP (generated - can be regenerated with yarn install)
+.pnp.cjs
+.pnp.loader.mjs
+.yarn/
+
 # Build outputs
 dist/
 cdk.out/
