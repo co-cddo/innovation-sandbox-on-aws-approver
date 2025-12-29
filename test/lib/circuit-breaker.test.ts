@@ -12,14 +12,12 @@ import {
   CircuitOpenError,
   createCircuitBreaker,
   DEFAULT_CIRCUIT_BREAKER_CONFIG,
+  type CircuitBreakerLogger,
 } from '../../src/lib/circuit-breaker.js';
 
 describe('CircuitBreaker', () => {
   let circuitBreaker: CircuitBreaker;
-  let mockLogger: {
-    info: ReturnType<typeof vi.fn>;
-    warn: ReturnType<typeof vi.fn>;
-  };
+  let mockLogger: CircuitBreakerLogger;
 
   beforeEach(() => {
     vi.clearAllMocks();
