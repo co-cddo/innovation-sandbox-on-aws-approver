@@ -57,8 +57,14 @@ import {
   buildEscalatedMessage,
   buildDelayedMessage,
   buildExpiredMessage,
+  buildCooldownDelayMessage,
   ruleResultsToBreakdown,
 } from './lib/lease-comments.js';
+import {
+  checkAccountReadiness,
+  getConfigFromEnvironment,
+  type AccountReadinessResult,
+} from './lib/account-cooldown.js';
 import {
   ApprovalState,
   createInitialContext,
@@ -546,6 +552,77 @@ const checkDomainVerification = async (domain: string): Promise<boolean> => {
 };
 
 /**
+ * Checks account readiness by querying ISB Lambda and applying cooldown logic.
+ * Returns account readiness result for inclusion in state context.
+ * Returns a "proceed" result on failure (pessimistic: let scoring decide).
+ */
+const checkAccountReadinessNow = async (): Promise<{
+  hasReadyAccount: boolean;
+  readyAccountCount: number;
+  coolingAccountCount: number;
+  activeAccountCount: number;
+  estimatedAccountReadyTime: string | undefined;
+  accountDelayReason: 'NO_READY_ACCOUNTS' | 'ACCOUNT_FETCH_ERROR' | undefined;
+}> => {
+  try {
+    // Fetch all accounts from ISB Lambda
+    const accountsResult = await isbLambdaService.getAccounts();
+
+    if (!accountsResult.success) {
+      logger.warn('Failed to fetch accounts from ISB Lambda - proceeding to scoring', {
+        error: accountsResult.error,
+      });
+      // On failure, proceed (let scoring decide) - pessimistic approach
+      // Don't block requests if we can't check accounts
+      return {
+        hasReadyAccount: true, // Assume ready to proceed
+        readyAccountCount: 0,
+        coolingAccountCount: 0,
+        activeAccountCount: 0,
+        estimatedAccountReadyTime: undefined,
+        accountDelayReason: undefined, // No delay, proceed with warning
+      };
+    }
+
+    // Apply cooldown logic
+    const cooldownConfig = getConfigFromEnvironment();
+    const now = new Date();
+    const readinessResult = checkAccountReadiness(accountsResult.accounts, now, cooldownConfig);
+
+    logger.info('Account readiness check completed', {
+      totalAccounts: accountsResult.accounts.length,
+      readyAccounts: readinessResult.readyAccounts.length,
+      coolingAccounts: readinessResult.coolingAccounts.length,
+      activeAccounts: readinessResult.activeAccounts.length,
+      hasReadyAccount: readinessResult.hasReadyAccount,
+      estimatedReadyTime: readinessResult.estimatedReadyTime?.toISOString(),
+    });
+
+    return {
+      hasReadyAccount: readinessResult.hasReadyAccount,
+      readyAccountCount: readinessResult.readyAccounts.length,
+      coolingAccountCount: readinessResult.coolingAccounts.length,
+      activeAccountCount: readinessResult.activeAccounts.length,
+      estimatedAccountReadyTime: readinessResult.estimatedReadyTime?.toISOString(),
+      accountDelayReason: readinessResult.hasReadyAccount ? undefined : 'NO_READY_ACCOUNTS',
+    };
+  } catch (error) {
+    logger.error('Error checking account readiness - proceeding to scoring', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    // On error, proceed (let scoring decide)
+    return {
+      hasReadyAccount: true,
+      readyAccountCount: 0,
+      coolingAccountCount: 0,
+      activeAccountCount: 0,
+      estimatedAccountReadyTime: undefined,
+      accountDelayReason: undefined,
+    };
+  }
+};
+
+/**
  * Checks if the current time is within business hours.
  * Returns business hours result for inclusion in state context.
  */
@@ -589,6 +666,16 @@ const checkBusinessHoursNow = async (): Promise<BusinessHoursResult> => {
   }
 };
 
+/** Account readiness check result for context preparation */
+interface AccountReadinessCheck {
+  hasReadyAccount: boolean;
+  readyAccountCount: number;
+  coolingAccountCount: number;
+  activeAccountCount: number;
+  estimatedAccountReadyTime: string | undefined;
+  accountDelayReason: 'NO_READY_ACCOUNTS' | 'ACCOUNT_FETCH_ERROR' | undefined;
+}
+
 /**
  * Prepares the initial state context from a validated event.
  */
@@ -598,6 +685,7 @@ const prepareContext = (
   orgLeaseHistory: LeaseHistoryRecord[],
   isVerifiedDomain: boolean,
   businessHoursResult: BusinessHoursResult,
+  accountReadinessCheck: AccountReadinessCheck,
   aiAnalysis?: AIAnalysisResult
 ): StateContext => {
   const { detail } = event;
@@ -621,6 +709,13 @@ const prepareContext = (
     isWithinBusinessHours: businessHoursResult.isWithinBusinessHours,
     isEndOfWindow: businessHoursResult.isEndOfWindow,
     nextProcessingTime: businessHoursResult.nextProcessingTime,
+    // Account readiness data from cooldown check (Epic 6)
+    hasReadyAccount: accountReadinessCheck.hasReadyAccount,
+    readyAccountCount: accountReadinessCheck.readyAccountCount,
+    coolingAccountCount: accountReadinessCheck.coolingAccountCount,
+    activeAccountCount: accountReadinessCheck.activeAccountCount,
+    estimatedAccountReadyTime: accountReadinessCheck.estimatedAccountReadyTime,
+    accountDelayReason: accountReadinessCheck.accountDelayReason,
   };
 };
 
@@ -1194,6 +1289,9 @@ export const handler = async (
     // Check business hours first
     const businessHoursResult = await checkBusinessHoursNow();
 
+    // Check account readiness (Epic 6 - account cooldown)
+    const accountReadinessCheck = await checkAccountReadinessNow();
+
     // Query user and org history before running state machine
     const userLeaseHistory = await queryUserHistory(leaseId.userEmail);
     const orgLeaseHistory = await queryOrgHistory(leaseId.userEmail);
@@ -1211,6 +1309,7 @@ export const handler = async (
       orgLeaseHistory,
       isVerifiedDomain,
       businessHoursResult,
+      accountReadinessCheck,
       aiAnalysis
     );
     const result = orchestrator.run(ApprovalState.RECEIVED, initialContext);
@@ -1364,14 +1463,20 @@ export const handler = async (
     }
 
     if (decision === 'delayed') {
-      // Request arrived outside business hours - send to delay queue
-      logger.info('Request delayed - outside business hours', {
+      // Determine delay reason: business hours or account cooldown
+      const { accountDelayReason, estimatedAccountReadyTime } = result.context;
+      const isAccountCooldownDelay = accountDelayReason === 'NO_READY_ACCOUNTS';
+
+      logger.info('Request delayed', {
         action: 'delayed',
         timestamp: new Date().toISOString(),
         leaseId: leaseId.uuid,
         userEmail: leaseId.userEmail,
         reason,
+        delayReason: isAccountCooldownDelay ? 'account_cooldown' : 'outside_business_hours',
         nextProcessingTime: result.context.nextProcessingTime,
+        estimatedAccountReadyTime,
+        accountDelayReason,
       });
 
       // Check if SQS service is configured
@@ -1404,7 +1509,7 @@ export const handler = async (
         originalEvent: validatedEvent,
         receivedAt: new Date().toISOString(),
         processAfter: result.context.nextProcessingTime ?? new Date().toISOString(),
-        reason: reason ?? 'Outside business hours',
+        reason: reason ?? (isAccountCooldownDelay ? 'No ready accounts' : 'Outside business hours'),
       };
 
       const sqsResult = await sqsService.sendDelayedRequest(delayMessage);
@@ -1439,11 +1544,14 @@ export const handler = async (
         leaseId: leaseId.uuid,
         userEmail: leaseId.userEmail,
         processAfter: delayMessage.processAfter,
+        delayReason: isAccountCooldownDelay ? 'account_cooldown' : 'outside_business_hours',
       });
 
-      // Update lease comments (Story 5.1 AC5)
+      // Update lease comments with appropriate message
       const referenceNumber = generateReferenceNumber(leaseId.uuid);
-      const delayedMessage = buildDelayedMessage(referenceNumber);
+      const delayedMessage = isAccountCooldownDelay
+        ? buildCooldownDelayMessage(referenceNumber, estimatedAccountReadyTime)
+        : buildDelayedMessage(referenceNumber);
       await updateLeaseComments(leaseId, delayedMessage);
 
       return {

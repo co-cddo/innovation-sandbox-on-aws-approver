@@ -111,10 +111,20 @@ const mockEventBridgeService: EventBridgeService = {
 // Mock ISB Lambda service for testing (used for actual approvals)
 const mockApproveLease = vi.fn().mockResolvedValue({ success: true, statusCode: 200 });
 const mockDenyLease = vi.fn().mockResolvedValue({ success: true, statusCode: 200 });
+// Default mock returns a ready account (created > 60 min ago, last edited > 24hr ago)
+const mockReadyAccount = {
+  awsAccountId: '123456789012',
+  name: 'pool-001',
+  status: 'Available' as const,
+  meta: {
+    createdTime: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(), // 48hr ago
+    lastEditTime: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), // 25hr ago (past cooldown)
+  },
+};
 const mockGetAccounts = vi.fn().mockResolvedValue({
   success: true,
-  accounts: [],
-  totalFetched: 0,
+  accounts: [mockReadyAccount],
+  totalFetched: 1,
   pagesTraversed: 1,
 });
 const mockIsbLambdaService: IsbLambdaService = {
