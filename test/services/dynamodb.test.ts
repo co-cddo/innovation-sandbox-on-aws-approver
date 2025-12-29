@@ -472,7 +472,7 @@ describe('DynamoDB Service', () => {
   describe('updateLeaseComments (Story 5.1)', () => {
     it('should update comments field with UpdateCommand (AC1)', async () => {
       const leaseId = { userEmail: 'test@example.gov.uk', uuid: 'lease-123' };
-      const comments = 'Your lease request has been approved.';
+      const comments = 'Your request has been approved.';
       mockSend.mockResolvedValueOnce({});
 
       const result = await service.updateLeaseComments(leaseId, comments);
@@ -532,7 +532,7 @@ describe('DynamoDB Service', () => {
 
     it('should handle multiline comments correctly', async () => {
       const multilineComments = [
-        'Your lease request has been automatically approved.',
+        'Your request has been automatically approved.',
         'Score: 15 (threshold: 20)',
         'Reference: ISB-2025-0042',
       ].join('\n');

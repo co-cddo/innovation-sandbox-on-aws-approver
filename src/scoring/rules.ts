@@ -37,7 +37,7 @@ export const expiredLeasesRule: ScoringRuleFn = (context, weight) => {
     ruleId: 'expired_leases',
     points: expiredCount * weight,
     triggered: expiredCount > 0,
-    reason: expiredCount > 0 ? `${expiredCount} expired lease(s) in last 30 days` : undefined,
+    reason: expiredCount > 0 ? `${expiredCount} expired session(s) in last 30 days` : undefined,
   };
 };
 
@@ -54,7 +54,7 @@ export const budgetExceededRule: ScoringRuleFn = (context, weight) => {
     ruleId: 'budget_exceeded',
     points: exceededCount * weight,
     triggered: exceededCount > 0,
-    reason: exceededCount > 0 ? `${exceededCount} budget exceeded lease(s) in last 30 days` : undefined,
+    reason: exceededCount > 0 ? `${exceededCount} budget exceeded session(s) in last 30 days` : undefined,
   };
 };
 
@@ -69,7 +69,7 @@ export const firstTimeUserRule: ScoringRuleFn = (context, weight) => {
     ruleId: 'first_time_user',
     points: isFirstTime ? weight : 0,
     triggered: isFirstTime,
-    reason: isFirstTime ? 'No previous leases found' : undefined,
+    reason: isFirstTime ? 'No previous sessions found' : undefined,
   };
 };
 
@@ -162,7 +162,7 @@ export const templateHopperRule: ScoringRuleFn = (context, weight) => {
     ruleId: 'template_hopper',
     points: isHopper ? weight : 0,
     triggered: isHopper,
-    reason: isHopper ? `${history.length}+ leases with all different templates` : undefined,
+    reason: isHopper ? `${history.length}+ sessions with all different templates` : undefined,
   };
 };
 
@@ -262,7 +262,7 @@ export const cooldownViolationRule: ScoringRuleFn = (context, weight) => {
     points: isViolation ? weight : 0,
     triggered: isViolation,
     reason: isViolation
-      ? `Request ${Math.round(timeSinceCreation / 60000)} minutes after previous lease`
+      ? `Request ${Math.round(timeSinceCreation / 60000)} minutes after previous session`
       : undefined,
   };
 };
@@ -370,7 +370,7 @@ export const orgCleanRecordRule: ScoringRuleFn = (context, weight) => {
     points: isClean ? weight : 0, // weight is negative for bonus
     triggered: isClean,
     reason: isClean
-      ? `Organization has clean record (${recentOrgHistory.length} leases, 0 negative)`
+      ? `Organization has clean record (${recentOrgHistory.length} sessions, 0 negative)`
       : undefined,
   };
 };

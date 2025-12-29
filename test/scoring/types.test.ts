@@ -203,13 +203,13 @@ describe('scoring types', () => {
         ruleId: 'first_time_user',
         points: 5,
         triggered: true,
-        reason: 'No previous leases found',
+        reason: 'No previous sessions found',
       };
 
       expect(result.ruleId).toBe('first_time_user');
       expect(result.points).toBe(5);
       expect(result.triggered).toBe(true);
-      expect(result.reason).toBe('No previous leases found');
+      expect(result.reason).toBe('No previous sessions found');
     });
 
     it('should allow optional fallbackUsed field in ScoringRuleResult', () => {

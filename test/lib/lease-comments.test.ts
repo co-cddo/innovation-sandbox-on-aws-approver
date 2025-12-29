@@ -25,7 +25,7 @@ describe('Lease Comments Message Builders (Story 5.1)', () => {
     it('should format auto-approved message with score and reference', () => {
       const message = buildAutoApprovedMessage(15, testReference);
 
-      expect(message).toContain('Your lease request has been automatically approved.');
+      expect(message).toContain('Your request has been automatically approved.');
       expect(message).toContain('Score: 15 (threshold: 20)');
       expect(message).toContain(`Reference: ${testReference}`);
     });
@@ -145,7 +145,7 @@ describe('Lease Comments Message Builders (Story 5.1)', () => {
 
       const message = buildEscalatedMessage(25, breakdown, testReference);
 
-      expect(message).toContain('Your lease request requires additional review.');
+      expect(message).toContain('Your request requires additional review.');
       expect(message).toContain('Score: 25 (threshold: 20)');
       expect(message).toContain('Score breakdown:');
       expect(message).toContain('- first_time_user: +5');
@@ -182,7 +182,7 @@ describe('Lease Comments Message Builders (Story 5.1)', () => {
     it('should format delayed message with business hours info', () => {
       const message = buildDelayedMessage(testReference);
 
-      expect(message).toContain('Your lease request has been received.');
+      expect(message).toContain('Your request has been received.');
       expect(message).toContain('outside of our');
       expect(message).toContain('processing hours');
       expect(message).toContain('7am-7pm London time, weekdays');
@@ -202,7 +202,7 @@ describe('Lease Comments Message Builders (Story 5.1)', () => {
     it('should format queued message with position', () => {
       const message = buildQueuedMessage(3, testReference);
 
-      expect(message).toContain('Your lease request has been received.');
+      expect(message).toContain('Your request has been received.');
       expect(message).toContain('sandbox accounts are currently in use');
       expect(message).toContain('queued');
       expect(message).toContain('when an account becomes available');
@@ -227,7 +227,7 @@ describe('Lease Comments Message Builders (Story 5.1)', () => {
     it('should format expired message with default business days', () => {
       const message = buildExpiredMessage(testReference);
 
-      expect(message).toContain('Your lease request has expired after 5 business days in queue.');
+      expect(message).toContain('Your request has expired after 5 business days in queue.');
       expect(message).toContain('no sandbox accounts were available');
       expect(message).toContain('submit a new request');
       expect(message).toContain('if you still need access');

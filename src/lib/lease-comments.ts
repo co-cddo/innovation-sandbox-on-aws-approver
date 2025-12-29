@@ -47,7 +47,7 @@ export const buildAutoApprovedMessage = (
   threshold: number = DEFAULT_THRESHOLD
 ): string => {
   return [
-    'Your lease request has been automatically approved.',
+    'Your request has been automatically approved.',
     `Score: ${score} (threshold: ${threshold})`,
     `Reference: ${referenceNumber}`,
   ].join('\n');
@@ -65,7 +65,7 @@ export const buildAllowListApprovedMessage = (
   referenceNumber: string
 ): string => {
   return [
-    'Your lease request has been automatically approved (ALLOW-LIST-OVERRIDE).',
+    'Your request has been automatically approved (ALLOW-LIST-OVERRIDE).',
     `Score: ${score} (for reference only)`,
     `Reference: ${referenceNumber}`,
   ].join('\n');
@@ -118,7 +118,7 @@ export const buildEscalatedMessage = (
   const breakdown = formatScoreBreakdown(scoreBreakdown);
 
   return [
-    'Your lease request requires additional review.',
+    'Your request requires additional review.',
     `Score: ${score} (threshold: ${threshold})`,
     '',
     'Score breakdown:',
@@ -138,7 +138,7 @@ export const buildEscalatedMessage = (
  */
 export const buildDelayedMessage = (referenceNumber: string): string => {
   return [
-    'Your lease request has been received. As it was submitted outside of our',
+    'Your request has been received. As it was submitted outside of our',
     'processing hours (7am-7pm London time, weekdays), it will be processed',
     'during the next available window.',
     `Reference: ${referenceNumber}`,
@@ -157,7 +157,7 @@ export const buildQueuedMessage = (
   referenceNumber: string
 ): string => {
   return [
-    'Your lease request has been received. All sandbox accounts are currently in use.',
+    'Your request has been received. All sandbox accounts are currently in use.',
     'Your request has been queued and will be processed when an account becomes available.',
     `Queue position: ${queuePosition}`,
     `Reference: ${referenceNumber}`,
@@ -176,7 +176,7 @@ export const buildExpiredMessage = (
   businessDays: number = 5
 ): string => {
   return [
-    `Your lease request has expired after ${businessDays} business days in queue.`,
+    `Your request has expired after ${businessDays} business days in queue.`,
     'This may have occurred because no sandbox accounts were available.',
     'Please submit a new request if you still need access.',
     `Reference: ${referenceNumber}`,
