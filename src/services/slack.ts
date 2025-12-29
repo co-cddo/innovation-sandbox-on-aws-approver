@@ -118,6 +118,19 @@ export const formatScoreBreakdownForSlack = (breakdown: ScoreBreakdown): string 
 };
 
 /**
+ * Encodes lease composite key for console URL.
+ * Creates base64-encoded JSON containing userEmail and uuid.
+ *
+ * @param userEmail - User's email address
+ * @param uuid - Lease UUID
+ * @returns Base64-encoded JSON string
+ */
+export const encodeLeaseCompositeKey = (userEmail: string, uuid: string): string => {
+  const json = JSON.stringify({ userEmail, uuid });
+  return Buffer.from(json, 'utf8').toString('base64');
+};
+
+/**
  * Builds the Slack notification payload.
  *
  * @param params - Escalation notification parameters
@@ -140,7 +153,7 @@ export const buildSlackPayload = (
     threshold: String(threshold),
     template_id: params.templateId,
     score_breakdown: formatScoreBreakdownForSlack(params.scoreBreakdown),
-    console_url: `${isbConsoleUrl}/leases/${params.leaseId}`,
+    console_url: `${isbConsoleUrl}/leases/edit/${encodeLeaseCompositeKey(params.userEmail, params.leaseId)}`,
     queue_depth: String(queueDepth),
   };
 };

@@ -7,6 +7,7 @@ import {
   createSlackService,
   formatScoreBreakdownForSlack,
   buildSlackPayload,
+  encodeLeaseCompositeKey,
   type EscalationNotificationParams,
   type SlackLogger,
 } from '../../src/services/slack.js';
@@ -116,6 +117,51 @@ describe('Slack Service (Story 5.2)', () => {
     });
   });
 
+  describe('encodeLeaseCompositeKey', () => {
+    it('should encode userEmail and uuid to base64 JSON', () => {
+      const encoded = encodeLeaseCompositeKey(
+        'user@example.gov.uk',
+        'abc-123-def'
+      );
+      const decoded = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
+      expect(decoded).toEqual({
+        userEmail: 'user@example.gov.uk',
+        uuid: 'abc-123-def',
+      });
+    });
+
+    it('should handle email with special characters', () => {
+      const encoded = encodeLeaseCompositeKey(
+        'user+tag@example.gov.uk',
+        'uuid-123'
+      );
+      const decoded = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
+      expect(decoded.userEmail).toBe('user+tag@example.gov.uk');
+    });
+
+    it('should produce valid base64 output', () => {
+      const encoded = encodeLeaseCompositeKey(
+        'test@test.gov.uk',
+        'uuid'
+      );
+      // Base64 regex
+      expect(encoded).toMatch(/^[A-Za-z0-9+/]+=*$/);
+    });
+
+    it('should handle long email addresses', () => {
+      const longEmail = 'very.long.email.address.with.many.parts@subdomain.department.gov.uk';
+      const encoded = encodeLeaseCompositeKey(longEmail, 'uuid-456');
+      const decoded = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
+      expect(decoded.userEmail).toBe(longEmail);
+    });
+
+    it('should produce consistent encoding for same input', () => {
+      const encoded1 = encodeLeaseCompositeKey('user@gov.uk', 'uuid-1');
+      const encoded2 = encodeLeaseCompositeKey('user@gov.uk', 'uuid-1');
+      expect(encoded1).toBe(encoded2);
+    });
+  });
+
   describe('buildSlackPayload (AC2)', () => {
     const params: EscalationNotificationParams = {
       leaseId: 'abc123-def456-ghi789',
@@ -145,16 +191,24 @@ describe('Slack Service (Story 5.2)', () => {
       expect(payload.queue_depth).toBe('3');
     });
 
-    it('should generate correct console URL (AC4)', () => {
+    it('should generate correct console URL with base64 encoded composite key (AC4)', () => {
       const payload = buildSlackPayload(
         params,
         'https://isb-console.example.com',
         0
       );
 
-      expect(payload.console_url).toBe(
-        'https://isb-console.example.com/leases/abc123-def456-ghi789'
-      );
+      // Verify URL structure
+      expect(payload.console_url).toMatch(/^https:\/\/isb-console\.example\.com\/leases\/edit\//);
+
+      // Decode and verify the composite key
+      const urlParts = payload.console_url.split('/leases/edit/');
+      expect(urlParts[0]).toBe('https://isb-console.example.com');
+      const decoded = JSON.parse(Buffer.from(urlParts[1]!, 'base64').toString('utf8'));
+      expect(decoded).toEqual({
+        userEmail: 'sarah.jones@council.gov.uk',
+        uuid: 'abc123-def456-ghi789',
+      });
     });
 
     it('should format score breakdown correctly', () => {
@@ -494,16 +548,23 @@ describe('Slack Service (Story 5.2)', () => {
       const fetchCall = mockFetch.mock.calls[0]!;
       const body = JSON.parse(fetchCall[1].body);
 
-      expect(body).toEqual({
-        user_email: 'team@bigcouncil.gov.uk',
-        lease_id: 'f2d3eb78-907a-4c20-8127-7ce45758836d',
-        reference: 'ISB-2025-1234',
-        score: '30',
-        threshold: '20',
-        template_id: 'bedrock-pro',
-        score_breakdown: expect.stringContaining('• group_mailbox_detected: +20'),
-        console_url: 'https://isb.sandbox.gov.uk/leases/f2d3eb78-907a-4c20-8127-7ce45758836d',
-        queue_depth: '5',
+      // Verify non-URL fields
+      expect(body.user_email).toBe('team@bigcouncil.gov.uk');
+      expect(body.lease_id).toBe('f2d3eb78-907a-4c20-8127-7ce45758836d');
+      expect(body.reference).toBe('ISB-2025-1234');
+      expect(body.score).toBe('30');
+      expect(body.threshold).toBe('20');
+      expect(body.template_id).toBe('bedrock-pro');
+      expect(body.score_breakdown).toContain('• group_mailbox_detected: +20');
+      expect(body.queue_depth).toBe('5');
+
+      // Verify console_url contains base64-encoded composite key
+      const urlParts = body.console_url.split('/leases/edit/');
+      expect(urlParts[0]).toBe('https://isb.sandbox.gov.uk');
+      const decoded = JSON.parse(Buffer.from(urlParts[1], 'base64').toString('utf8'));
+      expect(decoded).toEqual({
+        userEmail: 'team@bigcouncil.gov.uk',
+        uuid: 'f2d3eb78-907a-4c20-8127-7ce45758836d',
       });
     });
   });
