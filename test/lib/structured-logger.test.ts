@@ -11,21 +11,23 @@ import {
   type DecisionLogParams,
 } from '../../src/lib/structured-logger.js';
 
-// Mock @aws-lambda-powertools/logger
-const mockAppendKeys = vi.fn();
-const mockInfo = vi.fn();
-const mockWarn = vi.fn();
-const mockError = vi.fn();
-const mockDebug = vi.fn();
+// Use vi.hoisted() for Vitest v4 compatibility
+const { mockAppendKeys, mockInfo, mockWarn, mockError, mockDebug } = vi.hoisted(() => ({
+  mockAppendKeys: vi.fn(),
+  mockInfo: vi.fn(),
+  mockWarn: vi.fn(),
+  mockError: vi.fn(),
+  mockDebug: vi.fn(),
+}));
 
 vi.mock('@aws-lambda-powertools/logger', () => ({
-  Logger: vi.fn().mockImplementation(() => ({
-    appendKeys: mockAppendKeys,
-    info: mockInfo,
-    warn: mockWarn,
-    error: mockError,
-    debug: mockDebug,
-  })),
+  Logger: class MockLogger {
+    appendKeys = mockAppendKeys;
+    info = mockInfo;
+    warn = mockWarn;
+    error = mockError;
+    debug = mockDebug;
+  },
 }));
 
 describe('Structured Logger (Story 5.3)', () => {

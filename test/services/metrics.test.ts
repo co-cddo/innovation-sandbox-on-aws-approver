@@ -9,19 +9,23 @@ import {
   type MetricsLogger,
 } from '../../src/services/metrics.js';
 
-// Mock @aws-lambda-powertools/metrics
-const mockAddMetric = vi.fn();
-const mockAddDimension = vi.fn();
-const mockPublishStoredMetrics = vi.fn();
-const mockClearMetrics = vi.fn();
+// Use vi.hoisted() for Vitest v4 compatibility
+const { mockAddMetric, mockAddDimension, mockPublishStoredMetrics, mockClearMetrics } = vi.hoisted(
+  () => ({
+    mockAddMetric: vi.fn(),
+    mockAddDimension: vi.fn(),
+    mockPublishStoredMetrics: vi.fn(),
+    mockClearMetrics: vi.fn(),
+  })
+);
 
 vi.mock('@aws-lambda-powertools/metrics', () => ({
-  Metrics: vi.fn().mockImplementation(() => ({
-    addMetric: mockAddMetric,
-    addDimension: mockAddDimension,
-    publishStoredMetrics: mockPublishStoredMetrics,
-    clearMetrics: mockClearMetrics,
-  })),
+  Metrics: class MockMetrics {
+    addMetric = mockAddMetric;
+    addDimension = mockAddDimension;
+    publishStoredMetrics = mockPublishStoredMetrics;
+    clearMetrics = mockClearMetrics;
+  },
   MetricUnit: {
     Count: 'Count',
     Milliseconds: 'Milliseconds',

@@ -8,17 +8,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
-import { sdkStreamMixin } from '@smithy/util-stream';
 import {
   createDomainAllowlistService,
   type DomainAllowlistService,
   CACHE_TTL_MS,
 } from '../../src/services/domain-allowlist.js';
 
-// Helper to create mock S3 response body
-const createMockBody = (content: string): ReturnType<typeof sdkStreamMixin> => {
+// Helper to create mock S3 response body that mimics sdkStreamMixin behavior
+const createMockBody = (content: string) => {
   const stream = Readable.from([content]);
-  return sdkStreamMixin(stream);
+  return {
+    transformToString: async () => content,
+    transformToByteArray: async () => Buffer.from(content),
+    transformToWebStream: () => stream,
+    pipe: stream.pipe.bind(stream),
+  };
 };
 
 // Mock S3 client
