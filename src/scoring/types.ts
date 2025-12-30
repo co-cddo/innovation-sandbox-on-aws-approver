@@ -21,9 +21,10 @@ export type LeaseStatus =
   | 'Ejected';
 
 /**
- * All 18 rule identifiers as a const array for iteration and validation.
+ * All 19 rule identifiers as a const array for iteration and validation.
  */
 export const RULE_IDS = [
+  'allow_list_override',
   'expired_leases',
   'budget_exceeded',
   'first_time_user',
@@ -57,10 +58,13 @@ export type RuleId = (typeof RULE_IDS)[number];
 export type RuleWeights = Record<RuleId, number>;
 
 /**
- * Default weights for all 18 rules.
+ * Default weights for all 19 rules.
  * These values come from the PRD and can be overridden via RULE_WEIGHTS env var.
  */
 export const DEFAULT_RULE_WEIGHTS: RuleWeights = {
+  // Allow-list override (massive bonus ensures approval)
+  allow_list_override: -100, // -100 for allow-listed users (guarantees score < threshold)
+
   // Penalty rules (positive = more scrutiny)
   expired_leases: 2, // +2 each expired lease in last 30 days
   budget_exceeded: 5, // +5 each budget exceeded in last 30 days
@@ -156,6 +160,10 @@ export interface ScoringContext {
   // From business hours check (populated in Story 4.1)
   /** Whether request is in end-of-window period (5-7pm London) - pre-calculated by state machine */
   isEndOfWindow?: boolean;
+
+  // From allow-list check (populated in SCORING handler)
+  /** Whether the user email is on the allow-list */
+  isAllowListed?: boolean;
 }
 
 /**
@@ -173,6 +181,7 @@ export interface ScoringContextInput {
   isVerifiedGovDomain?: boolean;
   aiAnalysis?: AIAnalysisResult;
   isEndOfWindow?: boolean;
+  isAllowListed?: boolean;
 }
 
 /**
@@ -191,6 +200,7 @@ export const createScoringContext = (input: ScoringContextInput): ScoringContext
   isVerifiedGovDomain: input.isVerifiedGovDomain ?? false,
   aiAnalysis: input.aiAnalysis,
   isEndOfWindow: input.isEndOfWindow,
+  isAllowListed: input.isAllowListed ?? false,
 });
 
 /**

@@ -37,7 +37,7 @@ describe('scoring engine', () => {
   });
 
   describe('calculateScore', () => {
-    it('should run all 18 rules and return breakdown', () => {
+    it('should run all 19 rules and return breakdown', () => {
       const config: ScoringEngineConfig = {
         weights: {},
         threshold: 20,
@@ -55,7 +55,7 @@ describe('scoring engine', () => {
 
       const result = engine.calculateScore(context);
 
-      expect(result.breakdown).toHaveLength(18);
+      expect(result.breakdown).toHaveLength(19);
       expect(typeof result.totalScore).toBe('number');
       expect(typeof result.durationMs).toBe('number');
     });

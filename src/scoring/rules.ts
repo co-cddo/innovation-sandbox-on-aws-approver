@@ -1,7 +1,7 @@
 /**
  * Scoring Rules Implementation
  *
- * All 18 rules as pure functions per architecture.md.
+ * All 19 rules as pure functions per architecture.md.
  * Each rule: (context, weight) => ScoringRuleResult
  */
 
@@ -23,6 +23,22 @@ const SUCCESSFUL_STATUSES: LeaseHistoryRecord['status'][] = [
   'Expired',
   'ManuallyTerminated',
 ];
+
+/**
+ * Rule 0: allow_list_override
+ * -100 (massive bonus) if user is on the allow-list.
+ * This effectively guarantees approval since threshold is 20.
+ */
+export const allowListOverrideRule: ScoringRuleFn = (context, weight) => {
+  const isAllowed = context.isAllowListed ?? false;
+
+  return {
+    ruleId: 'allow_list_override',
+    points: isAllowed ? weight : 0,
+    triggered: isAllowed,
+    reason: isAllowed ? 'User on allow-list' : undefined,
+  };
+};
 
 /**
  * Rule 1: expired_leases
@@ -482,6 +498,7 @@ export interface RuleDefinition {
 }
 
 export const ALL_RULES: RuleDefinition[] = [
+  { ruleId: 'allow_list_override', fn: allowListOverrideRule },
   { ruleId: 'expired_leases', fn: expiredLeasesRule },
   { ruleId: 'budget_exceeded', fn: budgetExceededRule },
   { ruleId: 'first_time_user', fn: firstTimeUserRule },

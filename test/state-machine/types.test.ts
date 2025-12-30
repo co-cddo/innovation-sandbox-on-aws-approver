@@ -15,8 +15,7 @@ describe('ApprovalState enum', () => {
     expect(ApprovalState.RECEIVED).toBe('RECEIVED');
     expect(ApprovalState.VALIDATING).toBe('VALIDATING');
     expect(ApprovalState.TIMING_CHECK).toBe('TIMING_CHECK');
-    expect(ApprovalState.ALLOW_LIST_CHECK).toBe('ALLOW_LIST_CHECK');
-    expect(ApprovalState.ACCOUNT_COOLDOWN_CHECK).toBe('ACCOUNT_COOLDOWN_CHECK'); // Epic 6
+    expect(ApprovalState.ACCOUNT_COOLDOWN_CHECK).toBe('ACCOUNT_COOLDOWN_CHECK');
     expect(ApprovalState.SCORING).toBe('SCORING');
     expect(ApprovalState.DECIDING).toBe('DECIDING');
     expect(ApprovalState.APPROVED).toBe('APPROVED');
@@ -26,9 +25,9 @@ describe('ApprovalState enum', () => {
     expect(ApprovalState.ERROR).toBe('ERROR');
   });
 
-  it('should have exactly 12 states', () => {
+  it('should have exactly 11 states', () => {
     const stateValues = Object.values(ApprovalState);
-    expect(stateValues).toHaveLength(12);
+    expect(stateValues).toHaveLength(11);
   });
 });
 
@@ -49,8 +48,7 @@ describe('TERMINAL_STATES', () => {
     expect(TERMINAL_STATES).not.toContain(ApprovalState.RECEIVED);
     expect(TERMINAL_STATES).not.toContain(ApprovalState.VALIDATING);
     expect(TERMINAL_STATES).not.toContain(ApprovalState.TIMING_CHECK);
-    expect(TERMINAL_STATES).not.toContain(ApprovalState.ALLOW_LIST_CHECK);
-    expect(TERMINAL_STATES).not.toContain(ApprovalState.ACCOUNT_COOLDOWN_CHECK); // Epic 6
+    expect(TERMINAL_STATES).not.toContain(ApprovalState.ACCOUNT_COOLDOWN_CHECK);
     expect(TERMINAL_STATES).not.toContain(ApprovalState.SCORING);
     expect(TERMINAL_STATES).not.toContain(ApprovalState.DECIDING);
   });
@@ -69,7 +67,7 @@ describe('isTerminalState', () => {
     expect(isTerminalState(ApprovalState.RECEIVED)).toBe(false);
     expect(isTerminalState(ApprovalState.VALIDATING)).toBe(false);
     expect(isTerminalState(ApprovalState.TIMING_CHECK)).toBe(false);
-    expect(isTerminalState(ApprovalState.ALLOW_LIST_CHECK)).toBe(false);
+    expect(isTerminalState(ApprovalState.ACCOUNT_COOLDOWN_CHECK)).toBe(false);
     expect(isTerminalState(ApprovalState.SCORING)).toBe(false);
     expect(isTerminalState(ApprovalState.DECIDING)).toBe(false);
   });
