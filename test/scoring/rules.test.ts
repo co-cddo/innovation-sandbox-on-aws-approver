@@ -9,7 +9,7 @@ import {
   expiredLeasesRule,
   budgetExceededRule,
   firstTimeUserRule,
-  firstTimeSuspiciousRule,
+  firstTimeUserGroupMailboxCompoundRule,
   verifiedGovDomainRule,
   familiarTemplateRule,
   templateHopperRule,
@@ -166,10 +166,10 @@ describe('scoring rules', () => {
     });
   });
 
-  describe('Rule 4: first_time_suspicious', () => {
+  describe('Rule 4: first_time_user_group_mailbox_compound', () => {
     it('should skip when no AI analysis available', () => {
       const context = createBaseContext({ userLeaseHistory: [], aiAnalysis: undefined });
-      const result = firstTimeSuspiciousRule(context, 20);
+      const result = firstTimeUserGroupMailboxCompoundRule(context, 20);
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
       expect(result.fallbackUsed).toBe(true);
@@ -180,7 +180,7 @@ describe('scoring rules', () => {
         userLeaseHistory: [],
         aiAnalysis: { isGroupMailbox: true, confidence: 0.9 },
       });
-      const result = firstTimeSuspiciousRule(context, 20);
+      const result = firstTimeUserGroupMailboxCompoundRule(context, 20);
       expect(result.points).toBe(20);
       expect(result.triggered).toBe(true);
     });
@@ -192,7 +192,7 @@ describe('scoring rules', () => {
         ],
         aiAnalysis: { isGroupMailbox: true, confidence: 0.9 },
       });
-      const result = firstTimeSuspiciousRule(context, 20);
+      const result = firstTimeUserGroupMailboxCompoundRule(context, 20);
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
     });
@@ -746,10 +746,10 @@ describe('scoring rules', () => {
       });
       const result = groupMailboxDetectedRule(context, 20);
 
-      // Rule #16 should NOT fire - Rule #4 (first_time_suspicious) handles it
+      // Rule #16 should NOT fire - Rule #4 (first_time_user_group_mailbox_compound) handles it
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
-      expect(result.reason).toBe('Handled by first_time_suspicious rule');
+      expect(result.reason).toBe('Handled by first_time_user_group_mailbox_compound rule');
     });
   });
 
