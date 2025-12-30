@@ -61,7 +61,14 @@ vi.mock('@aws-sdk/client-lambda', () => ({
 
 // Mock the DynamoDB client to prevent real AWS calls (Vitest v4 compatible)
 vi.mock('@aws-sdk/client-dynamodb', () => ({
-  DynamoDBClient: class MockDynamoDBClient {},
+  DynamoDBClient: class MockDynamoDBClient {
+    send = vi.fn().mockResolvedValue({ Count: 0, Items: [] });
+  },
+  QueryCommand: class MockQueryCommand {},
+  GetItemCommand: class MockGetItemCommand {},
+  PutItemCommand: class MockPutItemCommand {},
+  DeleteItemCommand: class MockDeleteItemCommand {},
+  UpdateItemCommand: class MockUpdateItemCommand {},
 }));
 
 vi.mock('@aws-sdk/lib-dynamodb', () => ({
@@ -69,6 +76,11 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
     from: vi.fn().mockReturnValue({}),
   },
   QueryCommand: class MockQueryCommand {},
+}));
+
+vi.mock('@aws-sdk/util-dynamodb', () => ({
+  marshall: vi.fn((obj) => obj),
+  unmarshall: vi.fn((obj) => obj),
 }));
 
 // Mock the S3 client to prevent real AWS calls (Vitest v4 compatible)
@@ -2269,6 +2281,282 @@ describe('handler', () => {
         'AI email analysis used fallback',
         expect.objectContaining({
           isGroupMailbox: true,
+        })
+      );
+    });
+  });
+
+  describe('Delayed decision handling (Story 6.2, 6.3, 6.4)', () => {
+    it('should handle business hours delay with SQS service', async () => {
+      setSQSService(mockSQSService);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            reason: 'Outside business hours',
+            nextProcessingTime: '2025-12-31T09:00:00Z',
+            // No accountDelayReason - this is a business hours delay
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Delayed - will process during next business hours');
+      expect(mockSendDelayedRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          leaseId: expect.objectContaining({
+            userEmail: 'user@example.gov.uk',
+            uuid: '123e4567-e89b-12d3-a456-426614174000',
+          }),
+          reason: 'Outside business hours',
+        })
+      );
+    });
+
+    it('should handle account cooldown delay and add to queue position table', async () => {
+      setSQSService(mockSQSService);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            reason: 'No ready accounts',
+            accountDelayReason: 'NO_READY_ACCOUNTS',
+            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
+            coolingAccountCount: 3,
+            activeAccountCount: 5,
+            nextProcessingTime: '2025-12-31T12:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Delayed - will process during next business hours');
+      expect(mockSendDelayedRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reason: 'No ready accounts',
+        })
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Request delayed',
+        expect.objectContaining({
+          delayReason: 'account_cooldown',
+          accountDelayReason: 'NO_READY_ACCOUNTS',
+        })
+      );
+    });
+
+    it('should send capacity crunch alert when all accounts are active', async () => {
+      setSQSService(mockSQSService);
+      const mockNotifyCapacityCrunch = vi.fn().mockResolvedValue({ success: true });
+      const mockSlackService: SlackService = {
+        notifyEscalation: vi.fn().mockResolvedValue({ success: true }),
+        notifyCapacityCrunch: mockNotifyCapacityCrunch,
+      };
+      setSlackService(mockSlackService);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            reason: 'Capacity crunch - all accounts active',
+            accountDelayReason: 'NO_READY_ACCOUNTS',
+            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
+            coolingAccountCount: 0, // No cooling accounts = capacity crunch
+            activeAccountCount: 8,
+            nextProcessingTime: '2025-12-31T12:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(mockNotifyCapacityCrunch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          alertType: 'capacity_crunch',
+          activeAccounts: 8,
+          availableAccounts: 0,
+        })
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Capacity crunch alert sent to Slack',
+        expect.objectContaining({
+          activeAccounts: 8,
+        })
+      );
+    });
+
+    it('should continue processing when capacity crunch alert fails', async () => {
+      setSQSService(mockSQSService);
+      const mockNotifyCapacityCrunch = vi.fn().mockResolvedValue({ success: false, error: 'Slack error' });
+      const mockSlackService: SlackService = {
+        notifyEscalation: vi.fn().mockResolvedValue({ success: true }),
+        notifyCapacityCrunch: mockNotifyCapacityCrunch,
+      };
+      setSlackService(mockSlackService);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            accountDelayReason: 'NO_READY_ACCOUNTS',
+            coolingAccountCount: 0,
+            activeAccountCount: 8,
+            nextProcessingTime: '2025-12-31T12:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed even though alert failed
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Failed to send capacity crunch alert to Slack',
+        expect.objectContaining({
+          error: 'Slack error',
+        })
+      );
+    });
+
+    it('should escalate when SQS service is not configured for delayed request', async () => {
+      setSQSService(undefined);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            reason: 'Outside business hours',
+            nextProcessingTime: '2025-12-31T09:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+
+      await expect(handler(event, mockContext)).rejects.toThrow('Delay queue not configured');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Delay queue not configured - escalating instead',
+        expect.any(Object)
+      );
+    });
+
+    it('should escalate when SQS send fails', async () => {
+      mockSendDelayedRequest.mockResolvedValueOnce({ success: false, error: 'SQS unavailable' });
+      setSQSService(mockSQSService);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            reason: 'Outside business hours',
+            nextProcessingTime: '2025-12-31T09:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+
+      await expect(handler(event, mockContext)).rejects.toThrow('SQS unavailable');
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to send to delay queue - escalating',
+        expect.objectContaining({
+          error: 'SQS unavailable',
+        })
+      );
+    });
+
+    it('should use cooldown delay message for account cooldown without queue estimate', async () => {
+      setSQSService(mockSQSService);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            reason: 'No ready accounts',
+            accountDelayReason: 'NO_READY_ACCOUNTS',
+            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
+            coolingAccountCount: 2,
+            activeAccountCount: 6,
+            nextProcessingTime: '2025-12-31T12:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Request sent to delay queue',
+        expect.objectContaining({
+          delayReason: 'account_cooldown',
         })
       );
     });
