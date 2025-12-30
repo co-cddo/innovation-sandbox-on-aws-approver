@@ -4,7 +4,7 @@ Automated lease approval system for the [Innovation Sandbox on AWS (ISB)](https:
 
 ## Overview
 
-The ISB Approver listens for `LeaseRequested` events from the Innovation Sandbox and makes automated approval decisions using an 18-rule scoring engine. Most users receive instant approval ("preapproved" experience), while higher-risk requests are escalated to operators with full context for quick manual review.
+The ISB Approver listens for `LeaseRequested` events from the Innovation Sandbox and makes automated approval decisions using a 19-rule scoring engine. Most users receive instant approval ("preapproved" experience), while higher-risk requests are escalated to operators with full context for quick manual review.
 
 **Core Philosophy:** Most users are acting in good faith. The system provides instant access with no waiting while due diligence happens invisibly behind the scenes.
 
@@ -20,7 +20,7 @@ The ISB Approver listens for `LeaseRequested` events from the Innovation Sandbox
 ## Features
 
 ### Intelligent Risk Scoring
-- **18 configurable scoring rules** evaluating risk from multiple angles
+- **19 configurable scoring rules** evaluating risk from multiple angles
 - Rules cover: user history, organization reputation, domain verification, email patterns, timing, budget/duration
 - Deterministic scoring with complete breakdown logging
 - Configurable threshold for auto-approval vs escalation (default: 20 points)
@@ -130,18 +130,8 @@ LeaseRequested Event
  DELAYED    Continue
  (to SQS)       │
                 ▼
-┌───────────────────┐
-│ ALLOW_LIST_CHECK  │ User on bypass list?
-└─────────┬─────────┘
-          │
-    ┌─────┴─────┐
-    │           │
-    ▼           ▼
- APPROVED   Continue
- (bypass)       │
-                ▼
 ┌─────────────────────────┐
-│ ACCOUNT_READINESS_CHECK │ Ready accounts?
+│ ACCOUNT_COOLDOWN_CHECK  │ Account ready (48h cooldown)?
 └───────────┬─────────────┘
             │
       ┌─────┴─────┐
@@ -151,8 +141,8 @@ LeaseRequested Event
  (with ETA)       │
                   ▼
 ┌───────────────────┐
-│     SCORING       │ Run 18 scoring rules
-└─────────┬─────────┘
+│     SCORING       │ Run 19 scoring rules
+└─────────┬─────────┘     (allow-list override applied here)
           │
           ▼
 ┌───────────────────┐
@@ -168,7 +158,7 @@ LeaseRequested Event
 
 ## Scoring Engine
 
-The scoring engine evaluates 18 rules, each contributing positive (penalty) or negative (bonus) points:
+The scoring engine evaluates 19 rules, each contributing positive (penalty) or negative (bonus) points:
 
 ### Penalty Rules (increase risk score)
 
@@ -191,6 +181,7 @@ The scoring engine evaluates 18 rules, each contributing positive (penalty) or n
 
 | Rule | Weight | Trigger |
 |------|--------|---------|
+| `allow_list_override` | -100 | User on allow-list (testers/operators) |
 | `verified_gov_domain` | -5 | Domain in ukps-domains allowlist |
 | `familiar_template` | -1 | Previously used template successfully |
 | `manual_early_termination` | -2 each | Early termination (responsible behavior) |
@@ -211,7 +202,7 @@ The scoring engine evaluates 18 rules, each contributing positive (penalty) or n
 innovation-sandbox-on-aws-approver/
 ├── src/
 │   ├── handler.ts              # Lambda entry point
-│   ├── scoring/                # 18-rule scoring engine
+│   ├── scoring/                # 19-rule scoring engine
 │   │   ├── engine.ts           # Score calculation orchestrator
 │   │   ├── rules.ts            # Rule implementations
 │   │   ├── types.ts            # Scoring types

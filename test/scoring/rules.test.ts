@@ -55,13 +55,13 @@ const createLease = (overrides: Partial<LeaseHistoryRecord> = {}): LeaseHistoryR
 
 describe('scoring rules', () => {
   describe('ALL_RULES array', () => {
-    it('should contain 18 rules', () => {
-      expect(ALL_RULES).toHaveLength(18);
+    it('should contain 19 rules', () => {
+      expect(ALL_RULES).toHaveLength(19);
     });
 
     it('should have unique rule IDs', () => {
       const ruleIds = ALL_RULES.map((r) => r.ruleId);
-      expect(new Set(ruleIds).size).toBe(18);
+      expect(new Set(ruleIds).size).toBe(19);
     });
   });
 

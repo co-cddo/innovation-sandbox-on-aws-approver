@@ -177,7 +177,7 @@ describe('VALIDATING handler', () => {
 describe('TIMING_CHECK handler', () => {
   const handlers = createStateHandlers();
 
-  it('should transition to ALLOW_LIST_CHECK when within business hours', () => {
+  it('should transition to ACCOUNT_COOLDOWN_CHECK when within business hours', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
@@ -188,7 +188,7 @@ describe('TIMING_CHECK handler', () => {
 
     const result = handlers[ApprovalState.TIMING_CHECK](context);
 
-    expect(result.nextState).toBe(ApprovalState.ALLOW_LIST_CHECK);
+    expect(result.nextState).toBe(ApprovalState.ACCOUNT_COOLDOWN_CHECK);
     expect(result.context.reason).toBe('Within business hours');
   });
 
@@ -227,7 +227,7 @@ describe('TIMING_CHECK handler', () => {
     expect(result.context.reason).toContain('unknown');
   });
 
-  it('should proceed to ALLOW_LIST_CHECK when timing not checked (undefined)', () => {
+  it('should proceed to ACCOUNT_COOLDOWN_CHECK when timing not checked (undefined)', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
@@ -238,7 +238,7 @@ describe('TIMING_CHECK handler', () => {
 
     const result = handlers[ApprovalState.TIMING_CHECK](context);
 
-    expect(result.nextState).toBe(ApprovalState.ALLOW_LIST_CHECK);
+    expect(result.nextState).toBe(ApprovalState.ACCOUNT_COOLDOWN_CHECK);
     expect(result.context.reason).toBe('Business hours not checked - proceeding');
   });
 
@@ -253,70 +253,6 @@ describe('TIMING_CHECK handler', () => {
     const originalContext = JSON.parse(JSON.stringify(context));
 
     handlers[ApprovalState.TIMING_CHECK](context);
-
-    expect(context).toEqual(originalContext);
-  });
-});
-
-describe('ALLOW_LIST_CHECK handler', () => {
-  const handlers = createStateHandlers();
-
-  it('should transition to APPROVED for allow-listed email', () => {
-    const context: StateContext = {
-      ...createInitialContext(),
-      leaseId: 'abc-123',
-      userEmail: 'chris.nesbitt-smith@dsit.gov.uk',
-      templateId: 'web-hosting',
-    };
-
-    const result = handlers[ApprovalState.ALLOW_LIST_CHECK](context);
-
-    expect(result.nextState).toBe(ApprovalState.APPROVED);
-    expect(result.context.allowListOverride).toBe(true);
-    expect(result.context.decision).toBe('approved');
-    expect(result.context.reason).toBe('ALLOW-LIST-OVERRIDE');
-    expect(result.context.score).toBe(0);
-  });
-
-  it('should transition to SCORING for non-allow-listed email', () => {
-    const context: StateContext = {
-      ...createInitialContext(),
-      leaseId: 'abc-123',
-      userEmail: 'regular-user@example.gov.uk',
-      templateId: 'web-hosting',
-    };
-
-    const result = handlers[ApprovalState.ALLOW_LIST_CHECK](context);
-
-    // Now goes to ACCOUNT_COOLDOWN_CHECK before SCORING (Epic 6)
-    expect(result.nextState).toBe(ApprovalState.ACCOUNT_COOLDOWN_CHECK);
-    expect(result.context.allowListOverride).toBe(false);
-  });
-
-  it('should be case-insensitive for allow-list check', () => {
-    const context: StateContext = {
-      ...createInitialContext(),
-      leaseId: 'abc-123',
-      userEmail: 'CHRIS.NESBITT-SMITH@DSIT.GOV.UK',
-      templateId: 'web-hosting',
-    };
-
-    const result = handlers[ApprovalState.ALLOW_LIST_CHECK](context);
-
-    expect(result.nextState).toBe(ApprovalState.APPROVED);
-    expect(result.context.allowListOverride).toBe(true);
-  });
-
-  it('should be a pure function (no mutation)', () => {
-    const context: StateContext = {
-      ...createInitialContext(),
-      leaseId: 'abc-123',
-      userEmail: 'user@example.gov.uk',
-      templateId: 'web-hosting',
-    };
-    const originalContext = JSON.parse(JSON.stringify(context));
-
-    handlers[ApprovalState.ALLOW_LIST_CHECK](context);
 
     expect(context).toEqual(originalContext);
   });
@@ -444,7 +380,7 @@ describe('SCORING handler', () => {
     expect(result.context.score).toBe(0);
   });
 
-  it('should populate scoreBreakdown with 18 rules', () => {
+  it('should populate scoreBreakdown with 19 rules', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
@@ -456,14 +392,55 @@ describe('SCORING handler', () => {
 
     const result = handlers[ApprovalState.SCORING](context);
 
-    // Should have 18 rules in breakdown
-    expect(result.context.scoreBreakdown).toHaveLength(18);
+    // Should have 19 rules in breakdown (including allow_list_override)
+    expect(result.context.scoreBreakdown).toHaveLength(19);
 
     // First-time user rule should be triggered
     const firstTimeRule = result.context.scoreBreakdown.find((r) => r.rule === 'first_time_user');
     expect(firstTimeRule).toBeDefined();
     expect(firstTimeRule!.triggered).toBe(true);
     expect(firstTimeRule!.points).toBe(5);
+  });
+
+  it('should set allowListOverride to true for allow-listed users', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'chris.nesbitt-smith@dsit.gov.uk', // On allow-list
+      templateId: 'web-hosting',
+      budgetAmount: 0,
+      leaseDurationHours: 0,
+      isVerifiedGovDomain: true,
+    };
+
+    const result = handlers[ApprovalState.SCORING](context);
+
+    expect(result.context.allowListOverride).toBe(true);
+    // Allow-list override gives -100 bonus
+    const allowListRule = result.context.scoreBreakdown.find((r) => r.rule === 'allow_list_override');
+    expect(allowListRule).toBeDefined();
+    expect(allowListRule!.triggered).toBe(true);
+    expect(allowListRule!.points).toBe(-100);
+  });
+
+  it('should set allowListOverride to false for non-allow-listed users', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'regular-user@example.gov.uk',
+      templateId: 'web-hosting',
+      budgetAmount: 0,
+      leaseDurationHours: 0,
+    };
+
+    const result = handlers[ApprovalState.SCORING](context);
+
+    expect(result.context.allowListOverride).toBe(false);
+    // Allow-list override rule should not be triggered
+    const allowListRule = result.context.scoreBreakdown.find((r) => r.rule === 'allow_list_override');
+    expect(allowListRule).toBeDefined();
+    expect(allowListRule!.triggered).toBe(false);
+    expect(allowListRule!.points).toBe(0);
   });
 
   it('should be a pure function (no mutation)', () => {

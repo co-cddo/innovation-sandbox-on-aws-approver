@@ -16,8 +16,6 @@ export enum ApprovalState {
   VALIDATING = 'VALIDATING',
   /** Checking business hours and timing */
   TIMING_CHECK = 'TIMING_CHECK',
-  /** Checking if user is on the allow-list for auto-approval bypass */
-  ALLOW_LIST_CHECK = 'ALLOW_LIST_CHECK',
   /** Checking if a sandbox account is ready for assignment (Epic 6) */
   ACCOUNT_COOLDOWN_CHECK = 'ACCOUNT_COOLDOWN_CHECK',
   /** Running scoring rules */

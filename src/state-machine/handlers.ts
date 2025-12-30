@@ -133,12 +133,12 @@ export const createStateHandlers = (
   [ApprovalState.TIMING_CHECK]: (context: StateContext): StateHandlerResult => {
     const { isWithinBusinessHours, nextProcessingTime } = context;
 
-    // If timing hasn't been checked yet (undefined), proceed to allow-list
+    // If timing hasn't been checked yet (undefined), proceed to account cooldown check
     // This allows backwards compatibility and testing without timing setup
     if (isWithinBusinessHours === undefined || isWithinBusinessHours === true) {
-      // Within business hours - proceed to allow-list check
+      // Within business hours - proceed to account cooldown check
       return {
-        nextState: ApprovalState.ALLOW_LIST_CHECK,
+        nextState: ApprovalState.ACCOUNT_COOLDOWN_CHECK,
         context: {
           ...context,
           reason: isWithinBusinessHours === undefined
@@ -155,39 +155,6 @@ export const createStateHandlers = (
         ...context,
         decision: 'delayed',
         reason: `Outside business hours. Next processing: ${nextProcessingTime ?? 'unknown'}`,
-      },
-    };
-  },
-
-  /**
-   * ALLOW_LIST_CHECK state handler.
-   * Checks if the user email is in the allow-list for auto-approval bypass.
-   * If allow-listed, skips scoring and goes directly to APPROVED.
-   */
-  [ApprovalState.ALLOW_LIST_CHECK]: (context: StateContext): StateHandlerResult => {
-    const { userEmail } = context;
-
-    if (isAllowListed(userEmail)) {
-      // Allow-listed user - bypass scoring and auto-approve
-      return {
-        nextState: ApprovalState.APPROVED,
-        context: {
-          ...context,
-          score: 0, // Score set to 0 for reference
-          decision: 'approved',
-          approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
-          reason: 'ALLOW-LIST-OVERRIDE',
-          allowListOverride: true,
-        },
-      };
-    }
-
-    // Not allow-listed - proceed to account cooldown check
-    return {
-      nextState: ApprovalState.ACCOUNT_COOLDOWN_CHECK,
-      context: {
-        ...context,
-        allowListOverride: false,
       },
     };
   },
@@ -231,9 +198,13 @@ export const createStateHandlers = (
 
   /**
    * SCORING state handler.
-   * Calculates the risk score using the 18-rule scoring engine.
+   * Calculates the risk score using the 19-rule scoring engine.
+   * Allow-list check is now integrated into scoring as a -100 bonus rule.
    */
   [ApprovalState.SCORING]: (context: StateContext): StateHandlerResult => {
+    // Check if user is on the allow-list (for scoring rule and context flag)
+    const userIsAllowListed = isAllowListed(context.userEmail);
+
     // Create scoring context from state context
     const scoringContext = createScoringContext({
       leaseId: context.leaseId,
@@ -251,6 +222,8 @@ export const createStateHandlers = (
       aiAnalysis: context.aiAnalysis,
       // Business hours data (Story 4.1) - pass pre-calculated value
       isEndOfWindow: context.isEndOfWindow,
+      // Allow-list status for scoring rule
+      isAllowListed: userIsAllowListed,
     });
 
     // Run the scoring engine
@@ -270,6 +243,7 @@ export const createStateHandlers = (
         ...context,
         score: result.totalScore,
         scoreBreakdown,
+        allowListOverride: userIsAllowListed,
       },
     };
   },
