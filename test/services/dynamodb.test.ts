@@ -446,6 +446,34 @@ describe('DynamoDB Service', () => {
       expect(result.error).toBe('DynamoDB timeout');
     });
 
+    it('should handle undefined Count in response (line 198)', async () => {
+      // When ScanCommand returns a response without Count field
+      mockSend.mockResolvedValueOnce({});
+
+      const service = createDynamoDBService(mockClient, {
+        tableName: 'ISB-Leases',
+        accountsTableName: 'ISB-SandboxAccounts',
+      });
+      const result = await service.getAvailableAccountsCount();
+
+      expect(result.success).toBe(true);
+      expect(result.count).toBe(0); // ?? 0 fallback
+    });
+
+    it('should handle non-Error exception in catch block (line 209)', async () => {
+      mockSend.mockRejectedValueOnce('String error');
+
+      const service = createDynamoDBService(mockClient, {
+        tableName: 'ISB-Leases',
+        accountsTableName: 'ISB-SandboxAccounts',
+      });
+      const result = await service.getAvailableAccountsCount();
+
+      expect(result.success).toBe(false);
+      expect(result.count).toBe(0);
+      expect(result.error).toBe('String error');
+    });
+
     it('should filter for Available status', async () => {
       mockSend.mockResolvedValueOnce({ Count: 5 });
 

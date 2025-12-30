@@ -2,11 +2,11 @@
  * Account Cooldown Logic
  *
  * Determines which sandbox accounts are ready for lease assignment.
- * Implements 24-hour cooldown for billing separation and new account grace period.
+ * Implements 48-hour cooldown for billing separation and new account grace period.
  *
- * Rationale for 24-hour cooldown (5 Whys: Billing Separation):
+ * Rationale for 48-hour cooldown (5 Whys: Billing Separation):
  * - AWS Cost Explorer aggregates by day
- * - 24-hour gap ensures distinct billing days per user
+ * - 48-hour gap guarantees distinct billing days per user
  * - Makes cost attribution unambiguous
  * - Prevents billing disputes between sequential users
  */
@@ -17,7 +17,7 @@ import type { Account } from './types.js';
  * Configuration for account cooldown logic
  */
 export interface AccountCooldownConfig {
-  /** Hours an account must cool before reuse (default: 24) */
+  /** Hours an account must cool before reuse (default: 48) */
   readonly cooldownHours: number;
   /** Minutes a new account is considered ready without cooldown (default: 60) */
   readonly newAccountGraceMinutes: number;
@@ -27,7 +27,7 @@ export interface AccountCooldownConfig {
  * Default cooldown configuration
  */
 export const DEFAULT_COOLDOWN_CONFIG: AccountCooldownConfig = {
-  cooldownHours: 24,
+  cooldownHours: 48,
   newAccountGraceMinutes: 60,
 };
 
@@ -70,7 +70,7 @@ export const getConfigFromEnvironment = (): AccountCooldownConfig => {
  * An account is ready if:
  * 1. status === 'Available' AND
  * 2. Either:
- *    a. meta.lastEditTime > 24 hours ago (cooled down), OR
+ *    a. meta.lastEditTime > 48 hours ago (cooled down), OR
  *    b. meta.createdTime < 1 hour ago (brand new)
  *
  * @param account - The account to check

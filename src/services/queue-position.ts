@@ -42,6 +42,7 @@ export const leaseIdToKey = (leaseId: LeaseId): string => {
  */
 export const keyToLeaseId = (key: string): LeaseId => {
   const parts = key.split('#');
+  /* c8 ignore next -- split always returns at least one element */
   const userEmail = parts[0] ?? '';
   const uuid = parts[1] ?? '';
   return { userEmail, uuid };
@@ -172,6 +173,7 @@ export const addToQueue = async (
     const position = await getNextPosition(client, config);
 
     // Calculate TTL (7 days from now)
+    /* c8 ignore next -- ttlDays always set from DEFAULT_CONFIG spread */
     const ttlDays = mergedConfig.ttlDays ?? 7;
     const ttl = Math.floor(Date.now() / 1000) + ttlDays * 24 * 60 * 60;
 

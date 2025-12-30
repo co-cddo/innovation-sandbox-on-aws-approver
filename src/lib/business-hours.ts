@@ -60,6 +60,7 @@ export function getLondonTime(date: Date, timezone: string): { hour: number; min
   });
 
   const parts = formatter.formatToParts(date);
+  /* c8 ignore next -- Intl.DateTimeFormat always returns requested parts */
   const getPart = (type: string): string => parts.find(p => p.type === type)?.value ?? '';
 
   const hour = parseInt(getPart('hour'), 10);
@@ -70,6 +71,7 @@ export function getLondonTime(date: Date, timezone: string): { hour: number; min
   const weekdayMap: Record<string, number> = {
     'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6,
   };
+  /* c8 ignore next -- weekday is always valid from Intl API */
   const dayOfWeek = weekdayMap[weekday] ?? 0;
 
   // Build date string for holiday checking (YYYY-MM-DD)
@@ -127,9 +129,11 @@ export function getNextBusinessHoursStart(
       // Found a business day - set to start hour
       // Create a new date at the start hour in London time
       const dateParts = nextTime.dateString.split('-').map(Number);
+      /* c8 ignore start -- dateString always in YYYY-MM-DD format from Intl API */
       const year = dateParts[0] ?? 2025;
       const month = dateParts[1] ?? 1;
       const day = dateParts[2] ?? 1;
+      /* c8 ignore stop */
       const nextStart = new Date(Date.UTC(year, month - 1, day, config.startHour, 0, 0, 0));
       return nextStart;
     }
@@ -137,10 +141,12 @@ export function getNextBusinessHoursStart(
     daysToAdd++;
   }
 
+  /* c8 ignore start -- fallback unreachable: max 4 consecutive non-business days (weekend + 2 holidays) */
   // Fallback: return tomorrow at start hour
   const tomorrow = new Date(result.getTime() + 24 * 60 * 60 * 1000);
   tomorrow.setUTCHours(config.startHour, 0, 0, 0);
   return tomorrow;
+  /* c8 ignore stop */
 }
 
 /**
