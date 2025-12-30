@@ -231,7 +231,7 @@ describe('scoring engine', () => {
 
       // Rules 4 and 16 use AI analysis (outside_target_audience uses S3 domain list now)
       const fallbackRuleIds = fallbackRules.map((r) => r.ruleId);
-      expect(fallbackRuleIds).toContain('first_time_suspicious');
+      expect(fallbackRuleIds).toContain('first_time_user_group_mailbox_compound');
       expect(fallbackRuleIds).toContain('group_mailbox_detected');
     });
 
@@ -280,7 +280,7 @@ describe('scoring engine', () => {
       expect(ruleIds).toContain('expired_leases');
       expect(ruleIds).toContain('budget_exceeded');
       expect(ruleIds).toContain('first_time_user');
-      expect(ruleIds).toContain('first_time_suspicious');
+      expect(ruleIds).toContain('first_time_user_group_mailbox_compound');
       expect(ruleIds).toContain('verified_gov_domain');
       expect(ruleIds).toContain('familiar_template');
       expect(ruleIds).toContain('template_hopper');

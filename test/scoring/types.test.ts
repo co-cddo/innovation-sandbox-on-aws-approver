@@ -24,7 +24,7 @@ describe('scoring types', () => {
         'expired_leases',
         'budget_exceeded',
         'first_time_user',
-        'first_time_suspicious',
+        'first_time_user_group_mailbox_compound',
         'verified_gov_domain',
         'familiar_template',
         'template_hopper',
@@ -63,7 +63,7 @@ describe('scoring types', () => {
       expect(DEFAULT_RULE_WEIGHTS.expired_leases).toBe(2);
       expect(DEFAULT_RULE_WEIGHTS.budget_exceeded).toBe(5);
       expect(DEFAULT_RULE_WEIGHTS.first_time_user).toBe(5);
-      expect(DEFAULT_RULE_WEIGHTS.first_time_suspicious).toBe(20);
+      expect(DEFAULT_RULE_WEIGHTS.first_time_user_group_mailbox_compound).toBe(20);
       expect(DEFAULT_RULE_WEIGHTS.cooldown_violation).toBe(10);
       expect(DEFAULT_RULE_WEIGHTS.outside_target_audience).toBe(50);
       expect(DEFAULT_RULE_WEIGHTS.group_mailbox_detected).toBe(20);

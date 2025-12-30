@@ -90,15 +90,16 @@ export const firstTimeUserRule: ScoringRuleFn = (context, weight) => {
 };
 
 /**
- * Rule 4: first_time_suspicious
+ * Rule 4: first_time_user_group_mailbox_compound
  * +weight for first lease AND group mailbox pattern (AI-detected)
+ * Compound rule: triggers only when BOTH conditions are met
  * Skips if no AI analysis available
  */
-export const firstTimeSuspiciousRule: ScoringRuleFn = (context, weight) => {
+export const firstTimeUserGroupMailboxCompoundRule: ScoringRuleFn = (context, weight) => {
   // Skip if no AI analysis available
   if (!context.aiAnalysis) {
     return {
-      ruleId: 'first_time_suspicious',
+      ruleId: 'first_time_user_group_mailbox_compound',
       points: 0,
       triggered: false,
       fallbackUsed: true,
@@ -108,13 +109,13 @@ export const firstTimeSuspiciousRule: ScoringRuleFn = (context, weight) => {
 
   const isFirstTime = context.userLeaseHistory.length === 0;
   const isGroupMailbox = context.aiAnalysis.isGroupMailbox;
-  const isSuspicious = isFirstTime && isGroupMailbox;
+  const isCompoundMatch = isFirstTime && isGroupMailbox;
 
   return {
-    ruleId: 'first_time_suspicious',
-    points: isSuspicious ? weight : 0,
-    triggered: isSuspicious,
-    reason: isSuspicious ? 'First-time user with group mailbox detected' : undefined,
+    ruleId: 'first_time_user_group_mailbox_compound',
+    points: isCompoundMatch ? weight : 0,
+    triggered: isCompoundMatch,
+    reason: isCompoundMatch ? 'First-time user with group mailbox detected' : undefined,
   };
 };
 
@@ -395,8 +396,8 @@ export const orgCleanRecordRule: ScoringRuleFn = (context, weight) => {
  * Rule 16: group_mailbox_detected
  * +weight if AI detected group email pattern
  * Skips if no AI analysis available
- * NOTE: If user is first-time, Rule #4 (first_time_suspicious) handles group mailbox instead
- *       to avoid double-counting the +20 penalty (per AC2)
+ * NOTE: If user is first-time, Rule #4 (first_time_user_group_mailbox_compound) handles
+ *       group mailbox instead to avoid double-counting the +20 penalty (per AC2)
  */
 export const groupMailboxDetectedRule: ScoringRuleFn = (context, weight) => {
   // Skip if no AI analysis available
@@ -413,13 +414,13 @@ export const groupMailboxDetectedRule: ScoringRuleFn = (context, weight) => {
   const isGroup = context.aiAnalysis.isGroupMailbox;
   const isFirstTime = context.userLeaseHistory.length === 0;
 
-  // If first-time user with group mailbox, Rule #4 handles it (AC2: no double-counting)
+  // If first-time user with group mailbox, compound rule handles it (AC2: no double-counting)
   if (isFirstTime && isGroup) {
     return {
       ruleId: 'group_mailbox_detected',
       points: 0,
       triggered: false,
-      reason: 'Handled by first_time_suspicious rule',
+      reason: 'Handled by first_time_user_group_mailbox_compound rule',
     };
   }
 
@@ -502,7 +503,7 @@ export const ALL_RULES: RuleDefinition[] = [
   { ruleId: 'expired_leases', fn: expiredLeasesRule },
   { ruleId: 'budget_exceeded', fn: budgetExceededRule },
   { ruleId: 'first_time_user', fn: firstTimeUserRule },
-  { ruleId: 'first_time_suspicious', fn: firstTimeSuspiciousRule },
+  { ruleId: 'first_time_user_group_mailbox_compound', fn: firstTimeUserGroupMailboxCompoundRule },
   { ruleId: 'verified_gov_domain', fn: verifiedGovDomainRule },
   { ruleId: 'familiar_template', fn: familiarTemplateRule },
   { ruleId: 'template_hopper', fn: templateHopperRule },

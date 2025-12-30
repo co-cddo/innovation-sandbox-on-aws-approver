@@ -28,7 +28,7 @@ export const RULE_IDS = [
   'expired_leases',
   'budget_exceeded',
   'first_time_user',
-  'first_time_suspicious',
+  'first_time_user_group_mailbox_compound',
   'verified_gov_domain',
   'familiar_template',
   'template_hopper',
@@ -69,7 +69,7 @@ export const DEFAULT_RULE_WEIGHTS: RuleWeights = {
   expired_leases: 2, // +2 each expired lease in last 30 days
   budget_exceeded: 5, // +5 each budget exceeded in last 30 days
   first_time_user: 5, // +5 for no previous leases
-  first_time_suspicious: 20, // +20 for first lease + group mailbox
+  first_time_user_group_mailbox_compound: 20, // +20 for first lease + group mailbox
   cooldown_violation: 10, // +10 for request within 1hr of previous lease end
   outside_target_audience: 50, // +50 for non-local-gov domain
   group_mailbox_detected: 20, // +20 for detected group mailbox (AI)

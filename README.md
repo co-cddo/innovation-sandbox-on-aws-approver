@@ -167,7 +167,7 @@ The scoring engine evaluates 19 rules, each contributing positive (penalty) or n
 | `expired_leases` | +2 each | Expired lease in last 30 days |
 | `budget_exceeded` | +5 each | Budget exceeded in last 30 days |
 | `first_time_user` | +5 | No previous leases |
-| `first_time_suspicious` | +20 | First lease + group mailbox |
+| `first_time_user_group_mailbox_compound` | +20 | First lease + group mailbox |
 | `cooldown_violation` | +10 | Request within 1hr of previous lease end |
 | `outside_target_audience` | +50 | Non-local-gov domain |
 | `group_mailbox_detected` | +20 | AI-detected group mailbox |
