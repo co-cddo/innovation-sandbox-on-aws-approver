@@ -63,7 +63,6 @@ import {
 import {
   checkAccountReadiness,
   getConfigFromEnvironment,
-  type AccountReadinessResult,
 } from './lib/account-cooldown.js';
 import {
   ApprovalState,

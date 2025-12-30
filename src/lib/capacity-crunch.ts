@@ -9,7 +9,6 @@
  * - Operators receive Slack alert (throttled to 1 per hour)
  */
 
-import type { Account } from './types.js';
 import type { AccountReadinessResult } from './account-cooldown.js';
 
 /**
