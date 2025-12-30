@@ -58,12 +58,32 @@ import {
   buildDelayedMessage,
   buildExpiredMessage,
   buildCooldownDelayMessage,
+  buildReprocessingMessage,
   ruleResultsToBreakdown,
 } from './lib/lease-comments.js';
 import {
   checkAccountReadiness,
   getConfigFromEnvironment,
 } from './lib/account-cooldown.js';
+import {
+  calculateQueueEstimate,
+  buildQueueEstimateComment,
+} from './lib/queue-estimate.js';
+import {
+  addToQueue,
+  removeFromQueue,
+  getQueueDepth,
+  getOldestPending,
+  keyToLeaseId,
+  getLastCapacityCrunchAlertTime,
+  updateLastCapacityCrunchAlertTime,
+  type QueuePositionServiceConfig,
+} from './services/queue-position.js';
+import {
+  shouldSendCapacityCrunchAlert,
+  buildCapacityCrunchAlert,
+  type CapacityStatus,
+} from './lib/capacity-crunch.js';
 import {
   ApprovalState,
   createInitialContext,
@@ -122,6 +142,7 @@ const lambdaClient = new LambdaClient({
 // ISB Lambda service configuration
 const isbLambdaConfig = {
   functionName: process.env.ISB_LEASES_LAMBDA_NAME || 'ISB-LeasesLambdaFunction-ndx',
+  accountsFunctionName: process.env.ISB_ACCOUNTS_LAMBDA_NAME || 'ISB-AccountsLambdaFunction-ndx',
 };
 
 // Create ISB Lambda service (can be overridden in tests via dependency injection)
@@ -198,6 +219,13 @@ let sqsService: SQSService | undefined = sqsConfig.queueUrl
       logger as unknown as import('./services/sqs.js').SQSLogger
     )
   : undefined;
+
+// Queue Position service configuration (Story 6.3)
+const queuePositionConfig: QueuePositionServiceConfig = {
+  tableName: process.env.QUEUE_POSITION_TABLE_NAME || 'ApproverQueuePosition',
+  positionIndexName: 'PositionIndex',
+  ttlDays: 7,
+};
 
 // Slack service configuration (Story 5.2)
 // ISB Console URL for deep links in notifications
@@ -865,36 +893,6 @@ const notifySlackEscalation = async (
 };
 
 /**
- * Checks if there are available sandbox accounts.
- * Returns 0 on failure (pessimistic assumption).
- */
-const checkAccountAvailability = async (): Promise<number> => {
-  if (!dynamoDBService) {
-    logger.warn('DynamoDB service not configured - assuming no accounts available');
-    return 0;
-  }
-
-  try {
-    const result = await dynamoDBService.getAvailableAccountsCount();
-    if (!result.success) {
-      logger.warn('Failed to check account availability - assuming no accounts', {
-        error: result.error,
-      });
-      return 0;
-    }
-    logger.info('Account availability checked', {
-      availableAccounts: result.count,
-    });
-    return result.count;
-  } catch (error) {
-    logger.error('Error checking account availability', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return 0;
-  }
-};
-
-/**
  * Processes a single delayed message from the queue.
  * Returns true if processing was successful, false otherwise.
  */
@@ -1041,6 +1039,9 @@ const processExpiredMessage = async (
 /**
  * Processes the delay queue - checks for messages and processes if conditions are met.
  * Called by scheduled queue check and AccountCleanupSucceeded triggers.
+ *
+ * Story 6.3: Uses DynamoDB queue position table for FIFO ordering.
+ * The oldest request (lowest position number) is processed first.
  */
 const processDelayQueue = async (
   context: Context,
@@ -1060,15 +1061,19 @@ const processDelayQueue = async (
     };
   }
 
-  // Check account availability
-  const availableAccounts = await checkAccountAvailability();
-  if (availableAccounts === 0) {
-    logger.info('No accounts available - skipping queue processing', {
+  // Check account readiness (Epic 6 - use actual account cooldown check)
+  const accountReadiness = await checkAccountReadinessNow();
+  if (!accountReadiness.hasReadyAccount) {
+    logger.info('No ready accounts available - skipping queue processing', {
       triggerType,
+      readyAccountCount: accountReadiness.readyAccountCount,
+      coolingAccountCount: accountReadiness.coolingAccountCount,
+      activeAccountCount: accountReadiness.activeAccountCount,
+      estimatedAccountReadyTime: accountReadiness.estimatedAccountReadyTime,
     });
     return {
       statusCode: 200,
-      body: 'No accounts available - queue processing skipped',
+      body: 'No ready accounts available - queue processing skipped',
     };
   }
 
@@ -1079,6 +1084,27 @@ const processDelayQueue = async (
       statusCode: 200,
       body: 'SQS service not configured',
     };
+  }
+
+  // Story 6.3: Get oldest pending request from DynamoDB queue position table (FIFO)
+  let oldestLeaseId: { userEmail: string; uuid: string } | undefined;
+  try {
+    const oldestResult = await getOldestPending(dynamoDBClient, queuePositionConfig);
+    if (oldestResult.success && oldestResult.record) {
+      oldestLeaseId = keyToLeaseId(oldestResult.record.leaseId);
+      logger.info('Found oldest pending request for FIFO processing', {
+        leaseId: oldestLeaseId.uuid,
+        userEmail: oldestLeaseId.userEmail,
+        position: oldestResult.record.position,
+        queuedAt: oldestResult.record.queuedAt,
+        triggerType,
+      });
+    }
+  } catch (error) {
+    logger.warn('Failed to get oldest pending from queue position table - falling back to SQS order', {
+      error: error instanceof Error ? error.message : String(error),
+      triggerType,
+    });
   }
 
   // Log queue depth before processing (AC4)
@@ -1106,6 +1132,13 @@ const processDelayQueue = async (
   }
 
   if (receiveResult.messages.length === 0) {
+    // No messages in SQS but might have stale entries in DynamoDB - clean up
+    if (oldestLeaseId) {
+      logger.warn('DynamoDB queue has entries but SQS is empty - cleaning up', {
+        leaseId: oldestLeaseId.uuid,
+      });
+      await removeFromQueue(dynamoDBClient, queuePositionConfig, oldestLeaseId);
+    }
     logger.info('No messages in delay queue', {
       triggerType,
     });
@@ -1136,6 +1169,24 @@ const processDelayQueue = async (
     // Message is still valid - process it
     success = await processDelayedMessage(message, context);
     action = 'processed';
+  }
+
+  // Story 6.3: Remove from DynamoDB queue position table if successful
+  if (success) {
+    const processedLeaseId = message.body.leaseId;
+    try {
+      await removeFromQueue(dynamoDBClient, queuePositionConfig, processedLeaseId);
+      logger.info('Removed processed request from queue position table', {
+        leaseId: processedLeaseId.uuid,
+        action,
+      });
+    } catch (error) {
+      // Don't fail if cleanup fails - message is already processed
+      logger.warn('Failed to remove from queue position table', {
+        leaseId: processedLeaseId.uuid,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   // Log queue depth after processing (AC4)
@@ -1376,6 +1427,42 @@ export const handler = async (
       });
 
       if (!approvalResult.success) {
+        // Story 6.2 AC8: TOCTOU race condition detection
+        // ISB may reject approval if account is no longer available (race condition)
+        const isAccountUnavailable =
+          approvalResult.error?.includes('no available account') ||
+          approvalResult.error?.includes('account not available') ||
+          approvalResult.error?.includes('no sandbox available') ||
+          approvalResult.statusCode === 409; // Conflict status
+
+        if (isAccountUnavailable && sqsService) {
+          logger.warn('TOCTOU race condition detected - re-queuing request', {
+            leaseId: leaseId.uuid,
+            userEmail: leaseId.userEmail,
+            error: approvalResult.error,
+          });
+
+          // Re-queue the request instead of failing
+          const referenceNumber = generateReferenceNumber(leaseId.uuid);
+          await updateLeaseComments(leaseId, buildReprocessingMessage(referenceNumber));
+
+          // Add back to delay queue for reprocessing (retry after 5 minutes)
+          const now = new Date();
+          const processAfter = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes delay
+          await sqsService.sendDelayedRequest({
+            leaseId,
+            originalEvent: validatedEvent,
+            receivedAt: now.toISOString(),
+            processAfter: processAfter.toISOString(),
+            reason: 'TOCTOU_REQUEUE',
+          });
+
+          return {
+            statusCode: 202,
+            body: 'Request re-queued due to account unavailability',
+          };
+        }
+
         logger.error('ISB Lambda approval failed', {
           leaseId: leaseId.uuid,
           userEmail: leaseId.userEmail,
@@ -1383,7 +1470,7 @@ export const handler = async (
           error: approvalResult.error,
         });
 
-        // Escalate on approval failure
+        // Escalate on approval failure (non-TOCTOU)
         await emitEscalationOnError(
           leaseId,
           `ISB Lambda approval failed: ${approvalResult.error}`,
@@ -1466,8 +1553,126 @@ export const handler = async (
 
     if (decision === 'delayed') {
       // Determine delay reason: business hours or account cooldown
-      const { accountDelayReason, estimatedAccountReadyTime } = result.context;
+      const { accountDelayReason, estimatedAccountReadyTime, coolingAccountCount, activeAccountCount } = result.context;
       const isAccountCooldownDelay = accountDelayReason === 'NO_READY_ACCOUNTS';
+
+      // For account cooldown delays, add to queue position table (Story 6.3)
+      let queuePosition: number | undefined;
+      let queueDepth: number | undefined;
+      let queueEstimateMessage: string | undefined;
+
+      if (isAccountCooldownDelay) {
+        try {
+          // Get current queue depth first
+          const depthResult = await getQueueDepth(dynamoDBClient, queuePositionConfig);
+          if (depthResult.success) {
+            queueDepth = depthResult.queueDepth;
+          }
+
+          // Parse estimated fulfillment time if available
+          const estimatedTime = estimatedAccountReadyTime
+            ? new Date(estimatedAccountReadyTime)
+            : null;
+
+          // Add to queue position table
+          const addResult = await addToQueue(dynamoDBClient, queuePositionConfig, {
+            leaseId,
+            estimatedFulfillmentTime: estimatedTime,
+          });
+
+          if (addResult.success && addResult.position) {
+            queuePosition = addResult.position;
+            queueDepth = (queueDepth ?? 0) + 1; // Increment if we just added
+
+            // Calculate queue estimate with user-friendly message
+            // Use empty arrays but pass isCapacityCrunch override since we have the counts
+            const isCapacityCrunch = (coolingAccountCount ?? 0) === 0 && (activeAccountCount ?? 0) > 0;
+            const queueEstimate = calculateQueueEstimate(
+              [], // cooling accounts - not available in this context
+              [], // active accounts - not available in this context
+              queuePosition,
+              queueDepth,
+              new Date(),
+              undefined, // use default cooldown config
+              { isCapacityCrunchOverride: isCapacityCrunch }
+            );
+
+            queueEstimateMessage = queueEstimate.message;
+
+            logger.info('Added request to queue position table', {
+              leaseId: leaseId.uuid,
+              queuePosition,
+              queueDepth,
+              estimatedFulfillmentTime: estimatedTime?.toISOString(),
+            });
+
+            // Story 6.4: Send capacity crunch alert to Slack if applicable
+            if (isCapacityCrunch && slackService) {
+              try {
+                const now = new Date();
+
+                // Get last alert time from DynamoDB
+                const lastAlertResult = await getLastCapacityCrunchAlertTime(dynamoDBClient, queuePositionConfig);
+                const lastAlertTime = lastAlertResult.success ? lastAlertResult.lastAlertTime : null;
+
+                // Check if we should send alert (throttled to once per hour)
+                if (shouldSendCapacityCrunchAlert(true, lastAlertTime, now)) {
+                  // Build capacity status for alert
+                  const capacityStatus: CapacityStatus = {
+                    isCapacityCrunch: true,
+                    totalAccounts: (activeAccountCount ?? 0),
+                    activeCount: activeAccountCount ?? 0,
+                    availableCount: 0,
+                    readyCount: 0,
+                    coolingCount: 0,
+                    pendingRequests: queueDepth,
+                    soonestAvailableHours: estimatedTime
+                      ? Math.max(0, (estimatedTime.getTime() - now.getTime()) / (60 * 60 * 1000))
+                      : null,
+                  };
+
+                  const alert = buildCapacityCrunchAlert(capacityStatus);
+                  const alertResult = await slackService.notifyCapacityCrunch(alert);
+
+                  if (alertResult.success) {
+                    // Update last alert time in DynamoDB
+                    await updateLastCapacityCrunchAlertTime(dynamoDBClient, queuePositionConfig, now);
+                    logger.info('Capacity crunch alert sent to Slack', {
+                      activeAccounts: capacityStatus.activeCount,
+                      pendingRequests: capacityStatus.pendingRequests,
+                    });
+                  } else {
+                    // Don't fail the request if alert fails
+                    logger.warn('Failed to send capacity crunch alert to Slack', {
+                      error: alertResult.error,
+                    });
+                  }
+                } else {
+                  logger.debug('Capacity crunch alert throttled', {
+                    lastAlertTime: lastAlertTime?.toISOString(),
+                  });
+                }
+              } catch (error) {
+                // Don't fail the request if alert handling fails
+                logger.warn('Error processing capacity crunch alert', {
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }
+          } else {
+            logger.warn('Failed to add to queue position table - continuing with delay', {
+              leaseId: leaseId.uuid,
+              error: addResult.error,
+            });
+          }
+        } catch (error) {
+          // Don't fail the request if queue position tracking fails
+          logger.warn('Error tracking queue position - continuing with delay', {
+            leaseId: leaseId.uuid,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
 
       logger.info('Request delayed', {
         action: 'delayed',
@@ -1479,6 +1684,8 @@ export const handler = async (
         nextProcessingTime: result.context.nextProcessingTime,
         estimatedAccountReadyTime,
         accountDelayReason,
+        queuePosition,
+        queueDepth,
       });
 
       // Check if SQS service is configured
@@ -1547,13 +1754,32 @@ export const handler = async (
         userEmail: leaseId.userEmail,
         processAfter: delayMessage.processAfter,
         delayReason: isAccountCooldownDelay ? 'account_cooldown' : 'outside_business_hours',
+        queuePosition,
       });
 
       // Update lease comments with appropriate message
       const referenceNumber = generateReferenceNumber(leaseId.uuid);
-      const delayedMessage = isAccountCooldownDelay
-        ? buildCooldownDelayMessage(referenceNumber, estimatedAccountReadyTime)
-        : buildDelayedMessage(referenceNumber);
+      let delayedMessage: string;
+
+      if (isAccountCooldownDelay && queueEstimateMessage) {
+        // Use the queue estimate message with position info
+        delayedMessage = buildQueueEstimateComment(
+          {
+            position: queuePosition ?? 1,
+            estimatedFulfillmentTime: estimatedAccountReadyTime ? new Date(estimatedAccountReadyTime) : null,
+            isCapacityCrunch: (coolingAccountCount ?? 0) === 0 && (activeAccountCount ?? 0) > 0,
+            message: queueEstimateMessage,
+            queueDepth: queueDepth ?? 1,
+          },
+          referenceNumber
+        );
+      } else if (isAccountCooldownDelay) {
+        // Fallback to cooldown message without queue position
+        delayedMessage = buildCooldownDelayMessage(referenceNumber, estimatedAccountReadyTime);
+      } else {
+        // Business hours delay
+        delayedMessage = buildDelayedMessage(referenceNumber);
+      }
       await updateLeaseComments(leaseId, delayedMessage);
 
       return {

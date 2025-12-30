@@ -112,6 +112,21 @@ describe('queue-estimate', () => {
       expect(result.estimatedFulfillmentTime).toBeNull();
     });
 
+    it('respects isCapacityCrunchOverride when account arrays are empty', () => {
+      const now = new Date('2025-01-02T12:00:00Z');
+
+      // Without override, empty arrays = not capacity crunch
+      const resultWithoutOverride = calculateQueueEstimate([], [], 1, 1, now, DEFAULT_COOLDOWN_CONFIG);
+      expect(resultWithoutOverride.isCapacityCrunch).toBe(false);
+
+      // With override = true, should be capacity crunch
+      const resultWithOverride = calculateQueueEstimate([], [], 1, 1, now, DEFAULT_COOLDOWN_CONFIG, {
+        isCapacityCrunchOverride: true,
+      });
+      expect(resultWithOverride.isCapacityCrunch).toBe(true);
+      expect(resultWithOverride.message).toContain('36-48 hours');
+    });
+
     it('builds user-friendly message with queue position', () => {
       const now = new Date('2025-01-02T12:00:00Z');
 

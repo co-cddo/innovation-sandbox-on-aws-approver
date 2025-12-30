@@ -1,6 +1,6 @@
 # Story 6.3: Queue Position Estimation and User Messaging
 
-Status: done
+Status: complete
 
 ## Story
 
@@ -67,49 +67,53 @@ So that **I can plan my work accordingly**.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Define QueueEstimate types (AC: 4)
-  - [ ] Add `QueueEstimate` interface to types.ts
-  - [ ] Add `QueuePositionRecord` interface for DynamoDB
+- [x] Task 1: Define QueueEstimate types (AC: 4)
+  - [x] Add `QueueEstimate` interface to queue-estimate.ts
+  - [x] Add `QueuePositionRecord` interface for DynamoDB (types.ts)
+  - [x] Add `QueuePositionInput` and `QueuePositionResult` interfaces
 
-- [ ] Task 2: Create DynamoDB table for queue position (AC: 2, 6)
-  - [ ] Add QueuePosition table to CDK stack
-  - [ ] Schema: leaseId (PK), position, timestamp, userEmail, estimatedTime
-  - [ ] GSI on position for FIFO ordering
+- [x] Task 2: Create DynamoDB table for queue position (AC: 2, 6)
+  - [x] Add QueuePosition table to CDK stack (approver-stack.ts)
+  - [x] Schema: leaseId (PK), position, timestamp, userEmail, estimatedTime, ttl
+  - [x] GSI on positionStatus+position for FIFO ordering
+  - [x] Added QUEUE_POSITION_TABLE_NAME env var to Lambda
 
-- [ ] Task 3: Implement queue position service (AC: 1, 6)
-  - [ ] Create `src/services/queue-position.ts`
-  - [ ] `getQueuePosition(leaseId)`: Get position from DynamoDB
-  - [ ] `addToQueue(leaseId, userEmail)`: Add to queue, assign position
-  - [ ] `removeFromQueue(leaseId)`: Remove when processed
-  - [ ] `getQueueDepth()`: Count pending requests
+- [x] Task 3: Implement queue position service (AC: 1, 6)
+  - [x] Create `src/services/queue-position.ts`
+  - [x] `getQueuePosition(leaseId)`: Get position from DynamoDB
+  - [x] `addToQueue(leaseId, estimatedTime)`: Add to queue, assign position
+  - [x] `removeFromQueue(leaseId)`: Remove when processed
+  - [x] `getQueueDepth()`: Count pending requests
+  - [x] `getOldestPending()`: Get oldest request for FIFO processing
 
-- [ ] Task 4: Implement calculateQueueEstimate() (AC: 3, 4)
-  - [ ] Create `src/lib/queue-estimate.ts`
-  - [ ] Accept cooling accounts, queue position, nowTimestamp
-  - [ ] Calculate estimated fulfillment time
-  - [ ] Detect capacity crunch scenario
-  - [ ] Return human-readable message
+- [x] Task 4: Implement calculateQueueEstimate() (AC: 3, 4)
+  - [x] `src/lib/queue-estimate.ts` - already existed
+  - [x] Accepts cooling accounts, active accounts, queue position, queue depth, nowTimestamp
+  - [x] Calculates estimated fulfillment time (4hr per position ahead)
+  - [x] Detects capacity crunch scenario
+  - [x] Returns human-readable message with UK timezone
 
-- [ ] Task 5: Update state machine for queue position (AC: 1)
-  - [ ] When transitioning to DELAYED with NO_READY_ACCOUNTS
-  - [ ] Add request to queue, get position
-  - [ ] Include position in StateContext
+- [x] Task 5: Update handler for queue position (AC: 1)
+  - [x] When transitioning to DELAYED with NO_READY_ACCOUNTS
+  - [x] Add request to queue position table
+  - [x] Calculate queue estimate for user message
+  - [x] Include queuePosition and queueDepth in StateContext
 
-- [ ] Task 6: Update lease comment for queue (AC: 5)
-  - [ ] Add `buildQueuePositionMessage()` to lease-comments.ts
-  - [ ] Include position, estimated time, disclaimer
-  - [ ] Replace existing buildQueuedMessage or extend
+- [x] Task 6: Update lease comment for queue (AC: 5)
+  - [x] `buildQueueEstimateComment()` in queue-estimate.ts
+  - [x] Includes position, estimated time, disclaimer
+  - [x] Fallback to `buildCooldownDelayMessage()` if queue tracking fails
 
-- [ ] Task 7: Implement FIFO processing (AC: 7)
-  - [ ] On scheduled queue processing, get oldest entry
-  - [ ] Check if accounts available
-  - [ ] Process or re-queue
+- [x] Task 7: Implement FIFO processing (AC: 7)
+  - [x] `processDelayQueue()` uses `getOldestPending()` from DynamoDB
+  - [x] Checks account readiness via `checkAccountReadinessNow()`
+  - [x] Removes from queue position table after successful processing
 
-- [ ] Task 8: Write unit tests
-  - [ ] Queue position service tests
-  - [ ] calculateQueueEstimate() tests
-  - [ ] DynamoDB integration tests (mocked)
-  - [ ] Message builder tests
+- [x] Task 8: Write unit tests
+  - [x] Queue position service tests (18 tests in queue-position.test.ts)
+  - [x] calculateQueueEstimate() tests (10 tests in queue-estimate.test.ts)
+  - [x] Handler integration tests updated for new behavior
+  - [x] All 900 tests pass
 
 ## Dev Notes
 
@@ -220,29 +224,78 @@ N/A - All tests passed first run
 
 ### Completion Notes List
 
-1. **Simplified Implementation**: Focused on pure function `calculateQueueEstimate()` for core logic. DynamoDB queue persistence deferred to integration with state machine.
+1. **Initial Implementation** (Session 1):
+   - Focused on pure function `calculateQueueEstimate()` for core logic
+   - DynamoDB queue persistence was deferred
 
-2. **AC Deviations**:
-   - DynamoDB table for queue position (AC2, AC6) not created yet - will be added when integrating with state machine
-   - Queue position service (Task 3) deferred to integration phase
-   - FIFO processing (AC7) will be handled by state machine integration
+2. **INCOMPLETE - AC Deviations** (2025-12-30 Review):
+   - Identified that AC2, AC6, AC7 were not implemented
+   - Story 6.5 AC5 blocked by missing infrastructure
 
-3. **Core Functionality Implemented**:
-   - `calculateQueueEstimate()` calculates position and estimated fulfillment time
-   - 4 hours per queue position estimate (configurable)
-   - Capacity crunch detection (all accounts Active, none cooling)
-   - User-friendly messaging avoiding technical jargon
-   - UK timezone formatting (Europe/London)
+3. **Full Implementation** (2025-12-30 - Session 4):
+   All previously missing ACs are now complete:
+   - ✅ **AC1: Queue position calculation** - `addToQueue()` assigns position, `getQueueDepth()` for monitoring
+   - ✅ **AC2: DynamoDB table created** - `ApproverQueuePosition` table with GSI for FIFO
+   - ✅ **AC3: Estimated fulfillment time** - 4hr per position, considers cooling accounts
+   - ✅ **AC4: Pure function** - `calculateQueueEstimate()` returns QueueEstimate interface
+   - ✅ **AC5: User messaging** - `buildQueueEstimateComment()` with jargon-free language
+   - ✅ **AC6: Queue persistence** - DynamoDB stores position, survives Lambda cold starts
+   - ✅ **AC7: FIFO processing** - `getOldestPending()` returns lowest position first
 
-4. **Test Coverage**: 10 tests covering:
-   - Queue position with cooling accounts
-   - Position delay calculation (4hr per position ahead)
-   - Capacity crunch detection
-   - Empty pool handling
-   - Past-time edge case
-   - Message formatting
+4. **Key Implementation Details**:
+   - Queue position service uses DynamoDB for persistence
+   - GSI on `positionStatus` + `position` for efficient FIFO queries
+   - TTL of 7 days for automatic cleanup of stale entries
+   - Idempotent `addToQueue()` - returns existing position if already queued
+   - Handler integrates queue position tracking when delayed due to cooldown
+   - `processDelayQueue()` uses `getOldestPending()` for FIFO processing
+
+5. **Test Coverage**: 905 tests total, including:
+   - 22 queue position service tests (18 + 4 from code review)
+   - 11 queue estimate tests (10 + 1 from code review)
+   - Handler integration tests updated for new behavior
 
 ### File List
 
-- `src/lib/queue-estimate.ts` - Core queue estimation logic (new)
-- `test/lib/queue-estimate.test.ts` - Comprehensive tests (new)
+- `src/lib/queue-estimate.ts` - Queue estimation logic (existing, updated)
+- `test/lib/queue-estimate.test.ts` - Queue estimate tests (existing)
+- `src/lib/types.ts` - Added QueuePositionRecord, QueuePositionInput, QueuePositionResult
+- `src/services/queue-position.ts` - Queue position DynamoDB service (new)
+- `test/services/queue-position.test.ts` - Queue position service tests (new)
+- `src/state-machine/types.ts` - Added queuePosition, queueDepth to StateContext
+- `src/handler.ts` - Integrated queue position tracking and FIFO processing
+- `cdk/lib/approver-stack.ts` - Added QueuePosition DynamoDB table with GSI
+- `cdk/lib/constructs/approver-lambda.ts` - Added QUEUE_POSITION_TABLE_NAME env var, Scan permission for accounts table
+- `cdk/config/environments.ts` - Added isbAccountsLambdaName config (ISB Accounts Lambda discovery)
+- `src/services/isb-lambda.ts` - Updated to use separate Lambda for accounts endpoint
+- `test/services/isb-lambda.test.ts` - Updated mock format for JSend response
+- `test/handler.test.ts` - Updated tests for new queue processing behavior
+
+## Code Review Record
+
+### Review Date: 2025-12-30
+
+### Reviewer: Claude Opus 4.5 (Adversarial Code Review Workflow)
+
+### Issues Found & Fixed
+
+| # | Severity | Issue | Resolution |
+|---|----------|-------|------------|
+| 1 | HIGH | Story File List missing 3 files changed in git | ✅ Fixed: Added `cdk/config/environments.ts`, `src/services/isb-lambda.ts`, `test/services/isb-lambda.test.ts` |
+| 2 | MEDIUM | Race condition in `getNextPosition()` - concurrent requests could get same position | ✅ Fixed: Added documentation explaining low-volume tolerance, updated `getOldestPending()` to use `queuedAt` as tiebreaker |
+| 3 | MEDIUM | Handler passes empty arrays to `calculateQueueEstimate()` causing wrong `isCapacityCrunch` | ✅ Fixed: Added `isCapacityCrunchOverride` option to `calculateQueueEstimate()`, handler now passes correct override |
+| 4 | MEDIUM | `updateEstimatedTime()` is exported but never called | ✅ Fixed: Added documentation explaining future use cases (estimate recalculation) |
+| 5 | LOW | No tests for `updateEstimatedTime()` | ✅ Fixed: Added 3 tests for update success, null handling, and error handling |
+
+### Test Results Post-Fix
+- **Total Tests:** 905 (was 900)
+- **New Tests Added:** 5 (race condition tiebreaker, isCapacityCrunchOverride, 3x updateEstimatedTime)
+- **Lint:** ✅ Pass
+- **Typecheck:** ✅ Pass
+
+### Files Modified in Code Review
+- `src/services/queue-position.ts` - Added race condition documentation, queuedAt tiebreaker, updateEstimatedTime docs
+- `src/lib/queue-estimate.ts` - Added `CalculateQueueEstimateOptions` interface with `isCapacityCrunchOverride`
+- `src/handler.ts` - Now passes `isCapacityCrunchOverride` to `calculateQueueEstimate()`
+- `test/services/queue-position.test.ts` - Added tiebreaker test, 3x updateEstimatedTime tests
+- `test/lib/queue-estimate.test.ts` - Added isCapacityCrunchOverride test

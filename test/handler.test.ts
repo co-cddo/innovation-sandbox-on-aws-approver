@@ -370,6 +370,30 @@ describe('handler', () => {
 
       expect(mockEmitLeaseEscalated).toHaveBeenCalled();
     });
+
+    it('should re-queue request on TOCTOU race condition (account unavailable)', async () => {
+      const event = createValidLeaseRequestedEvent();
+      // ISB rejects with account unavailability message
+      mockApproveLease.mockResolvedValueOnce({
+        success: false,
+        statusCode: 409,
+        error: 'no available account',
+      });
+
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(202);
+      expect(result.body).toBe('Request re-queued due to account unavailability');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'TOCTOU race condition detected - re-queuing request',
+        expect.objectContaining({
+          leaseId: '123e4567-e89b-12d3-a456-426614174000',
+          error: 'no available account',
+        })
+      );
+      // Should NOT escalate
+      expect(mockEmitLeaseEscalated).not.toHaveBeenCalled();
+    });
   });
 
   describe('non-LeaseRequested events', () => {
@@ -456,6 +480,27 @@ describe('handler', () => {
       };
       setDynamoDBService(mockDynamoDBService);
 
+      // Mock ISB Lambda to return all active accounts (no available accounts)
+      const mockActiveAccount = {
+        awsAccountId: '123456789012',
+        name: 'pool-001',
+        status: 'Active' as const, // All accounts active = no ready accounts
+        meta: {
+          createdTime: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+          lastEditTime: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+        },
+      };
+      setIsbLambdaService({
+        approveLease: vi.fn().mockResolvedValue({ success: true, statusCode: 200 }),
+        denyLease: vi.fn().mockResolvedValue({ success: true, statusCode: 200 }),
+        getAccounts: vi.fn().mockResolvedValue({
+          success: true,
+          accounts: [mockActiveAccount],
+          totalFetched: 1,
+          pagesTraversed: 1,
+        }),
+      });
+
       const mockSQSService = createMockSQSService();
       setSQSService(mockSQSService);
 
@@ -463,9 +508,9 @@ describe('handler', () => {
       const result = await handler(event, mockContext);
 
       expect(result.statusCode).toBe(200);
-      expect(result.body).toBe('No accounts available - queue processing skipped');
+      expect(result.body).toBe('No ready accounts available - queue processing skipped');
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'No accounts available - skipping queue processing',
+        'No ready accounts available - skipping queue processing',
         expect.objectContaining({
           triggerType: 'scheduled',
         })
@@ -945,28 +990,46 @@ describe('handler', () => {
       expect(mockSQSService.receiveMessages).toHaveBeenCalled();
     });
 
-    it('should use pessimistic fallback when account check fails', async () => {
+    it('should proceed with queue processing when ISB Lambda account check fails (fail-open)', async () => {
       const mockDynamoDBService: DynamoDBService = {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
         getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
-        getAvailableAccountsCount: vi.fn().mockResolvedValue({
-          success: false,
-          count: 0,
-          error: 'DynamoDB timeout',
-        }),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 0 }),
         updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
       };
       setDynamoDBService(mockDynamoDBService);
 
-      const mockSQSService = createMockSQSService();
+      // Mock ISB Lambda to fail - should proceed with queue processing (fail-open)
+      setIsbLambdaService({
+        approveLease: vi.fn().mockResolvedValue({ success: true, statusCode: 200 }),
+        denyLease: vi.fn().mockResolvedValue({ success: true, statusCode: 200 }),
+        getAccounts: vi.fn().mockResolvedValue({
+          success: false,
+          error: 'ISB Lambda timeout',
+          accounts: [],
+          totalFetched: 0,
+          pagesTraversed: 0,
+        }),
+      });
+
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({ success: true, messages: [] }),
+      });
       setSQSService(mockSQSService);
 
       const event = createScheduledEvent();
       const result = await handler(event, mockContext);
 
-      // Should skip processing due to pessimistic fallback (0 accounts)
+      // Should proceed with processing despite ISB Lambda failure (fail-open to not block queue)
       expect(result.statusCode).toBe(200);
-      expect(result.body).toBe('No accounts available - queue processing skipped');
+      expect(result.body).toBe('No messages in queue');
+      // Should log warning about failed account fetch
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Failed to fetch accounts from ISB Lambda - proceeding to scoring',
+        expect.objectContaining({
+          error: 'ISB Lambda timeout',
+        })
+      );
     });
 
     it('should handle SQS service not configured', async () => {
@@ -1071,6 +1134,7 @@ describe('handler', () => {
       const mockNotifyEscalation = vi.fn().mockResolvedValue({ success: true, statusCode: 200 });
       const mockSlackService: SlackService = {
         notifyEscalation: mockNotifyEscalation,
+        notifyCapacityCrunch: vi.fn().mockResolvedValue({ success: true }),
       };
       setSlackService(mockSlackService);
 
@@ -1113,6 +1177,7 @@ describe('handler', () => {
       const mockNotifyEscalation = vi.fn().mockResolvedValue({ success: false, error: 'Webhook error' });
       const mockSlackService: SlackService = {
         notifyEscalation: mockNotifyEscalation,
+        notifyCapacityCrunch: vi.fn().mockResolvedValue({ success: true }),
       };
       setSlackService(mockSlackService);
 
@@ -1151,6 +1216,7 @@ describe('handler', () => {
       const mockNotifyEscalation = vi.fn().mockRejectedValue(new Error('Network error'));
       const mockSlackService: SlackService = {
         notifyEscalation: mockNotifyEscalation,
+        notifyCapacityCrunch: vi.fn().mockResolvedValue({ success: true }),
       };
       setSlackService(mockSlackService);
 

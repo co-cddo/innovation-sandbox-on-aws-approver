@@ -11,6 +11,7 @@
 
 import type { SQSService } from './sqs.js';
 import type { ScoreBreakdown } from '../scoring/types.js';
+import type { CapacityCrunchAlert } from '../lib/capacity-crunch.js';
 
 /**
  * Payload format for Slack Workflow Webhook.
@@ -72,6 +73,11 @@ export interface SlackService {
    * Sends a notification for an escalated lease request.
    */
   notifyEscalation(params: EscalationNotificationParams): Promise<SlackNotificationResult>;
+
+  /**
+   * Sends a capacity crunch alert notification (Story 6.4).
+   */
+  notifyCapacityCrunch(alert: CapacityCrunchAlert): Promise<SlackNotificationResult>;
 }
 
 /**
@@ -251,6 +257,77 @@ export const createSlackService = (
         log.error('Failed to send Slack notification', {
           leaseId: params.leaseId,
           userEmail: params.userEmail,
+          error: errorMessage,
+          isTimeout,
+        });
+
+        return {
+          success: false,
+          error: isTimeout
+            ? `Slack webhook timeout after ${WEBHOOK_TIMEOUT_MS}ms`
+            : `Slack webhook error: ${errorMessage}`,
+        };
+      }
+    },
+
+    async notifyCapacityCrunch(
+      alert: CapacityCrunchAlert
+    ): Promise<SlackNotificationResult> {
+      try {
+        log.info('Sending Slack capacity crunch alert', {
+          activeAccounts: alert.activeAccounts,
+          pendingRequests: alert.pendingRequests,
+          soonestAvailableHours: alert.soonestAvailableHours,
+        });
+
+        // Build payload - using snake_case for Slack Workflow compatibility
+        const payload = {
+          alert_type: alert.alertType,
+          active_accounts: String(alert.activeAccounts),
+          available_accounts: String(alert.availableAccounts),
+          pending_requests: String(alert.pendingRequests),
+          soonest_available_hours: alert.soonestAvailableHours !== null
+            ? String(alert.soonestAvailableHours)
+            : 'unknown',
+          message: alert.message,
+        };
+
+        // Send webhook request with timeout
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => 'Unable to read response');
+          log.error('Slack webhook returned error for capacity crunch alert', {
+            statusCode: response.status,
+            statusText: response.statusText,
+            responseBody: errorText,
+          });
+
+          return {
+            success: false,
+            error: `Slack webhook error: ${response.status} ${response.statusText}`,
+            statusCode: response.status,
+          };
+        }
+
+        log.info('Slack capacity crunch alert sent successfully', {
+          statusCode: response.status,
+        });
+
+        return { success: true, statusCode: response.status };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isTimeout =
+          error instanceof Error && error.name === 'TimeoutError';
+
+        log.error('Failed to send Slack capacity crunch alert', {
           error: errorMessage,
           isTimeout,
         });

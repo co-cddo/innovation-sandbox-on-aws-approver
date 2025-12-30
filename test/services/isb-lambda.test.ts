@@ -315,7 +315,7 @@ describe('ISB Lambda Service', () => {
       approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
     };
 
-    // Helper to create a mock accounts response
+    // Helper to create a mock accounts response (JSend format)
     const createAccountsResponse = (
       accounts: Array<{
         awsAccountId: string;
@@ -328,16 +328,19 @@ describe('ISB Lambda Service', () => {
     ) => ({
       statusCode: 200,
       body: JSON.stringify({
-        accounts: accounts.map((a) => ({
-          awsAccountId: a.awsAccountId,
-          name: a.name,
-          status: a.status,
-          meta: {
-            createdTime: a.createdTime,
-            lastEditTime: a.lastEditTime,
-          },
-        })),
-        nextPageIdentifier: nextPageIdentifier ?? null,
+        status: 'success',
+        data: {
+          result: accounts.map((a) => ({
+            awsAccountId: a.awsAccountId,
+            name: a.name,
+            status: a.status,
+            meta: {
+              createdTime: a.createdTime,
+              lastEditTime: a.lastEditTime,
+            },
+          })),
+          nextPageIdentifier: nextPageIdentifier ?? null,
+        },
       }),
     });
 

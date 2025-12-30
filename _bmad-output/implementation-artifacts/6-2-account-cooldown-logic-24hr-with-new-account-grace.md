@@ -112,14 +112,14 @@ So that **users don't encounter leftover resources from previous sessions**.
   - [x] Add `buildCooldownDelayMessage()` to lease-comments.ts
   - [x] Add `buildReprocessingMessage()` for TOCTOU race condition
 
-- [ ] Task 6: Handle TOCTOU race condition (AC: 8)
-  - [ ] Detect ISB rejection due to account unavailability
-  - [ ] Re-queue request instead of failing
+- [x] Task 6: Handle TOCTOU race condition (AC: 8)
+  - [x] Detect ISB rejection due to account unavailability
+  - [x] Re-queue request instead of failing
   - [x] Update lease comments with reprocessing message (message function created)
 
-- [ ] Task 7: Add environment variable support (AC: 2)
-  - [ ] Add `ACCOUNT_COOLDOWN_HOURS` to CDK stack
-  - [ ] Add `NEW_ACCOUNT_GRACE_MINUTES` to CDK stack
+- [x] Task 7: Add environment variable support (AC: 2)
+  - [x] Add `ACCOUNT_COOLDOWN_HOURS` to CDK stack
+  - [x] Add `NEW_ACCOUNT_GRACE_MINUTES` to CDK stack
   - [x] Handler reads environment variables via getConfigFromEnvironment()
 
 - [x] Task 8: Write unit tests (AC: 7)
@@ -249,9 +249,18 @@ claude-opus-4-5-20251101 (Opus 4.5)
    - 5 tests for ACCOUNT_COOLDOWN_CHECK handler
    - Edge cases: 24hr boundary, 23h59m, 59m grace, 61m, mixed states
 
-6. **Deferred Items**
-   - TOCTOU race condition detection (AC8): Message created, handler logic deferred
-   - CDK environment variables: `getConfigFromEnvironment()` ready, CDK update deferred
+6. **Task 6 Completed: TOCTOU Race Condition (AC8)**
+   - Detect when ISB rejects approval due to account no longer available
+   - In `handler.ts`: Check ISB Lambda response for rejection patterns
+   - Re-queue request using `sqsService.sendDelayedRequest()` with 5-minute delay
+   - Updates lease comments with `buildReprocessingMessage()`
+   - Unit test added for TOCTOU race condition handling
+
+7. **Task 7 Completed: CDK Environment Variables (AC2)**
+   - Added `accountCooldownHours` and `newAccountGraceMinutes` to `ApproverConfig` interface
+   - Added defaults (24 hours, 60 minutes) to `DEFAULT_CONFIG`
+   - Added `ACCOUNT_COOLDOWN_HOURS` and `NEW_ACCOUNT_GRACE_MINUTES` to Lambda environment
+   - Handler already reads these via `getConfigFromEnvironment()`
 
 ### File List
 
@@ -261,7 +270,11 @@ claude-opus-4-5-20251101 (Opus 4.5)
 | `src/state-machine/types.ts` | Modified | +14 lines |
 | `src/state-machine/handlers.ts` | Modified | +35 lines |
 | `src/lib/lease-comments.ts` | Modified | +47 lines |
+| `src/handler.ts` | Modified | +25 lines (TOCTOU handling) |
+| `cdk/config/environments.ts` | Modified | +4 lines (cooldown config) |
+| `cdk/lib/constructs/approver-lambda.ts` | Modified | +2 lines (env vars) |
 | `test/lib/account-cooldown.test.ts` | Created | +296 lines |
 | `test/lib/lease-comments.test.ts` | Modified | +54 lines |
 | `test/state-machine/types.test.ts` | Modified | +3 lines |
 | `test/state-machine/handlers.test.ts` | Modified | +85 lines |
+| `test/handler.test.ts` | Modified | +15 lines (TOCTOU test) |

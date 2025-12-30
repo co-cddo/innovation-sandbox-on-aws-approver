@@ -37,6 +37,26 @@ export class ApproverStack extends cdk.Stack {
     });
 
     // ==========================================
+    // DynamoDB Queue Position Table (Story 6.3 - FR62, FR67)
+    // Tracks queue position for FIFO processing when accounts are in cooldown
+    // ==========================================
+    const queuePositionTable = new dynamodb.Table(this, 'QueuePositionTable', {
+      tableName: 'ApproverQueuePosition',
+      partitionKey: { name: 'leaseId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // For dev; change to RETAIN for prod
+      timeToLiveAttribute: 'ttl',
+    });
+
+    // GSI for FIFO ordering: query by status, sorted by position
+    queuePositionTable.addGlobalSecondaryIndex({
+      indexName: 'PositionIndex',
+      partitionKey: { name: 'positionStatus', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'position', type: dynamodb.AttributeType.NUMBER },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // ==========================================
     // S3 Domain List Bucket
     // ==========================================
     const domainListBucket = new s3.Bucket(this, 'DomainListBucket', {
@@ -81,12 +101,14 @@ export class ApproverStack extends cdk.Stack {
     const approverLambda = new ApproverLambda(this, 'ApproverLambda', {
       config,
       idempotencyTableName: idempotencyTable.tableName,
+      queuePositionTableName: queuePositionTable.tableName,
       delayQueueUrl: delayQueue.queueUrl,
       domainListBucketName: domainListBucket.bucketName,
     });
 
     // Grant permissions to Lambda
     idempotencyTable.grantReadWriteData(approverLambda.function);
+    queuePositionTable.grantReadWriteData(approverLambda.function);
     domainListBucket.grantRead(approverLambda.function);
     delayQueue.grantSendMessages(approverLambda.function);
     delayQueue.grantConsumeMessages(approverLambda.function);
@@ -224,6 +246,11 @@ export class ApproverStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'IdempotencyTableName', {
       value: idempotencyTable.tableName,
       description: 'Idempotency DynamoDB table name',
+    });
+
+    new cdk.CfnOutput(this, 'QueuePositionTableName', {
+      value: queuePositionTable.tableName,
+      description: 'Queue position DynamoDB table name (Story 6.3)',
     });
 
     new cdk.CfnOutput(this, 'DomainListBucketName', {

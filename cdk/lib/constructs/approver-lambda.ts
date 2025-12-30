@@ -8,6 +8,7 @@ import type { ApproverConfig } from '../../config/environments.js';
 export interface ApproverLambdaProps {
   config: ApproverConfig;
   idempotencyTableName: string;
+  queuePositionTableName: string;
   delayQueueUrl: string;
   domainListBucketName: string;
 }
@@ -19,7 +20,7 @@ export class ApproverLambda extends Construct {
   constructor(scope: Construct, id: string, props: ApproverLambdaProps) {
     super(scope, id);
 
-    const { config, idempotencyTableName, delayQueueUrl, domainListBucketName } = props;
+    const { config, idempotencyTableName, queuePositionTableName, delayQueueUrl, domainListBucketName } = props;
 
     // Create explicit log group with GDPR-compliant retention (7 years)
     // Story 5.4: FR55 - GDPR compliance audit trail
@@ -42,10 +43,13 @@ export class ApproverLambda extends Construct {
         BUSINESS_HOURS_START: config.businessHoursStart.toString(),
         BUSINESS_HOURS_END: config.businessHoursEnd.toString(),
         BUSINESS_HOURS_TZ: config.businessHoursTz,
+        ACCOUNT_COOLDOWN_HOURS: config.accountCooldownHours.toString(),
+        NEW_ACCOUNT_GRACE_MINUTES: config.newAccountGraceMinutes.toString(),
         ISB_CONSOLE_URL: config.isbConsoleUrl,
         ISB_LEASES_TABLE_NAME: config.isbLeasesTableName,
         ISB_ACCOUNTS_TABLE_NAME: config.isbAccountsTableName,
         IDEMPOTENCY_TABLE_NAME: idempotencyTableName,
+        QUEUE_POSITION_TABLE_NAME: queuePositionTableName,
         DELAY_QUEUE_URL: delayQueueUrl,
         DOMAIN_ALLOWLIST_BUCKET: domainListBucketName,
         SLACK_WEBHOOK_SECRET_ARN: config.slackWebhookSecretArn,
@@ -54,6 +58,7 @@ export class ApproverLambda extends Construct {
         RULE_WEIGHTS: config.ruleWeights,
         EVENT_BUS_NAME: config.isbEventBusName,
         ISB_LEASES_LAMBDA_NAME: config.isbLeasesLambdaName,
+        ISB_ACCOUNTS_LAMBDA_NAME: config.isbAccountsLambdaName,
       },
       tracing: lambda.Tracing.ACTIVE,
     });
@@ -98,13 +103,14 @@ export class ApproverLambda extends Construct {
       })
     );
 
-    // Grant Lambda invoke permission for ISB Leases Lambda (direct approval)
+    // Grant Lambda invoke permission for ISB Lambdas (leases + accounts)
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['lambda:InvokeFunction'],
         resources: [
           `arn:aws:lambda:us-west-2:${cdk.Stack.of(this).account}:function:${config.isbLeasesLambdaName}`,
+          `arn:aws:lambda:us-west-2:${cdk.Stack.of(this).account}:function:${config.isbAccountsLambdaName}`,
         ],
       })
     );
@@ -121,11 +127,12 @@ export class ApproverLambda extends Construct {
       })
     );
 
-    // Grant ISB Accounts table read (GetItem/Query only - no Scan for least-privilege)
+    // Grant ISB Accounts table read (GetItem/Query/Scan for account cooldown checks - Story 6.2)
+    // Scan required for getAvailableAccountsCount() and checkAccountReadinessNow()
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ['dynamodb:GetItem', 'dynamodb:Query'],
+        actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
         resources: [
           `arn:aws:dynamodb:us-west-2:${cdk.Stack.of(this).account}:table/${config.isbAccountsTableName}`,
           `arn:aws:dynamodb:us-west-2:${cdk.Stack.of(this).account}:table/${config.isbAccountsTableName}/index/*`,

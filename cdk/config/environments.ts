@@ -11,6 +11,10 @@ export interface ApproverConfig {
   businessHoursEnd: number;
   /** Business hours timezone (default: Europe/London) */
   businessHoursTz: string;
+  /** Account cooldown period in hours (default: 24) - Story 6.2 AC2 */
+  accountCooldownHours: number;
+  /** New account grace period in minutes (default: 60) - Story 6.2 AC2 */
+  newAccountGraceMinutes: number;
   /** ISB Console URL for deep links (placeholder until AppConfig integration) */
   isbConsoleUrl: string;
   /** ISB Leases DynamoDB table name */
@@ -19,6 +23,8 @@ export interface ApproverConfig {
   isbAccountsTableName: string;
   /** ISB Leases Lambda function name for direct approval invocation */
   isbLeasesLambdaName: string;
+  /** ISB Accounts Lambda function name for account readiness checks */
+  isbAccountsLambdaName: string;
   /** ISB Event Bus name for EventBridge integration */
   isbEventBusName: string;
   /** KMS key ID for ISB DynamoDB table encryption */
@@ -38,10 +44,13 @@ export const DEFAULT_CONFIG: ApproverConfig = {
   businessHoursStart: 7,
   businessHoursEnd: 19,
   businessHoursTz: 'Europe/London',
+  accountCooldownHours: 24,
+  newAccountGraceMinutes: 60,
   isbConsoleUrl: 'https://ndx.digital.cabinet-office.gov.uk', // ISB Console URL
   isbLeasesTableName: 'ndx-try-isb-data-LeaseTable473C6DF2-1RC3238PVASE1',
   isbAccountsTableName: 'ndx-try-isb-data-SandboxAccountTableEFB9C069-198TPLJI6Z9KV',
   isbLeasesLambdaName: 'ISB-LeasesLambdaFunction-ndx',
+  isbAccountsLambdaName: 'ISB-AccountsLambdaFunction-ndx',
   isbEventBusName: 'InnovationSandboxComputeISBEventBus6697FE33',
   isbKmsKeyId: '4682f54a-cf9a-4a2f-941c-aba8795ac878',
   slackWebhookSecretArn:

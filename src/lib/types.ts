@@ -163,11 +163,15 @@ export const AccountSchema = z.object({
 export type Account = z.infer<typeof AccountSchema>;
 
 /**
- * Response from ISB /api/accounts endpoint (single page)
+ * Response from ISB /accounts endpoint (JSend format, single page)
+ * Example: {"status":"success","data":{"result":[...],"nextPageIdentifier":null}}
  */
 export const AccountsPageResponseSchema = z.object({
-  accounts: z.array(AccountSchema),
-  nextPageIdentifier: z.string().nullable(),
+  status: z.literal('success'),
+  data: z.object({
+    result: z.array(AccountSchema),
+    nextPageIdentifier: z.string().nullable(),
+  }),
 });
 
 export type AccountsPageResponse = z.infer<typeof AccountsPageResponseSchema>;
@@ -180,5 +184,48 @@ export interface GetAccountsResult {
   readonly accounts: Account[];
   readonly totalFetched: number;
   readonly pagesTraversed: number;
+  readonly error?: string;
+}
+
+// =============================================================================
+// Queue Position Schemas (Story 6.3 - FR62, FR67)
+// =============================================================================
+
+/**
+ * Queue position record stored in DynamoDB for FIFO processing.
+ * Users waiting for sandbox accounts are tracked here.
+ */
+export interface QueuePositionRecord {
+  /** Partition key: composite leaseId as string "userEmail#uuid" */
+  readonly leaseId: string;
+  /** Position in queue (1-based, lower = earlier) */
+  readonly position: number;
+  /** ISO 8601 timestamp when queued */
+  readonly queuedAt: string;
+  /** User email for logging/debugging */
+  readonly userEmail: string;
+  /** ISO 8601 estimated fulfillment time (null if capacity crunch) */
+  readonly estimatedFulfillmentTime: string | null;
+  /** Status for GSI query - always "PENDING" until processed */
+  readonly positionStatus: 'PENDING';
+  /** TTL for automatic cleanup (epoch seconds) - 7 days after queued */
+  readonly ttl: number;
+}
+
+/**
+ * Input for adding a request to the queue
+ */
+export interface QueuePositionInput {
+  readonly leaseId: LeaseId;
+  readonly estimatedFulfillmentTime: Date | null;
+}
+
+/**
+ * Result from queue position operations
+ */
+export interface QueuePositionResult {
+  readonly success: boolean;
+  readonly position?: number;
+  readonly queueDepth?: number;
   readonly error?: string;
 }

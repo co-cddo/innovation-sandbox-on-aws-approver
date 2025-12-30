@@ -100,6 +100,14 @@ const buildQueueMessage = (
 };
 
 /**
+ * Options for calculating queue estimate
+ */
+export interface CalculateQueueEstimateOptions {
+  /** Override capacity crunch detection (useful when account arrays unavailable) */
+  isCapacityCrunchOverride?: boolean;
+}
+
+/**
  * Calculate queue estimate for a user whose request is being delayed.
  *
  * Pure function - accepts all inputs as parameters for testability.
@@ -110,6 +118,7 @@ const buildQueueMessage = (
  * @param queueDepth - Total pending requests in queue
  * @param nowTimestamp - Current time (injected for testability)
  * @param config - Cooldown configuration
+ * @param options - Optional overrides for calculated values
  * @returns Queue estimate with position and estimated fulfillment time
  */
 export const calculateQueueEstimate = (
@@ -118,10 +127,13 @@ export const calculateQueueEstimate = (
   queuePosition: number,
   queueDepth: number,
   nowTimestamp: Date,
-  config: AccountCooldownConfig = DEFAULT_COOLDOWN_CONFIG
+  config: AccountCooldownConfig = DEFAULT_COOLDOWN_CONFIG,
+  options?: CalculateQueueEstimateOptions
 ): QueueEstimate => {
   // Detect capacity crunch: all accounts active, none cooling
-  const isCapacityCrunch = coolingAccounts.length === 0 && activeAccounts.length > 0;
+  // Allow override when account arrays are not available (e.g., handler context)
+  const isCapacityCrunch =
+    options?.isCapacityCrunchOverride ?? (coolingAccounts.length === 0 && activeAccounts.length > 0);
 
   // Calculate soonest ready time from cooling accounts
   let estimatedFulfillmentTime: Date | null = null;

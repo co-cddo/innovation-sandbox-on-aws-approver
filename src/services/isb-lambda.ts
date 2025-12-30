@@ -39,6 +39,8 @@ export interface IsbLambdaResult {
  */
 export interface IsbLambdaServiceConfig {
   readonly functionName: string;
+  /** Optional: separate Lambda for accounts endpoint (ISB-AccountsLambdaFunction) */
+  readonly accountsFunctionName?: string;
 }
 
 /**
@@ -292,8 +294,11 @@ export const createIsbLambdaService = (
 
       const payload = createAccountsApiGatewayEvent(approverJwt, pageIdentifier);
 
+      // Use accounts-specific Lambda if configured, otherwise fallback to main function
+      const accountsFunctionName = config.accountsFunctionName ?? config.functionName;
+
       const command = new InvokeCommand({
-        FunctionName: config.functionName,
+        FunctionName: accountsFunctionName,
         Payload: Buffer.from(JSON.stringify(payload)),
       });
 
@@ -355,11 +360,11 @@ export const createIsbLambdaService = (
           };
         }
 
-        // Add accounts from this page
-        allAccounts.push(...parseResult.data.accounts);
+        // Add accounts from this page (JSend format: data.result contains accounts)
+        allAccounts.push(...parseResult.data.data.result);
 
         // Check for next page
-        pageIdentifier = parseResult.data.nextPageIdentifier ?? undefined;
+        pageIdentifier = parseResult.data.data.nextPageIdentifier ?? undefined;
       } catch (error) {
         return {
           success: false,

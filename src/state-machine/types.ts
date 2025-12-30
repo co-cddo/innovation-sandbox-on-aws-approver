@@ -148,6 +148,12 @@ export interface StateContext {
   /** Delay reason if no accounts available */
   accountDelayReason?: 'NO_READY_ACCOUNTS' | 'ACCOUNT_FETCH_ERROR';
 
+  // Queue position data (populated when request is delayed due to cooldown - Story 6.3)
+  /** Queue position for FIFO processing (1-based) */
+  queuePosition?: number;
+  /** Total queue depth (pending requests) */
+  queueDepth?: number;
+
   // Processing state (populated during processing)
   /** Calculated risk score */
   score: number;

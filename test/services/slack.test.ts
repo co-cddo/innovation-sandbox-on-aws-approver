@@ -568,4 +568,123 @@ describe('Slack Service (Story 5.2)', () => {
       });
     });
   });
+
+  describe('notifyCapacityCrunch (Story 6.4)', () => {
+    const webhookUrl = 'https://hooks.slack.com/workflows/test';
+    const isbConsoleUrl = 'https://isb.sandbox.gov.uk';
+
+    it('should send capacity crunch alert to Slack', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve('ok'),
+      });
+
+      const sqsService = createMockSQSService(5);
+      const service = createSlackService(webhookUrl, isbConsoleUrl, sqsService);
+
+      const alert = {
+        alertType: 'capacity_crunch' as const,
+        activeAccounts: 8,
+        availableAccounts: 0,
+        pendingRequests: 5,
+        soonestAvailableHours: 6.5,
+        message: 'All sandbox accounts are in active use.',
+      };
+
+      const result = await service.notifyCapacityCrunch(alert);
+
+      expect(result.success).toBe(true);
+      expect(result.statusCode).toBe(200);
+
+      const fetchCall = mockFetch.mock.calls[0]!;
+      const body = JSON.parse(fetchCall[1].body);
+
+      expect(body.alert_type).toBe('capacity_crunch');
+      expect(body.active_accounts).toBe('8');
+      expect(body.available_accounts).toBe('0');
+      expect(body.pending_requests).toBe('5');
+      expect(body.soonest_available_hours).toBe('6.5');
+      expect(body.message).toBe('All sandbox accounts are in active use.');
+    });
+
+    it('should handle null soonest available hours', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve('ok'),
+      });
+
+      const sqsService = createMockSQSService(0);
+      const service = createSlackService(webhookUrl, isbConsoleUrl, sqsService);
+
+      const alert = {
+        alertType: 'capacity_crunch' as const,
+        activeAccounts: 8,
+        availableAccounts: 0,
+        pendingRequests: 3,
+        soonestAvailableHours: null,
+        message: 'All accounts in use.',
+      };
+
+      await service.notifyCapacityCrunch(alert);
+
+      const fetchCall = mockFetch.mock.calls[0]!;
+      const body = JSON.parse(fetchCall[1].body);
+
+      expect(body.soonest_available_hours).toBe('unknown');
+    });
+
+    it('should return error on webhook failure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        text: () => Promise.resolve('Server error'),
+      });
+
+      const sqsService = createMockSQSService(0);
+      const logger = createMockLogger();
+      const service = createSlackService(webhookUrl, isbConsoleUrl, sqsService, logger);
+
+      const alert = {
+        alertType: 'capacity_crunch' as const,
+        activeAccounts: 8,
+        availableAccounts: 0,
+        pendingRequests: 2,
+        soonestAvailableHours: 12,
+        message: 'Test alert.',
+      };
+
+      const result = await service.notifyCapacityCrunch(alert);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('500');
+      expect(logger.error).toHaveBeenCalled();
+    });
+
+    it('should handle timeout gracefully', async () => {
+      const timeoutError = new Error('Timeout');
+      timeoutError.name = 'TimeoutError';
+      mockFetch.mockRejectedValueOnce(timeoutError);
+
+      const sqsService = createMockSQSService(0);
+      const logger = createMockLogger();
+      const service = createSlackService(webhookUrl, isbConsoleUrl, sqsService, logger);
+
+      const alert = {
+        alertType: 'capacity_crunch' as const,
+        activeAccounts: 8,
+        availableAccounts: 0,
+        pendingRequests: 1,
+        soonestAvailableHours: 24,
+        message: 'Timeout test.',
+      };
+
+      const result = await service.notifyCapacityCrunch(alert);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('timeout');
+    });
+  });
 });

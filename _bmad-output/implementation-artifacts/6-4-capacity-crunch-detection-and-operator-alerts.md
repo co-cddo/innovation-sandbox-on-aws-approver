@@ -87,9 +87,9 @@ So that **I can provision additional capacity if demand is high**.
   - [x] Alert building tests
   - [x] Message building tests
 
-- [ ] Task 7: DynamoDB throttle state persistence (deferred)
-  - [ ] Add lastCapacityCrunchAlert to state table
-  - [ ] Update on alert sent
+- [x] Task 7: DynamoDB throttle state persistence
+  - [x] Add lastCapacityCrunchAlert to state table (QueuePosition table)
+  - [x] Update on alert sent
 
 ## Dev Notes
 
@@ -165,7 +165,32 @@ N/A - All tests passed first run
    - Alert building (all fields, unknown availability)
    - User message format (jargon-free)
 
+### Completed Implementation
+
+**Task 7: DynamoDB throttle state persistence (Completed)**
+- Added `getLastCapacityCrunchAlertTime()` to queue-position.ts
+- Added `updateLastCapacityCrunchAlertTime()` to queue-position.ts
+- Uses fixed key `__SYSTEM__#capacityCrunchLastAlert` in QueuePosition table
+- 7-day TTL for automatic cleanup
+
+**Handler Integration (Completed)**
+- Imported `capacity-crunch.ts` functions into `src/handler.ts`
+- Added `notifyCapacityCrunch()` method to SlackService interface
+- Integrated alert sending when `isCapacityCrunch` detected
+- Throttle check before sending (once per hour)
+- Updates `lastCapacityCrunchAlert` timestamp after successful alert
+- Graceful error handling (doesn't fail request on alert failure)
+
 ### File List
 
-- `src/lib/capacity-crunch.ts` - Capacity crunch detection and alerts (new)
-- `test/lib/capacity-crunch.test.ts` - Comprehensive tests (new)
+| File | Action | Description |
+|------|--------|-------------|
+| `src/lib/capacity-crunch.ts` | Created | Capacity crunch detection and alerts |
+| `src/services/slack.ts` | Modified | Added `notifyCapacityCrunch()` method |
+| `src/services/queue-position.ts` | Created | Queue position service with throttle state persistence |
+| `src/handler.ts` | Modified | Integrated capacity crunch alert logic |
+| `cdk/config/environments.ts` | Modified | Added cooldown config (Story 6.2) |
+| `cdk/lib/constructs/approver-lambda.ts` | Modified | Added env vars (Story 6.2) |
+| `test/lib/capacity-crunch.test.ts` | Created | 16 tests |
+| `test/services/slack.test.ts` | Modified | +4 tests for capacity crunch alerts |
+| `test/services/queue-position.test.ts` | Created | Queue position tests including throttle state |
