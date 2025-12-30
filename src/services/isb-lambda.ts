@@ -133,7 +133,7 @@ const createAccountsApiGatewayEvent = (
   pageIdentifier?: string
 ): Record<string, unknown> => ({
   httpMethod: 'GET',
-  path: '/api/accounts',
+  path: '/accounts',
   queryStringParameters: pageIdentifier ? { pageIdentifier } : null,
   headers: {
     Authorization: `Bearer ${approverJwt}`,
@@ -141,10 +141,10 @@ const createAccountsApiGatewayEvent = (
   },
   requestContext: {
     httpMethod: 'GET',
-    path: '/api/accounts',
+    path: '/accounts',
     extendedRequestId: `approver-accounts-${Date.now()}`,
   },
-  resource: '/api/accounts',
+  resource: '/accounts',
   isBase64Encoded: false,
 });
 

@@ -341,7 +341,7 @@ describe('ISB Lambda Service', () => {
       }),
     });
 
-    it('sends GET request to /api/accounts', async () => {
+    it('sends GET request to /accounts', async () => {
       mockSend.mockResolvedValue({
         Payload: Buffer.from(
           JSON.stringify(
@@ -366,8 +366,8 @@ describe('ISB Lambda Service', () => {
       const payload = JSON.parse(Buffer.from(sentCommand.input.Payload as Buffer).toString());
 
       expect(payload.httpMethod).toBe('GET');
-      expect(payload.path).toBe('/api/accounts');
-      expect(payload.resource).toBe('/api/accounts');
+      expect(payload.path).toBe('/accounts');
+      expect(payload.resource).toBe('/accounts');
     });
 
     it('returns accounts on successful single page response', async () => {
