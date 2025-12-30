@@ -565,7 +565,10 @@ const checkAccountReadinessNow = async (): Promise<{
 }> => {
   try {
     // Fetch all accounts from ISB Lambda
-    const accountsResult = await isbLambdaService.getAccounts();
+    // Use the automated approver email for account queries
+    const accountsResult = await isbLambdaService.getAccounts({
+      approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
+    });
 
     if (!accountsResult.success) {
       logger.warn('Failed to fetch accounts from ISB Lambda - proceeding to scoring', {
