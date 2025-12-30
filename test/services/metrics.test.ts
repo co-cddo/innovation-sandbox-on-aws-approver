@@ -386,6 +386,112 @@ describe('Metrics Service (Story 5.3)', () => {
     });
   });
 
+  describe('Non-Error exception handling', () => {
+    it('should handle non-Error in recordDecision', () => {
+      mockAddDimension.mockImplementationOnce(() => {
+        throw 'String error'; // Non-Error exception
+      });
+      const logger = createMockLogger();
+      const service = createMetricsService(logger);
+
+      service.recordDecision('approved');
+
+      expect(logger.warn).toHaveBeenCalledWith('Failed to record decision metric', {
+        action: 'approved',
+        error: 'String error',
+      });
+    });
+
+    it('should handle non-Error in recordScore', () => {
+      mockAddMetric.mockImplementationOnce(() => {
+        throw { custom: 'error object' }; // Non-Error exception
+      });
+      const logger = createMockLogger();
+      const service = createMetricsService(logger);
+
+      service.recordScore(10);
+
+      expect(logger.warn).toHaveBeenCalledWith('Failed to record score metric', {
+        score: 10,
+        error: '[object Object]',
+      });
+    });
+
+    it('should handle non-Error in recordLatency', () => {
+      mockAddDimension.mockImplementationOnce(() => {
+        throw 42; // Non-Error exception (number)
+      });
+      const logger = createMockLogger();
+      const service = createMetricsService(logger);
+
+      service.recordLatency('total', 1000);
+
+      expect(logger.warn).toHaveBeenCalledWith('Failed to record latency metric', {
+        stage: 'total',
+        durationMs: 1000,
+        error: '42',
+      });
+    });
+
+    it('should handle non-Error in recordRuleTriggers', () => {
+      mockAddDimension.mockImplementationOnce(() => {
+        throw null; // Non-Error exception (null)
+      });
+      const logger = createMockLogger();
+      const service = createMetricsService(logger);
+
+      service.recordRuleTriggers({ test_rule: 5 });
+
+      expect(logger.warn).toHaveBeenCalledWith('Failed to record rule trigger metrics', {
+        error: 'null',
+      });
+    });
+
+    it('should handle non-Error in publishMetrics', () => {
+      mockPublishStoredMetrics.mockImplementationOnce(() => {
+        throw undefined; // Non-Error exception (undefined)
+      });
+      const logger = createMockLogger();
+      const service = createMetricsService(logger);
+
+      service.publishMetrics();
+
+      expect(logger.warn).toHaveBeenCalledWith('Failed to publish metrics', {
+        error: 'undefined',
+      });
+    });
+
+    it('should handle non-Error in addDimension', () => {
+      mockAddDimension.mockImplementationOnce(() => {
+        throw 'dimension error';
+      });
+      const logger = createMockLogger();
+      const service = createMetricsService(logger);
+
+      service.addDimension('test', 'value');
+
+      expect(logger.warn).toHaveBeenCalledWith('Failed to add dimension', {
+        name: 'test',
+        value: 'value',
+        error: 'dimension error',
+      });
+    });
+
+    it('should handle non-Error in clearMetrics', () => {
+      mockClearMetrics.mockImplementationOnce(() => {
+        throw 'clear error string';
+      });
+      const logger = createMockLogger();
+      const service = createMetricsService(logger);
+
+      service.clearMetrics();
+
+      expect(logger.warn).toHaveBeenCalledWith('Failed to clear metrics', {
+        error: 'clear error string',
+      });
+    });
+  });
+
   describe('Integration scenarios', () => {
     it('should handle complete request flow', () => {
       const logger = createMockLogger();

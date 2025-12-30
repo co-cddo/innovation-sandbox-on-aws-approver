@@ -11,7 +11,7 @@ export interface ApproverConfig {
   businessHoursEnd: number;
   /** Business hours timezone (default: Europe/London) */
   businessHoursTz: string;
-  /** Account cooldown period in hours (default: 24) - Story 6.2 AC2 */
+  /** Account cooldown period in hours (default: 48) - Story 6.2 AC2 */
   accountCooldownHours: number;
   /** New account grace period in minutes (default: 60) - Story 6.2 AC2 */
   newAccountGraceMinutes: number;
@@ -44,7 +44,7 @@ export const DEFAULT_CONFIG: ApproverConfig = {
   businessHoursStart: 7,
   businessHoursEnd: 19,
   businessHoursTz: 'Europe/London',
-  accountCooldownHours: 24,
+  accountCooldownHours: 48,
   newAccountGraceMinutes: 60,
   isbConsoleUrl: 'https://ndx.digital.cabinet-office.gov.uk', // ISB Console URL
   isbLeasesTableName: 'ndx-try-isb-data-LeaseTable473C6DF2-1RC3238PVASE1',

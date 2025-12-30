@@ -63,6 +63,28 @@ The ISB Approver listens for `LeaseRequested` events from the Innovation Sandbox
 - CloudWatch alarms for DLQ depth, error rate, latency
 - GDPR-compliant 7-year audit trail
 
+### Account Cooldown & Availability
+
+To ensure clean billing separation between sequential users, sandbox accounts enforce a **48-hour cooldown** period:
+
+| State | Condition | Action |
+|-------|-----------|--------|
+| **Ready** | Available + lastEditTime > 48h ago | Immediate assignment |
+| **Cooling** | Available + lastEditTime < 48h ago | Queue request with ETA |
+| **New** | Available + createdTime < 60min ago | Immediate assignment (grace period) |
+| **Active** | Currently leased | Not available |
+
+**Queue Management:**
+- Requests queue FIFO when no ready accounts available
+- Users receive queue position and estimated wait time
+- Queued requests expire after 5 business days with automatic denial
+- `AccountCleanupSucceeded` events trigger queue processing
+
+**Capacity Crunch:**
+- All accounts Active (none Available) triggers extended wait messaging
+- Ops team receives throttled alerts (max 1 per 6 hours)
+- Estimated wait: 36-48 hours based on typical lease durations
+
 ## Architecture
 
 ### Technology Stack
@@ -118,6 +140,16 @@ LeaseRequested Event
  APPROVED   Continue
  (bypass)       │
                 ▼
+┌─────────────────────────┐
+│ ACCOUNT_READINESS_CHECK │ Ready accounts?
+└───────────┬─────────────┘
+            │
+      ┌─────┴─────┐
+      │           │
+      ▼           ▼
+   QUEUED     Continue
+ (with ETA)       │
+                  ▼
 ┌───────────────────┐
 │     SCORING       │ Run 18 scoring rules
 └─────────┬─────────┘
@@ -267,6 +299,8 @@ cd cdk && npx cdk deploy ApproverStack --profile YOUR_PROFILE
 | `BEDROCK_MODEL_ID` | Bedrock model for AI analysis | `us.amazon.nova-micro-v1:0` |
 | `DELAY_QUEUE_URL` | SQS queue for delayed requests | - |
 | `DOMAIN_ALLOWLIST_BUCKET` | S3 bucket for domain list | - |
+| `ACCOUNT_COOLDOWN_HOURS` | Hours before account reuse | `48` |
+| `NEW_ACCOUNT_GRACE_MINUTES` | Grace period for new accounts | `60` |
 
 ### Rule Weight Customization
 
@@ -289,7 +323,7 @@ Detailed project documentation is available in the `_bmad-output/` directory:
 |----------|-------------|
 | [Product Requirements](./_bmad-output/prd.md) | Full PRD with success metrics |
 | [Architecture](./_bmad-output/architecture.md) | Technical design and patterns |
-| [Epics & Stories](./_bmad-output/epics.md) | 5 epics, 23 stories breakdown |
+| [Epics & Stories](./_bmad-output/epics.md) | 6 epics, 24 stories breakdown |
 | [ISB Integration](./_bmad-output/isb-integration-reference.md) | Integration with Innovation Sandbox |
 | [Implementation Artifacts](./_bmad-output/implementation-artifacts/) | Story-level implementation details |
 
@@ -302,6 +336,7 @@ Detailed project documentation is available in the `_bmad-output/` directory:
 | 3 | Intelligent Scoring | 5 |
 | 4 | Timing & Queue Management | 4 |
 | 5 | Communications & Operations | 5 |
+| 6 | Account Cooldown & Capacity | 1 |
 
 ## Integration with Innovation Sandbox
 

@@ -431,6 +431,51 @@ describe('Slack Service (Story 5.2)', () => {
         expect(result.error).toContain('Network error');
       });
 
+      it('should use 0 when approximateNumberOfMessages is undefined (line 199)', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve('ok'),
+        });
+
+        // SQS returns success but no approximateNumberOfMessages
+        const sqsService: SQSService = {
+          sendDelayedRequest: vi.fn(),
+          receiveMessages: vi.fn(),
+          deleteMessage: vi.fn(),
+          getQueueDepth: vi.fn().mockResolvedValue({
+            success: true,
+            // approximateNumberOfMessages is undefined
+          }),
+        };
+        const service = createSlackService(webhookUrl, isbConsoleUrl, sqsService);
+
+        await service.notifyEscalation(params);
+
+        const fetchCall = mockFetch.mock.calls[0]!;
+        const body = JSON.parse(fetchCall[1].body);
+        expect(body.queue_depth).toBe('0'); // Falls back to 0
+      });
+
+      it('should handle non-Error exception in catch block (line 253)', async () => {
+        mockFetch.mockRejectedValueOnce('String error'); // Non-Error exception
+
+        const sqsService = createMockSQSService();
+        const logger = createMockLogger();
+        const service = createSlackService(webhookUrl, isbConsoleUrl, sqsService, logger);
+
+        const result = await service.notifyEscalation(params);
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('String error');
+        expect(logger.error).toHaveBeenCalledWith(
+          'Failed to send Slack notification',
+          expect.objectContaining({
+            isTimeout: false,
+          })
+        );
+      });
+
       it('should log success with relevant details', async () => {
         mockFetch.mockResolvedValueOnce({
           ok: true,
@@ -685,6 +730,58 @@ describe('Slack Service (Story 5.2)', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('timeout');
+    });
+
+    it('should handle non-Error exception in catch block (line 326)', async () => {
+      mockFetch.mockRejectedValueOnce('String error'); // Non-Error exception
+
+      const sqsService = createMockSQSService(0);
+      const logger = createMockLogger();
+      const service = createSlackService(webhookUrl, isbConsoleUrl, sqsService, logger);
+
+      const alert = {
+        alertType: 'capacity_crunch' as const,
+        activeAccounts: 8,
+        availableAccounts: 0,
+        pendingRequests: 2,
+        soonestAvailableHours: 12,
+        message: 'Non-Error test.',
+      };
+
+      const result = await service.notifyCapacityCrunch(alert);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('String error');
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to send Slack capacity crunch alert',
+        expect.objectContaining({
+          isTimeout: false,
+        })
+      );
+    });
+
+    it('should handle network error (non-timeout) gracefully (line 337)', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+      const sqsService = createMockSQSService(0);
+      const logger = createMockLogger();
+      const service = createSlackService(webhookUrl, isbConsoleUrl, sqsService, logger);
+
+      const alert = {
+        alertType: 'capacity_crunch' as const,
+        activeAccounts: 8,
+        availableAccounts: 0,
+        pendingRequests: 3,
+        soonestAvailableHours: 18,
+        message: 'Network error test.',
+      };
+
+      const result = await service.notifyCapacityCrunch(alert);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Network error');
+      // Verify it's the non-timeout path
+      expect(result.error).not.toContain('timeout');
     });
   });
 });

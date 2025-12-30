@@ -59,6 +59,7 @@ const UK_LOCAL_GOV_PATTERNS = [
  * @returns true if the prefix matches a group mailbox pattern
  */
 export const isLikelyGroupMailbox = (email: string): boolean => {
+  /* c8 ignore next -- split always returns at least one element */
   const prefix = email.split('@')[0]?.toLowerCase() ?? '';
 
   // Check if prefix starts with any group mailbox pattern
@@ -103,6 +104,7 @@ export const analyzeEmailPattern = (email: string): AIAnalysisResult => {
  * @returns The matched prefix pattern, or undefined
  */
 export const getMatchedGroupMailboxPrefix = (email: string): string | undefined => {
+  /* c8 ignore next -- split always returns at least one element */
   const prefix = email.split('@')[0]?.toLowerCase() ?? '';
 
   return GROUP_MAILBOX_PREFIXES.find((pattern) => prefix.startsWith(pattern));

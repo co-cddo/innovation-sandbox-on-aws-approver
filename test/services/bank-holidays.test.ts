@@ -155,6 +155,15 @@ describe('createBankHolidayService', () => {
     expect(holidays.size).toBe(0);
   });
 
+  it('should handle non-Error exception in fetch (line 83)', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue('String error'); // Non-Error exception
+
+    const service = createBankHolidayService();
+    const holidays = await service.getBankHolidays();
+
+    expect(holidays.size).toBe(0);
+  });
+
   it('should return empty set on HTTP error', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

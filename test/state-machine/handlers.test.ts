@@ -210,6 +210,23 @@ describe('TIMING_CHECK handler', () => {
     expect(result.context.reason).toContain('2025-01-16T07:00:00.000Z');
   });
 
+  it('should use "unknown" when nextProcessingTime is undefined (line 157)', () => {
+    const context: StateContext = {
+      ...createInitialContext(),
+      leaseId: 'abc-123',
+      userEmail: 'user@example.gov.uk',
+      templateId: 'web-hosting',
+      isWithinBusinessHours: false,
+      // nextProcessingTime is not set (undefined)
+    };
+
+    const result = handlers[ApprovalState.TIMING_CHECK](context);
+
+    expect(result.nextState).toBe(ApprovalState.DELAYED);
+    expect(result.context.reason).toContain('Outside business hours');
+    expect(result.context.reason).toContain('unknown');
+  });
+
   it('should proceed to ALLOW_LIST_CHECK when timing not checked (undefined)', () => {
     const context: StateContext = {
       ...createInitialContext(),

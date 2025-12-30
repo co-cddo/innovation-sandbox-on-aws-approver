@@ -413,5 +413,41 @@ describe('BedrockService', () => {
       const result = await service.analyzeEmail('team@council.gov.uk');
       expect(result.analysis.confidence).toBe(0.5);
     });
+
+    it('should default to low (0.5) when confidence is missing (line 161)', async () => {
+      mockSend.mockResolvedValueOnce({
+        body: new globalThis.TextEncoder().encode(
+          JSON.stringify({
+            output: {
+              message: {
+                // No confidence field - should default to 'low' -> 0.5
+                content: [{ text: '{"isGroupMailbox": true}' }],
+              },
+            },
+          })
+        ),
+      });
+
+      const result = await service.analyzeEmail('team@council.gov.uk');
+      expect(result.analysis.confidence).toBe(0.5); // low = 0.5
+    });
+  });
+
+  describe('error handling edge cases', () => {
+    it('should handle non-Error exception (line 282)', async () => {
+      mockSend.mockRejectedValueOnce('String error'); // Non-Error exception
+
+      const result = await service.analyzeEmail('user@council.gov.uk');
+
+      expect(result.usedFallback).toBe(true);
+      expect(result.fallbackReason).toBe('String error');
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Using fallback - Bedrock error',
+        expect.objectContaining({
+          email: 'user@council.gov.uk',
+          error: 'String error',
+        })
+      );
+    });
   });
 });

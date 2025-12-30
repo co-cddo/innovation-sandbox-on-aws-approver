@@ -372,6 +372,30 @@ describe('Structured Logger (Story 5.3)', () => {
 
       expect(mockInfo).toHaveBeenCalledWith('Simple message');
     });
+
+    it('should delegate warn without data parameter (line 189)', () => {
+      const logger = createStructuredLogger(leaseId, eventId);
+
+      logger.warn('Warning without data');
+
+      expect(mockWarn).toHaveBeenCalledWith('Warning without data');
+    });
+
+    it('should delegate error without data parameter (line 197)', () => {
+      const logger = createStructuredLogger(leaseId, eventId);
+
+      logger.error('Error without data');
+
+      expect(mockError).toHaveBeenCalledWith('Error without data');
+    });
+
+    it('should delegate debug without data parameter (line 205)', () => {
+      const logger = createStructuredLogger(leaseId, eventId);
+
+      logger.debug('Debug without data');
+
+      expect(mockDebug).toHaveBeenCalledWith('Debug without data');
+    });
   });
 
   describe('Attribution helpers', () => {

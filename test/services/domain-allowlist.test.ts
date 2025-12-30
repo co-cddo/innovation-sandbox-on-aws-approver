@@ -208,6 +208,33 @@ describe('DomainAllowlistService', () => {
       vi.useRealTimers();
     });
 
+    it('should handle non-Error exception when using stale cache (line 153)', async () => {
+      const mockData = {
+        domains: [
+          { domain_pattern: 'stale2.gov.uk', organisation_type_id: 'local_authority' },
+        ],
+      };
+
+      mockSend
+        .mockResolvedValueOnce({ Body: createMockBody(JSON.stringify(mockData)) })
+        .mockRejectedValueOnce('String error'); // Non-Error exception
+
+      // First call - successful
+      const first = await service.getLocalAuthorityDomains();
+      expect(first.domains).toEqual(['stale2.gov.uk']);
+
+      // Advance time past TTL
+      vi.useFakeTimers();
+      vi.advanceTimersByTime(CACHE_TTL_MS + 1000);
+
+      // Second call should use stale cache and handle non-Error exception
+      const second = await service.getLocalAuthorityDomains();
+      expect(second.usedStaleCache).toBe(true);
+      expect(second.staleReason).toBe('String error');
+
+      vi.useRealTimers();
+    });
+
     it('should throw on S3 error with no cache (AC5)', async () => {
       mockSend.mockRejectedValueOnce(new Error('S3 bucket not found'));
 

@@ -383,6 +383,19 @@ describe('EventBridge Service', () => {
       );
     });
 
+    it('handles FailedEntryCount with missing error details gracefully (line 181)', async () => {
+      mockSend.mockResolvedValue({
+        FailedEntryCount: 1,
+        Entries: [{}], // Empty entry - no ErrorCode or ErrorMessage
+      });
+
+      const service = createEventBridgeService(mockClient, config);
+
+      await expect(service.emitLeaseDenied(deniedParams)).rejects.toThrow(
+        'Failed to emit LeaseDenied event: Unknown - No error message'
+      );
+    });
+
     it('propagates client errors', async () => {
       const error = new Error('EventBridge unavailable');
       mockSend.mockRejectedValue(error);

@@ -32,33 +32,33 @@ describe('account-cooldown', () => {
       expect(isAccountReady(account, now, config)).toBe(false);
     });
 
-    it('returns true for Available account past 24hr cooldown', () => {
+    it('returns true for Available account past 48hr cooldown', () => {
       const account = createAccount({
         status: 'Available',
         lastEditTime: '2025-01-01T00:00:00Z',
         createdTime: '2024-12-01T00:00:00Z', // Not a new account
       });
-      const now = new Date('2025-01-02T00:00:00Z'); // Exactly 24 hours later
+      const now = new Date('2025-01-03T00:00:00Z'); // Exactly 48 hours later
       expect(isAccountReady(account, now, config)).toBe(true);
     });
 
-    it('returns true for Available account exactly at 24hr boundary', () => {
+    it('returns true for Available account exactly at 48hr boundary', () => {
       const account = createAccount({
         status: 'Available',
         lastEditTime: '2025-01-01T10:00:00Z',
         createdTime: '2024-12-01T00:00:00Z',
       });
-      const now = new Date('2025-01-02T10:00:00Z'); // Exactly 24 hours
+      const now = new Date('2025-01-03T10:00:00Z'); // Exactly 48 hours
       expect(isAccountReady(account, now, config)).toBe(true);
     });
 
-    it('returns false for Available account at 23h 59m (still cooling)', () => {
+    it('returns false for Available account at 47h 59m (still cooling)', () => {
       const account = createAccount({
         status: 'Available',
         lastEditTime: '2025-01-01T10:00:00Z',
         createdTime: '2024-12-01T00:00:00Z',
       });
-      const now = new Date('2025-01-02T09:59:00Z'); // 23 hours 59 minutes
+      const now = new Date('2025-01-03T09:59:00Z'); // 47 hours 59 minutes
       expect(isAccountReady(account, now, config)).toBe(false);
     });
 
@@ -79,7 +79,7 @@ describe('account-cooldown', () => {
         lastEditTime: '2025-01-01T10:00:00Z',
       });
       const now = new Date('2025-01-01T11:01:00Z'); // 61 minutes since creation
-      // Now it uses cooldown rule: lastEditTime needs to be 24hr ago
+      // Now it uses cooldown rule: lastEditTime needs to be 48hr ago
       expect(isAccountReady(account, now, config)).toBe(false);
     });
 
@@ -91,18 +91,18 @@ describe('account-cooldown', () => {
         createdTime: '2025-01-01T00:00:00Z',
       });
 
-      // Check at 08:01 UTC next day (24h 1min later)
-      const now = new Date('2025-03-31T08:01:00Z');
+      // Check at 08:01 UTC two days later (48h 1min later)
+      const now = new Date('2025-04-01T08:01:00Z');
       expect(isAccountReady(account, now, config)).toBe(true);
 
-      // Check at 07:59 UTC next day (23h 59min later)
-      const nowBefore = new Date('2025-03-31T07:59:00Z');
+      // Check at 07:59 UTC two days later (47h 59min later)
+      const nowBefore = new Date('2025-04-01T07:59:00Z');
       expect(isAccountReady(account, nowBefore, config)).toBe(false);
     });
 
     it('respects custom cooldown hours configuration', () => {
       const customConfig: AccountCooldownConfig = {
-        cooldownHours: 48, // 48 hour cooldown
+        cooldownHours: 72, // 72 hour custom cooldown
         newAccountGraceMinutes: 60,
       };
 
@@ -112,13 +112,13 @@ describe('account-cooldown', () => {
         createdTime: '2024-12-01T00:00:00Z',
       });
 
-      // At 24 hours - still cooling with 48hr config
-      const now24h = new Date('2025-01-02T00:00:00Z');
-      expect(isAccountReady(account, now24h, customConfig)).toBe(false);
-
-      // At 48 hours - ready
+      // At 48 hours - still cooling with 72hr config
       const now48h = new Date('2025-01-03T00:00:00Z');
-      expect(isAccountReady(account, now48h, customConfig)).toBe(true);
+      expect(isAccountReady(account, now48h, customConfig)).toBe(false);
+
+      // At 72 hours - ready
+      const now72h = new Date('2025-01-04T00:00:00Z');
+      expect(isAccountReady(account, now72h, customConfig)).toBe(true);
     });
 
     it('respects custom grace period configuration', () => {
@@ -217,17 +217,17 @@ describe('account-cooldown', () => {
     });
 
     it('calculates estimatedReadyTime from soonest cooling account', () => {
-      const now = new Date('2025-01-02T12:00:00Z');
+      const now = new Date('2025-01-03T12:00:00Z');
 
       const accounts: Account[] = [
-        // Will be ready in 6 hours (at 2025-01-02T18:00:00Z)
+        // Will be ready in 6 hours (at 2025-01-03T18:00:00Z)
         createAccount({
           awsAccountId: '111111111111',
           status: 'Available',
           lastEditTime: '2025-01-01T18:00:00Z',
           createdTime: '2024-12-01T00:00:00Z',
         }),
-        // Will be ready in 12 hours (at 2025-01-03T00:00:00Z)
+        // Will be ready in 12 hours (at 2025-01-04T00:00:00Z)
         createAccount({
           awsAccountId: '222222222222',
           status: 'Available',
@@ -239,7 +239,7 @@ describe('account-cooldown', () => {
       const result = checkAccountReadiness(accounts, now, config);
 
       expect(result.estimatedReadyTime).not.toBeNull();
-      expect(result.estimatedReadyTime?.toISOString()).toBe('2025-01-02T18:00:00.000Z');
+      expect(result.estimatedReadyTime?.toISOString()).toBe('2025-01-03T18:00:00.000Z');
     });
 
     it('returns estimatedReadyTime=null when no cooling accounts', () => {
@@ -295,14 +295,14 @@ describe('account-cooldown', () => {
   });
 
   describe('calculateReadyTime', () => {
-    it('calculates correct ready time for 24hr cooldown', () => {
+    it('calculates correct ready time for 48hr cooldown', () => {
       const account = createAccount({
         lastEditTime: '2025-01-01T10:30:00Z',
       });
 
       const readyTime = calculateReadyTime(account, DEFAULT_COOLDOWN_CONFIG);
 
-      expect(readyTime.toISOString()).toBe('2025-01-02T10:30:00.000Z');
+      expect(readyTime.toISOString()).toBe('2025-01-03T10:30:00.000Z');
     });
 
     it('respects custom cooldown hours', () => {
@@ -335,7 +335,7 @@ describe('account-cooldown', () => {
 
       const config = getConfigFromEnvironment();
 
-      expect(config.cooldownHours).toBe(24);
+      expect(config.cooldownHours).toBe(48);
       expect(config.newAccountGraceMinutes).toBe(60);
     });
 
@@ -361,7 +361,7 @@ describe('account-cooldown', () => {
 
       const config = getConfigFromEnvironment();
 
-      expect(config.cooldownHours).toBe(24);
+      expect(config.cooldownHours).toBe(48);
       expect(config.newAccountGraceMinutes).toBe(60);
     });
   });

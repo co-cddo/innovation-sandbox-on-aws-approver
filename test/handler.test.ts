@@ -43,6 +43,40 @@ vi.mock('../src/lib/logger.ts', () => ({
   },
 }));
 
+// Use vi.hoisted() for queue-position mocks (Vitest v4 compatible)
+const { mockAddToQueue, mockGetQueueEstimate, mockRemoveFromQueue, mockGetLastCapacityCrunchAlertTime, mockUpdateLastCapacityCrunchAlertTime, mockGetOldestPending } = vi.hoisted(() => ({
+  mockAddToQueue: vi.fn(),
+  mockGetQueueEstimate: vi.fn(),
+  mockRemoveFromQueue: vi.fn(),
+  mockGetLastCapacityCrunchAlertTime: vi.fn(),
+  mockUpdateLastCapacityCrunchAlertTime: vi.fn(),
+  mockGetOldestPending: vi.fn(),
+}));
+
+// Use vi.hoisted() for secrets mock (Vitest v4 compatible)
+const { mockGetSlackWebhookUrl } = vi.hoisted(() => ({
+  mockGetSlackWebhookUrl: vi.fn(),
+}));
+
+// Mock secrets module to control getSlackWebhookUrl behavior
+vi.mock('../src/lib/secrets.js', () => ({
+  getSlackWebhookUrl: mockGetSlackWebhookUrl,
+}));
+
+// Mock queue-position module to control queue position behavior in tests
+vi.mock('../src/services/queue-position.js', async () => {
+  const actual = await vi.importActual('../src/services/queue-position.js');
+  return {
+    ...actual,
+    addToQueue: mockAddToQueue,
+    getQueueEstimate: mockGetQueueEstimate,
+    removeFromQueue: mockRemoveFromQueue,
+    getLastCapacityCrunchAlertTime: mockGetLastCapacityCrunchAlertTime,
+    updateLastCapacityCrunchAlertTime: mockUpdateLastCapacityCrunchAlertTime,
+    getOldestPending: mockGetOldestPending,
+  };
+});
+
 // Mock the EventBridge client to prevent real AWS calls (Vitest v4 compatible)
 vi.mock('@aws-sdk/client-eventbridge', () => ({
   EventBridgeClient: class MockEventBridgeClient {
@@ -218,6 +252,37 @@ describe('handler', () => {
         usedStaleCache: false,
       }),
       clearCache: vi.fn(),
+    });
+    // Default queue-position mock behavior - success with position info
+    mockAddToQueue.mockResolvedValue({
+      success: true,
+      position: 1,
+    });
+    mockGetQueueEstimate.mockResolvedValue({
+      position: 1,
+      estimatedFulfillmentTime: new Date('2025-12-31T12:00:00Z'),
+      isCapacityCrunch: false,
+      message: 'Your request is next in queue',
+      queueDepth: 1,
+    });
+    mockRemoveFromQueue.mockResolvedValue({
+      success: true,
+    });
+    mockGetLastCapacityCrunchAlertTime.mockResolvedValue({
+      success: true,
+      lastAlertTime: null, // No previous alert
+    });
+    mockUpdateLastCapacityCrunchAlertTime.mockResolvedValue({
+      success: true,
+    });
+    mockGetOldestPending.mockResolvedValue({
+      success: true,
+      // No record by default
+    });
+    // Default getSlackWebhookUrl mock behavior - success with webhook URL
+    mockGetSlackWebhookUrl.mockResolvedValue({
+      success: true,
+      webhookUrl: 'https://hooks.slack.com/test',
     });
   });
 
@@ -599,6 +664,87 @@ describe('handler', () => {
       expect(result.body).toBe('No messages in queue');
     });
 
+    it('should fall back to SQS order when getOldestPending fails (line 1104)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // Make getOldestPending throw an error
+      mockGetOldestPending.mockRejectedValueOnce(new Error('DynamoDB unavailable'));
+
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({ success: true, messages: [] }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('No messages in queue');
+      // Should warn about falling back to SQS order
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Failed to get oldest pending from queue position table - falling back to SQS order',
+        expect.objectContaining({
+          error: 'DynamoDB unavailable',
+          triggerType: 'scheduled',
+        })
+      );
+    });
+
+    it('should clean up stale DynamoDB entries when SQS is empty (lines 1137-1140)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // Mock DynamoDB having a stale entry but SQS is empty
+      const staleLeaseId = {
+        userEmail: 'stale@example.gov.uk',
+        uuid: '33333333-3333-3333-3333-333333333333',
+      };
+      mockGetOldestPending.mockResolvedValueOnce({
+        success: true,
+        record: {
+          leaseId: 'stale@example.gov.uk#33333333-3333-3333-3333-333333333333',
+          position: 1,
+          positionStatus: 'PENDING',
+          queuedAt: '2025-12-30T10:00:00Z',
+        },
+      });
+
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({ success: true, messages: [] }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('No messages in queue');
+      // Should warn about cleaning up stale entries
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'DynamoDB queue has entries but SQS is empty - cleaning up',
+        expect.objectContaining({
+          leaseId: staleLeaseId.uuid,
+        })
+      );
+      // Should remove the stale entry
+      expect(mockRemoveFromQueue).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        staleLeaseId
+      );
+    });
+
     it('should process delayed message and delete on success (AC5)', async () => {
       const mockDynamoDBService: DynamoDBService = {
         getUserLeaseHistory: vi.fn().mockResolvedValue([]),
@@ -698,6 +844,278 @@ describe('handler', () => {
           userEmail: 'delayed@example.gov.uk',
         })
       );
+    });
+
+    it('should continue when removeFromQueue fails after processing (line 1185)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const delayedLeaseUuid = '22222222-2222-2222-2222-222222222222';
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: delayedLeaseUuid,
+            userEmail: 'delayed2@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 0,
+            decision: 'approved',
+            approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      // Make removeFromQueue throw an error
+      mockRemoveFromQueue.mockRejectedValueOnce(new Error('DynamoDB queue cleanup failed'));
+
+      const recentDate = new Date();
+      recentDate.setHours(recentDate.getHours() - 2);
+      const recentDateISO = recentDate.toISOString();
+      const processAfterDate = new Date(recentDate);
+      processAfterDate.setHours(processAfterDate.getHours() + 1);
+      const processAfterISO = processAfterDate.toISOString();
+
+      const originalEvent = {
+        version: '0',
+        id: 'original-event-id-2',
+        'detail-type': 'LeaseRequested',
+        source: 'innovation-sandbox',
+        account: '123456789012',
+        time: recentDateISO,
+        region: 'us-east-1',
+        resources: [],
+        detail: {
+          leaseId: { userEmail: 'delayed2@example.gov.uk', uuid: delayedLeaseUuid },
+          templateId: 'web-hosting',
+          budgetAmount: 50,
+          leaseDurationHours: 48,
+          requiresManualApproval: false,
+        },
+      };
+
+      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: true });
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({
+          success: true,
+          messages: [
+            {
+              messageId: 'msg-delayed-2',
+              receiptHandle: 'receipt-handle-456',
+              body: {
+                leaseId: { userEmail: 'delayed2@example.gov.uk', uuid: delayedLeaseUuid },
+                originalEvent,
+                receivedAt: recentDateISO,
+                processAfter: processAfterISO,
+                reason: 'Outside business hours',
+              },
+              sentTimestamp: recentDate.getTime(),
+            },
+          ],
+        }),
+        deleteMessage: mockDeleteMessage,
+        getQueueDepth: vi.fn()
+          .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 })
+          .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 0 }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed even though removeFromQueue failed
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Processed 1 message from queue');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Failed to remove from queue position table',
+        expect.objectContaining({
+          error: 'DynamoDB queue cleanup failed',
+        })
+      );
+      // Message should still be deleted from SQS
+      expect(mockDeleteMessage).toHaveBeenCalledWith('receipt-handle-456');
+    });
+
+    it('should handle SQS delete failure after successful processing (lines 928-934)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const delayedLeaseUuid = '66666666-6666-6666-6666-666666666666';
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: delayedLeaseUuid,
+            userEmail: 'delete-fail-delayed@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 0,
+            decision: 'approved',
+            approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const recentDate = new Date();
+      recentDate.setHours(recentDate.getHours() - 2);
+      const recentDateISO = recentDate.toISOString();
+      const processAfterDate = new Date(recentDate);
+      processAfterDate.setHours(processAfterDate.getHours() + 1);
+      const processAfterISO = processAfterDate.toISOString();
+
+      const originalEvent = {
+        version: '0',
+        id: 'original-event-id-delete-fail',
+        'detail-type': 'LeaseRequested',
+        source: 'innovation-sandbox',
+        account: '123456789012',
+        time: recentDateISO,
+        region: 'us-east-1',
+        resources: [],
+        detail: {
+          leaseId: { userEmail: 'delete-fail-delayed@example.gov.uk', uuid: delayedLeaseUuid },
+          templateId: 'web-hosting',
+          budgetAmount: 50,
+          leaseDurationHours: 48,
+          requiresManualApproval: false,
+        },
+      };
+
+      // deleteMessage returns failure
+      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: false, error: 'SQS delete failed' });
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({
+          success: true,
+          messages: [
+            {
+              messageId: 'msg-delete-fail-delayed',
+              receiptHandle: 'receipt-handle-delete-fail',
+              body: {
+                leaseId: { userEmail: 'delete-fail-delayed@example.gov.uk', uuid: delayedLeaseUuid },
+                originalEvent,
+                receivedAt: recentDateISO,
+                processAfter: processAfterISO,
+                reason: 'Outside business hours',
+              },
+              sentTimestamp: recentDate.getTime(),
+            },
+          ],
+        }),
+        deleteMessage: mockDeleteMessage,
+        getQueueDepth: vi.fn().mockResolvedValue({ success: true, approximateNumberOfMessages: 1 }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Message processing failed - will retry');
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to delete processed message',
+        expect.objectContaining({
+          error: 'SQS delete failed',
+          leaseId: delayedLeaseUuid,
+        })
+      );
+    });
+
+    it('should handle exception during delayed message processing (lines 952-957)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // Make orchestrator throw an exception
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockImplementation(() => {
+          throw new Error('Unexpected orchestrator error');
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const delayedLeaseUuid = '77777777-7777-7777-7777-777777777777';
+      const recentDate = new Date();
+      recentDate.setHours(recentDate.getHours() - 2);
+      const recentDateISO = recentDate.toISOString();
+      const processAfterDate = new Date(recentDate);
+      processAfterDate.setHours(processAfterDate.getHours() + 1);
+      const processAfterISO = processAfterDate.toISOString();
+
+      const originalEvent = {
+        version: '0',
+        id: 'original-event-id-exception',
+        'detail-type': 'LeaseRequested',
+        source: 'innovation-sandbox',
+        account: '123456789012',
+        time: recentDateISO,
+        region: 'us-east-1',
+        resources: [],
+        detail: {
+          leaseId: { userEmail: 'exception@example.gov.uk', uuid: delayedLeaseUuid },
+          templateId: 'web-hosting',
+          budgetAmount: 50,
+          leaseDurationHours: 48,
+          requiresManualApproval: false,
+        },
+      };
+
+      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: true });
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({
+          success: true,
+          messages: [
+            {
+              messageId: 'msg-exception',
+              receiptHandle: 'receipt-handle-exception',
+              body: {
+                leaseId: { userEmail: 'exception@example.gov.uk', uuid: delayedLeaseUuid },
+                originalEvent,
+                receivedAt: recentDateISO,
+                processAfter: processAfterISO,
+                reason: 'Outside business hours',
+              },
+              sentTimestamp: recentDate.getTime(),
+            },
+          ],
+        }),
+        deleteMessage: mockDeleteMessage,
+        getQueueDepth: vi.fn().mockResolvedValue({ success: true, approximateNumberOfMessages: 1 }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Message processing failed - will retry');
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Error processing delayed message',
+        expect.objectContaining({
+          error: 'Unexpected orchestrator error',
+          leaseId: delayedLeaseUuid,
+        })
+      );
+      // Message should NOT be deleted
+      expect(mockDeleteMessage).not.toHaveBeenCalled();
     });
 
     it('should not delete message when processing fails (AC5)', async () => {
@@ -930,6 +1348,175 @@ describe('handler', () => {
           deniedBy: 'system',
         })
       );
+    });
+
+    it('should handle deleteMessage failure in processExpiredMessage (lines 1010-1015)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // EventBridge works fine
+      setEventBridgeService({
+        emitLeaseApproved: vi.fn().mockResolvedValue(undefined),
+        emitLeaseEscalated: vi.fn().mockResolvedValue(undefined),
+        emitLeaseDenied: vi.fn().mockResolvedValue(undefined),
+      });
+
+      // Create a message that was queued 15 days ago (definitely expired)
+      const oldDate = new Date();
+      oldDate.setDate(oldDate.getDate() - 15);
+      const oldDateISO = oldDate.toISOString();
+
+      const expiredLeaseUuid = '55555555-5555-5555-5555-555555555555';
+      const originalEvent = {
+        version: '0',
+        id: 'original-event-id',
+        'detail-type': 'LeaseRequested',
+        source: 'innovation-sandbox',
+        account: '123456789012',
+        time: oldDateISO,
+        region: 'us-east-1',
+        resources: [],
+        detail: {
+          leaseId: {
+            userEmail: 'delete-fail@example.gov.uk',
+            uuid: expiredLeaseUuid,
+          },
+          templateId: 'web-hosting',
+          budgetAmount: 50,
+          leaseDurationHours: 48,
+          requiresManualApproval: false,
+        },
+      };
+
+      // deleteMessage returns failure
+      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: false, error: 'SQS delete failed' });
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({
+          success: true,
+          messages: [
+            {
+              messageId: 'msg-delete-fail',
+              receiptHandle: 'receipt-handle-delete-fail',
+              body: {
+                leaseId: { userEmail: 'delete-fail@example.gov.uk', uuid: expiredLeaseUuid },
+                originalEvent,
+                receivedAt: oldDateISO,
+                processAfter: oldDateISO,
+                reason: 'Outside business hours',
+              },
+              sentTimestamp: oldDate.getTime(),
+            },
+          ],
+        }),
+        deleteMessage: mockDeleteMessage,
+        getQueueDepth: vi.fn().mockResolvedValue({ success: true, approximateNumberOfMessages: 1 }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      // Should return failure for expired message
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Failed to expire stale message');
+      // Should log the delete failure
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to delete expired message',
+        expect.objectContaining({
+          error: 'SQS delete failed',
+          leaseId: expiredLeaseUuid,
+        })
+      );
+    });
+
+    it('should handle error in processExpiredMessage gracefully (lines 1030-1035)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      // Make emitLeaseDenied throw an error to trigger the catch block
+      setEventBridgeService({
+        emitLeaseApproved: vi.fn().mockResolvedValue(undefined),
+        emitLeaseEscalated: vi.fn().mockResolvedValue(undefined),
+        emitLeaseDenied: vi.fn().mockRejectedValue(new Error('EventBridge unavailable')),
+      });
+
+      // Create a message that was queued 15 days ago (definitely expired)
+      const oldDate = new Date();
+      oldDate.setDate(oldDate.getDate() - 15);
+      const oldDateISO = oldDate.toISOString();
+
+      const expiredLeaseUuid = '44444444-4444-4444-4444-444444444444';
+      const originalEvent = {
+        version: '0',
+        id: 'original-event-id',
+        'detail-type': 'LeaseRequested',
+        source: 'innovation-sandbox',
+        account: '123456789012',
+        time: oldDateISO,
+        region: 'us-east-1',
+        resources: [],
+        detail: {
+          leaseId: {
+            userEmail: 'error-expired@example.gov.uk',
+            uuid: expiredLeaseUuid,
+          },
+          templateId: 'web-hosting',
+          budgetAmount: 50,
+          leaseDurationHours: 48,
+          requiresManualApproval: false,
+        },
+      };
+
+      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: true });
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({
+          success: true,
+          messages: [
+            {
+              messageId: 'msg-error-expired',
+              receiptHandle: 'receipt-handle-error-expired',
+              body: {
+                leaseId: { userEmail: 'error-expired@example.gov.uk', uuid: expiredLeaseUuid },
+                originalEvent,
+                receivedAt: oldDateISO,
+                processAfter: oldDateISO,
+                reason: 'Outside business hours',
+              },
+              sentTimestamp: oldDate.getTime(),
+            },
+          ],
+        }),
+        deleteMessage: mockDeleteMessage,
+        getQueueDepth: vi.fn().mockResolvedValue({ success: true, approximateNumberOfMessages: 1 }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      // Should not crash, but should return failure
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Failed to expire stale message');
+      // Should log the error
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Error processing expired message',
+        expect.objectContaining({
+          error: 'EventBridge unavailable',
+          leaseId: expiredLeaseUuid,
+        })
+      );
+      // Should NOT delete the message since processing failed
+      expect(mockDeleteMessage).not.toHaveBeenCalled();
     });
 
     it('should handle SQS receive failure gracefully', async () => {
@@ -1566,6 +2153,131 @@ describe('handler', () => {
         expect.objectContaining({
           action: 'approved',
           allowListOverride: true,
+        })
+      );
+    });
+
+    it('should continue processing even if updateLeaseComments returns failure (lines 807-812)', async () => {
+      // Mock DynamoDB service to return failure for updateLeaseComments
+      const mockDynamoDB: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({
+          success: false,
+          error: 'DynamoDB error: table not found',
+        }),
+      };
+      setDynamoDBService(mockDynamoDB);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 0,
+            decision: 'approved',
+            reason: 'Auto-approved',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Request should still succeed
+      expect(result.statusCode).toBe(200);
+      // Should log the warning
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Failed to update lease comments',
+        expect.objectContaining({
+          leaseId: '123e4567-e89b-12d3-a456-426614174000',
+          error: 'DynamoDB error: table not found',
+        })
+      );
+    });
+
+    it('should continue processing even if updateLeaseComments throws (line 821)', async () => {
+      // Mock DynamoDB service to throw
+      const mockDynamoDB: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockRejectedValue(new Error('Connection timeout')),
+      };
+      setDynamoDBService(mockDynamoDB);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 0,
+            decision: 'approved',
+            reason: 'Auto-approved',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Request should still succeed
+      expect(result.statusCode).toBe(200);
+      // Should log the warning
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Error updating lease comments',
+        expect.objectContaining({
+          leaseId: '123e4567-e89b-12d3-a456-426614174000',
+          error: 'Connection timeout',
+        })
+      );
+    });
+
+    it('should log end-of-window penalty when in 5pm-7pm window (line 675)', async () => {
+      // Set time to 5pm UK (17:00) which is within end-of-window (5pm-7pm)
+      vi.setSystemTime(new Date('2025-01-07T17:00:00Z')); // Tuesday 5pm UTC
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'End-of-window penalty applicable',
+        expect.objectContaining({
+          endOfWindowPenalty: true,
+        })
+      );
+    });
+
+    it('should continue processing when ISB Lambda getAccounts throws (lines 644-651)', async () => {
+      // Mock getAccounts to throw
+      const mockIsbLambdaServiceWithError: IsbLambdaService = {
+        approveLease: mockApproveLease,
+        denyLease: mockDenyLease,
+        getAccounts: vi.fn().mockRejectedValue(new Error('Lambda invocation failed')),
+      };
+      setIsbLambdaService(mockIsbLambdaServiceWithError);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed - error is handled gracefully
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Error checking account readiness - proceeding to scoring',
+        expect.objectContaining({
+          error: 'Lambda invocation failed',
         })
       );
     });
@@ -2560,5 +3272,340 @@ describe('handler', () => {
         })
       );
     });
+
+    it('should handle capacity crunch alert exception gracefully', async () => {
+      setSQSService(mockSQSService);
+      const mockNotifyCapacityCrunch = vi.fn().mockRejectedValue(new Error('Slack API down'));
+      const mockSlackService: SlackService = {
+        notifyEscalation: vi.fn().mockResolvedValue({ success: true }),
+        notifyCapacityCrunch: mockNotifyCapacityCrunch,
+      };
+      setSlackService(mockSlackService);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            accountDelayReason: 'NO_READY_ACCOUNTS',
+            coolingAccountCount: 0,
+            activeAccountCount: 8,
+            nextProcessingTime: '2025-12-31T12:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed even though alert threw an exception
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Error processing capacity crunch alert',
+        expect.objectContaining({
+          error: 'Slack API down',
+        })
+      );
+    });
+
+    it('should handle non-Error exception in capacity crunch alert', async () => {
+      setSQSService(mockSQSService);
+      const mockNotifyCapacityCrunch = vi.fn().mockRejectedValue('String error');
+      const mockSlackService: SlackService = {
+        notifyEscalation: vi.fn().mockResolvedValue({ success: true }),
+        notifyCapacityCrunch: mockNotifyCapacityCrunch,
+      };
+      setSlackService(mockSlackService);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            accountDelayReason: 'NO_READY_ACCOUNTS',
+            coolingAccountCount: 0,
+            activeAccountCount: 8,
+            nextProcessingTime: '2025-12-31T12:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Error processing capacity crunch alert',
+        expect.objectContaining({
+          error: 'String error',
+        })
+      );
+    });
+
+    it('should handle non-Error exception in SQS send failure', async () => {
+      mockSendDelayedRequest.mockRejectedValueOnce('String SQS error');
+      setSQSService(mockSQSService);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            reason: 'Outside business hours',
+            nextProcessingTime: '2025-12-31T09:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+
+      // The SQS send throws a non-Error, which should be handled gracefully
+      await expect(handler(event, mockContext)).rejects.toThrow();
+    });
+
+    it('should continue with delay when addToQueue fails (lines 1663-1667)', async () => {
+      setSQSService(mockSQSService);
+
+      // Make addToQueue fail
+      mockAddToQueue.mockResolvedValueOnce({
+        success: false,
+        error: 'DynamoDB connection error',
+      });
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            reason: 'No ready accounts',
+            accountDelayReason: 'NO_READY_ACCOUNTS',
+            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
+            coolingAccountCount: 3,
+            activeAccountCount: 5,
+            nextProcessingTime: '2025-12-31T12:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed even though addToQueue failed
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Failed to add to queue position table - continuing with delay',
+        expect.objectContaining({
+          error: 'DynamoDB connection error',
+        })
+      );
+    });
+
+    it('should use cooldown delay message when queue estimate is not available (line 1778)', async () => {
+      setSQSService(mockSQSService);
+
+      // addToQueue succeeds but getQueueEstimate returns null (no estimate)
+      mockAddToQueue.mockResolvedValueOnce({
+        success: true,
+        position: 1,
+      });
+      mockGetQueueEstimate.mockResolvedValueOnce(null);
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            reason: 'No ready accounts',
+            accountDelayReason: 'NO_READY_ACCOUNTS',
+            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
+            coolingAccountCount: 2,
+            activeAccountCount: 6,
+            nextProcessingTime: '2025-12-31T12:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should succeed with cooldown delay message path
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Request sent to delay queue',
+        expect.objectContaining({
+          delayReason: 'account_cooldown',
+        })
+      );
+    });
+
+    it('should handle error exception in queue position tracking (lines 1668-1673)', async () => {
+      setSQSService(mockSQSService);
+
+      // Make addToQueue throw an exception
+      mockAddToQueue.mockRejectedValueOnce(new Error('Queue tracking exception'));
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            reason: 'No ready accounts',
+            accountDelayReason: 'NO_READY_ACCOUNTS',
+            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
+            coolingAccountCount: 3,
+            activeAccountCount: 5,
+            nextProcessingTime: '2025-12-31T12:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed even though queue tracking threw
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Error tracking queue position - continuing with delay',
+        expect.objectContaining({
+          error: 'Queue tracking exception',
+        })
+      );
+    });
+
+    it('should handle non-Error exception in queue position tracking (lines 1668-1673)', async () => {
+      setSQSService(mockSQSService);
+
+      // Make addToQueue throw a non-Error
+      mockAddToQueue.mockRejectedValueOnce('Non-Error queue exception');
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            reason: 'No ready accounts',
+            accountDelayReason: 'NO_READY_ACCOUNTS',
+            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
+            coolingAccountCount: 3,
+            activeAccountCount: 5,
+            nextProcessingTime: '2025-12-31T12:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Should still succeed with non-Error stringified
+      expect(result.statusCode).toBe(200);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Error tracking queue position - continuing with delay',
+        expect.objectContaining({
+          error: 'Non-Error queue exception',
+        })
+      );
+    });
+
+    it('should throttle capacity crunch alert when recently sent (line 1651)', async () => {
+      setSQSService(mockSQSService);
+      const mockNotifyCapacityCrunch = vi.fn().mockResolvedValue({ success: true });
+      const mockSlackService: SlackService = {
+        notifyEscalation: vi.fn().mockResolvedValue({ success: true }),
+        notifyCapacityCrunch: mockNotifyCapacityCrunch,
+      };
+      setSlackService(mockSlackService);
+
+      // Set last alert time to 30 minutes ago (within 1-hour throttle period)
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+      mockGetLastCapacityCrunchAlertTime.mockResolvedValueOnce({
+        success: true,
+        lastAlertTime: thirtyMinutesAgo,
+      });
+
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.DELAYED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: '123e4567-e89b-12d3-a456-426614174000',
+            userEmail: 'user@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 5,
+            decision: 'delayed',
+            accountDelayReason: 'NO_READY_ACCOUNTS',
+            coolingAccountCount: 0, // Capacity crunch condition
+            activeAccountCount: 8,
+            nextProcessingTime: '2025-12-31T12:00:00Z',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      const event = createValidLeaseRequestedEvent();
+      const result = await handler(event, mockContext);
+
+      // Request should succeed
+      expect(result.statusCode).toBe(200);
+      // Alert should NOT be sent (throttled)
+      expect(mockNotifyCapacityCrunch).not.toHaveBeenCalled();
+      // Should log the throttle
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'Capacity crunch alert throttled',
+        expect.objectContaining({
+          lastAlertTime: thirtyMinutesAgo.toISOString(),
+        })
+      );
+    });
   });
+
 });

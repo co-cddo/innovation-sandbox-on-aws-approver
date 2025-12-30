@@ -217,6 +217,95 @@ describe('ISB Lambda Service', () => {
       expect(result.error).toBe('Lease already approved');
     });
 
+    it('uses "success" default message when body.status is undefined (line 179)', async () => {
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(
+          JSON.stringify({
+            statusCode: 200,
+            body: JSON.stringify({}), // No status field
+          })
+        ),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      const result = await service.approveLease(approveParams);
+
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('success'); // Falls back to 'success'
+    });
+
+    it('falls back to body.message when JSend errors array is missing (line 185)', async () => {
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(
+          JSON.stringify({
+            statusCode: 400,
+            body: JSON.stringify({
+              message: 'Validation failed',
+              data: {}, // No errors array
+            }),
+          })
+        ),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      const result = await service.approveLease(approveParams);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Validation failed');
+    });
+
+    it('uses "Unknown error from ISB" when no error message available (line 185)', async () => {
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(
+          JSON.stringify({
+            statusCode: 500,
+            body: JSON.stringify({}), // No message, no errors array
+          })
+        ),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      const result = await service.approveLease(approveParams);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Unknown error from ISB');
+    });
+
+    it('defaults to statusCode 500 when statusCode is missing (line 172)', async () => {
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(
+          JSON.stringify({
+            // No statusCode field - should default to 500
+            body: JSON.stringify({ message: 'Server error' }),
+          })
+        ),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      const result = await service.approveLease(approveParams);
+
+      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(500);
+      expect(result.error).toBe('Server error');
+    });
+
+    it('handles body as object instead of string (line 173)', async () => {
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(
+          JSON.stringify({
+            statusCode: 200,
+            body: { status: 'approved' }, // Object, not JSON string
+          })
+        ),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      const result = await service.approveLease(approveParams);
+
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('approved');
+    });
+
     it('propagates client errors', async () => {
       const error = new Error('Lambda unavailable');
       mockSend.mockRejectedValue(error);
@@ -729,6 +818,177 @@ describe('ISB Lambda Service', () => {
       expect(result.success).toBe(true);
       expect(result.pagesTraversed).toBe(2);
       expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it('sends null queryStringParameters on first call (no pageIdentifier)', async () => {
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(JSON.stringify(createAccountsResponse([]))),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      await service.getAccounts(getAccountsParams);
+
+      const callArgs = mockSend.mock.calls[0] as unknown[];
+      const sentCommand = callArgs[0] as InvokeCommand;
+      const payload = JSON.parse(Buffer.from(sentCommand.input.Payload as Buffer).toString());
+
+      expect(payload.queryStringParameters).toBeNull();
+    });
+
+    it('handles non-2xx response where body is already an object', async () => {
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(
+          JSON.stringify({
+            statusCode: 500,
+            body: { message: 'Internal server error' }, // Already an object, not a string
+          })
+        ),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      const result = await service.getAccounts(getAccountsParams);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Internal server error');
+    });
+
+    it('handles response with missing statusCode (defaults to 500)', async () => {
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(
+          JSON.stringify({
+            // statusCode is missing, should default to 500
+            body: JSON.stringify({ message: 'Unexpected response' }),
+          })
+        ),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      const result = await service.getAccounts(getAccountsParams);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Unexpected response');
+    });
+
+    it('uses accountsFunctionName when configured', async () => {
+      const configWithAccountsLambda: IsbLambdaServiceConfig = {
+        functionName: 'ISB-LeasesLambdaFunction-test',
+        accountsFunctionName: 'ISB-AccountsLambdaFunction-test',
+      };
+
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(JSON.stringify(createAccountsResponse([]))),
+      });
+
+      const service = createIsbLambdaService(mockClient, configWithAccountsLambda);
+      await service.getAccounts(getAccountsParams);
+
+      const callArgs = mockSend.mock.calls[0] as unknown[];
+      const sentCommand = callArgs[0] as InvokeCommand;
+      expect(sentCommand.input.FunctionName).toBe('ISB-AccountsLambdaFunction-test');
+    });
+
+    it('handles non-2xx response with JSend error format', async () => {
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(
+          JSON.stringify({
+            statusCode: 400,
+            body: JSON.stringify({
+              data: {
+                errors: [{ message: 'Bad request parameter' }],
+              },
+            }),
+          })
+        ),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      const result = await service.getAccounts(getAccountsParams);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Bad request parameter');
+    });
+
+    it('handles 2xx response with body as object (not string)', async () => {
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(
+          JSON.stringify({
+            statusCode: 200,
+            body: {
+              status: 'success',
+              data: {
+                result: [
+                  {
+                    awsAccountId: '123456789012',
+                    name: 'pool-001',
+                    status: 'Available',
+                    meta: {
+                      createdTime: '2025-01-01T00:00:00Z',
+                      lastEditTime: '2025-12-28T14:30:00Z',
+                    },
+                  },
+                ],
+                nextPageIdentifier: null,
+              },
+            },
+          })
+        ),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      const result = await service.getAccounts(getAccountsParams);
+
+      expect(result.success).toBe(true);
+      expect(result.accounts).toHaveLength(1);
+    });
+
+    it('falls back to body.message when JSend errors array is empty (line 337)', async () => {
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(
+          JSON.stringify({
+            statusCode: 400,
+            body: JSON.stringify({
+              message: 'Request failed',
+              data: { errors: [] }, // Empty errors array
+            }),
+          })
+        ),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      const result = await service.getAccounts(getAccountsParams);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Request failed');
+    });
+
+    it('uses "Unknown error from ISB" when no message in getAccounts (line 337)', async () => {
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from(
+          JSON.stringify({
+            statusCode: 500,
+            body: JSON.stringify({ data: {} }), // No errors, no message
+          })
+        ),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      const result = await service.getAccounts(getAccountsParams);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Unknown error from ISB');
+    });
+
+    it('handles non-Error exception in getAccounts parse (line 374)', async () => {
+      // First call throws a non-Error exception during processing
+      mockSend.mockResolvedValue({
+        Payload: Buffer.from('not valid json'),
+      });
+
+      const service = createIsbLambdaService(mockClient, config);
+      const result = await service.getAccounts(getAccountsParams);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Failed to parse ISB Lambda response');
     });
   });
 });

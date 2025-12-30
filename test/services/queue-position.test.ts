@@ -58,6 +58,26 @@ describe('Queue Position Service', () => {
         uuid: '12345678-1234-1234-1234-123456789012',
       });
     });
+
+    it('should handle key without # separator (lines 45-46)', () => {
+      // When there's no #, split returns single element array
+      // parts[0] ?? '' and parts[1] ?? '' fallbacks should be covered
+      const key = 'malformed-key-no-separator';
+      const leaseId = keyToLeaseId(key);
+      expect(leaseId).toEqual({
+        userEmail: 'malformed-key-no-separator',
+        uuid: '',
+      });
+    });
+
+    it('should handle empty key string (lines 45-46)', () => {
+      const key = '';
+      const leaseId = keyToLeaseId(key);
+      expect(leaseId).toEqual({
+        userEmail: '',
+        uuid: '',
+      });
+    });
   });
 
   describe('getQueueDepth', () => {
@@ -81,6 +101,17 @@ describe('Queue Position Service', () => {
       expect(result).toEqual({
         success: true,
         queueDepth: 0,
+      });
+    });
+
+    it('should handle undefined Count in response (line 71)', async () => {
+      mockSend.mockResolvedValueOnce({}); // No Count property
+
+      const result = await getQueueDepth(mockClient, config);
+
+      expect(result).toEqual({
+        success: true,
+        queueDepth: 0, // Default to 0 via ?? operator
       });
     });
 
@@ -212,6 +243,49 @@ describe('Queue Position Service', () => {
         success: false,
         error: 'DynamoDB write error',
       });
+    });
+
+    it('should use default ttlDays when not provided in config (line 175)', async () => {
+      // Config without ttlDays
+      const configNoTtl: QueuePositionServiceConfig = {
+        tableName: 'test-queue-position',
+        positionIndexName: 'PositionIndex',
+        // ttlDays not provided - should default to 7
+      };
+
+      mockSend.mockResolvedValueOnce({ Item: undefined });
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await addToQueue(mockClient, configNoTtl, {
+        leaseId,
+        estimatedFulfillmentTime: null,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.position).toBe(1);
+    });
+
+    it('should handle race condition when GetItem returns empty after ConditionalCheckFailed (line 216)', async () => {
+      // GetItem returns nothing
+      mockSend.mockResolvedValueOnce({ Item: undefined });
+      // Query returns position
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      // PutItem fails with condition check
+      const conditionError = new Error('Conditional check failed');
+      conditionError.name = 'ConditionalCheckFailedException';
+      mockSend.mockRejectedValueOnce(conditionError);
+      // GetItem for recovery returns nothing (item was deleted in between)
+      mockSend.mockResolvedValueOnce({ Item: undefined });
+
+      const result = await addToQueue(mockClient, config, {
+        leaseId,
+        estimatedFulfillmentTime: null,
+      });
+
+      // Should return error since we couldn't recover the position
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Conditional check failed');
     });
   });
 
@@ -449,6 +523,23 @@ describe('Queue Position Service', () => {
         error: 'DynamoDB error',
       });
     });
+
+    it('should return null when item exists but lastAlertTime is missing (line 451)', async () => {
+      // Item exists but lastAlertTime is undefined
+      mockSend.mockResolvedValueOnce({
+        Item: marshall({
+          leaseId: '__SYSTEM__#capacityCrunchLastAlert',
+          positionStatus: 'SYSTEM',
+          position: 0,
+          // lastAlertTime is missing
+        }),
+      });
+
+      const result = await getLastCapacityCrunchAlertTime(mockClient, config);
+
+      expect(result.success).toBe(true);
+      expect(result.lastAlertTime).toBeNull();
+    });
   });
 
   describe('updateLastCapacityCrunchAlertTime (Story 6.4)', () => {
@@ -475,6 +566,166 @@ describe('Queue Position Service', () => {
         success: false,
         error: 'Write failed',
       });
+    });
+
+    it('should handle non-Error exception', async () => {
+      mockSend.mockRejectedValueOnce('String error');
+
+      const result = await updateLastCapacityCrunchAlertTime(
+        mockClient,
+        config,
+        new Date('2025-12-30T11:00:00Z')
+      );
+
+      expect(result).toEqual({
+        success: false,
+        error: 'String error',
+      });
+    });
+  });
+
+  describe('Non-Error exception handling', () => {
+    const leaseId: LeaseId = {
+      userEmail: 'user@example.gov.uk',
+      uuid: '12345678-1234-1234-1234-123456789012',
+    };
+
+    it('should handle non-Error in getQueueDepth', async () => {
+      mockSend.mockRejectedValueOnce('String query error');
+
+      const result = await getQueueDepth(mockClient, config);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'String query error',
+      });
+    });
+
+    it('should handle non-Error in addToQueue', async () => {
+      mockSend.mockResolvedValueOnce({ Item: undefined });
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      mockSend.mockRejectedValueOnce('PutItem failed');
+
+      const result = await addToQueue(mockClient, config, {
+        leaseId,
+        estimatedFulfillmentTime: null,
+      });
+
+      expect(result).toEqual({
+        success: false,
+        error: 'PutItem failed',
+      });
+    });
+
+    it('should handle non-Error in removeFromQueue', async () => {
+      mockSend.mockRejectedValueOnce({ code: 'AWS_ERROR' });
+
+      const result = await removeFromQueue(mockClient, config, leaseId);
+
+      expect(result).toEqual({
+        success: false,
+        error: '[object Object]',
+      });
+    });
+
+    it('should handle non-Error in getOldestPending', async () => {
+      mockSend.mockRejectedValueOnce(42);
+
+      const result = await getOldestPending(mockClient, config);
+
+      expect(result).toEqual({
+        success: false,
+        error: '42',
+      });
+    });
+
+    it('should handle non-Error in getQueuePosition', async () => {
+      mockSend.mockRejectedValueOnce(null);
+
+      const result = await getQueuePosition(mockClient, config, leaseId);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'null',
+      });
+    });
+
+    it('should handle non-Error in updateEstimatedTime', async () => {
+      mockSend.mockRejectedValueOnce(undefined);
+
+      const result = await updateEstimatedTime(
+        mockClient,
+        config,
+        leaseId,
+        new Date('2025-12-31T18:00:00Z')
+      );
+
+      expect(result).toEqual({
+        success: false,
+        error: 'undefined',
+      });
+    });
+
+    it('should handle non-Error in getLastCapacityCrunchAlertTime', async () => {
+      mockSend.mockRejectedValueOnce('Network timeout');
+
+      const result = await getLastCapacityCrunchAlertTime(mockClient, config);
+
+      expect(result).toEqual({
+        success: false,
+        lastAlertTime: null,
+        error: 'Network timeout',
+      });
+    });
+  });
+
+  describe('getNextPosition error handling (lines 135-136)', () => {
+    const leaseId: LeaseId = {
+      userEmail: 'user@example.gov.uk',
+      uuid: '12345678-1234-1234-1234-123456789012',
+    };
+
+    it('should default to position 1 when QueryCommand fails in getNextPosition', async () => {
+      // First call: GetItem for existing check - returns nothing (not in queue)
+      mockSend.mockResolvedValueOnce({});
+      // Second call: QueryCommand for getNextPosition - throws error
+      mockSend.mockRejectedValueOnce(new Error('Query failed'));
+      // Third call: PutItem - succeeds
+      mockSend.mockResolvedValueOnce({});
+
+      const result = await addToQueue(mockClient, config, {
+        leaseId,
+        estimatedFulfillmentTime: null,
+      });
+
+      // Should succeed with position 1 (default when getNextPosition fails)
+      expect(result).toEqual({
+        success: true,
+        position: 1,
+      });
+    });
+  });
+
+  describe('getOldestPending edge cases (lines 310-312)', () => {
+    it('should return success with no record when items have undefined positions', async () => {
+      // Return items but with missing/undefined position (edge case)
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          marshall({
+            leaseId: 'user1@example.gov.uk#uuid1',
+            positionStatus: 'PENDING',
+            // position is intentionally missing - will be undefined after unmarshall
+            queuedAt: '2025-12-30T10:00:00Z',
+          }),
+        ],
+      });
+
+      const result = await getOldestPending(mockClient, config);
+
+      // When record[0].position is undefined, lowestPosition becomes 0 (via ?? 0)
+      // Filter for position === 0 will return empty array since no items have position 0
+      // Then samePositionRecords[0] is undefined, hitting line 310-312
+      expect(result.success).toBe(true);
     });
   });
 });

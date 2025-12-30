@@ -128,6 +128,15 @@ describe('Secrets Utilities (Story 5.2)', () => {
       expect(result.error).toContain('Connection timeout');
     });
 
+    it('should handle non-Error exception in catch block (line 68)', async () => {
+      mockGetSecret.mockRejectedValueOnce('String error'); // Non-Error exception
+
+      const result = await getSlackWebhookUrl();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('String error');
+    });
+
     it('should accept valid Slack workflow webhook URL format', async () => {
       // Workflow webhook URLs use /triggers/ path
       const webhookUrl = 'https://hooks.slack.com/triggers/T12345678/1234567890/abcdefghij';

@@ -25,15 +25,15 @@ describe('queue-estimate', () => {
     it('calculates estimated time from soonest cooling account', () => {
       const now = new Date('2025-01-02T12:00:00Z');
 
-      // Account will be ready in 6 hours (lastEdit + 24hr = 2025-01-02T18:00:00Z)
+      // Account will be ready at soonest cooling account's ready time (48h after lastEdit)
       const coolingAccounts = [
         createAccount({
           name: 'pool-001',
-          lastEditTime: '2025-01-01T18:00:00Z', // Ready at 2025-01-02T18:00:00Z
+          lastEditTime: '2025-01-01T18:00:00Z', // Ready at 2025-01-03T18:00:00Z (48h cooldown)
         }),
         createAccount({
           name: 'pool-002',
-          lastEditTime: '2025-01-02T00:00:00Z', // Ready at 2025-01-03T00:00:00Z
+          lastEditTime: '2025-01-02T00:00:00Z', // Ready at 2025-01-04T00:00:00Z (48h cooldown)
         }),
       ];
 
@@ -49,14 +49,14 @@ describe('queue-estimate', () => {
       expect(result.position).toBe(1);
       expect(result.isCapacityCrunch).toBe(false);
       expect(result.estimatedFulfillmentTime).not.toBeNull();
-      // Position 1 = soonest ready time (18:00:00Z)
-      expect(result.estimatedFulfillmentTime?.toISOString()).toBe('2025-01-02T18:00:00.000Z');
+      // Position 1 = soonest ready time (2025-01-03T18:00:00Z with 48h cooldown)
+      expect(result.estimatedFulfillmentTime?.toISOString()).toBe('2025-01-03T18:00:00.000Z');
     });
 
     it('adds 4 hours per queue position ahead', () => {
-      const now = new Date('2025-01-02T12:00:00Z');
+      const now = new Date('2025-01-03T12:00:00Z');
 
-      // Account will be ready at 18:00:00Z
+      // Account will be ready at 2025-01-03T18:00:00Z (48h after lastEditTime)
       const coolingAccounts = [
         createAccount({
           lastEditTime: '2025-01-01T18:00:00Z',
@@ -77,7 +77,7 @@ describe('queue-estimate', () => {
       expect(result.queueDepth).toBe(5);
       expect(result.estimatedFulfillmentTime).not.toBeNull();
       // Position 3 = soonest time + (2 * 4 hours) = 18:00 + 8 hours = 02:00 next day
-      expect(result.estimatedFulfillmentTime?.toISOString()).toBe('2025-01-03T02:00:00.000Z');
+      expect(result.estimatedFulfillmentTime?.toISOString()).toBe('2025-01-04T02:00:00.000Z');
     });
 
     it('detects capacity crunch when all accounts are active', () => {

@@ -193,6 +193,7 @@ const parseResponse = (payload: Uint8Array | undefined): IsbLambdaResult => {
     return {
       success: false,
       statusCode: 500,
+      /* c8 ignore next -- defensive: JSON.parse throws Error objects */
       error: `Failed to parse ISB Lambda response: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
@@ -371,6 +372,7 @@ export const createIsbLambdaService = (
           accounts: allAccounts,
           totalFetched: allAccounts.length,
           pagesTraversed,
+          /* c8 ignore next -- defensive: JSON.parse throws Error objects */
           error: `Failed to parse ISB Lambda response: ${error instanceof Error ? error.message : String(error)}`,
         };
       }
