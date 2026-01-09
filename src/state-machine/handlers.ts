@@ -250,25 +250,17 @@ export const createStateHandlers = (
 
   /**
    * DECIDING state handler.
-   * Compares score to threshold and decides approval/denial/escalation.
+   * Compares score to threshold and decides approval/escalation.
+   *
+   * Note: requiresManualApproval is intentionally ignored. ISB routes ALL requests
+   * to this approver system with requiresManualApproval=true. This approver IS the
+   * "manual approver" from ISB's perspective - scoring determines the decision.
    */
   [ApprovalState.DECIDING]: (context: StateContext): StateHandlerResult => {
-    const { score, requiresManualApproval } = context;
+    const { score } = context;
     const threshold = stateMachineConfig.autoApproveThreshold;
 
-    // If manual approval was explicitly requested, escalate
-    if (requiresManualApproval) {
-      return {
-        nextState: ApprovalState.ESCALATED,
-        context: {
-          ...context,
-          decision: 'escalated',
-          reason: 'Manual approval requested by user',
-        },
-      };
-    }
-
-    // Compare score to threshold
+    // Score-based decision only
     if (score < threshold) {
       // Auto-approve
       return {

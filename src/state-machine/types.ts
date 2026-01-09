@@ -109,7 +109,14 @@ export interface StateContext {
   budgetAmount: number;
   /** Lease duration in hours */
   leaseDurationHours: number;
-  /** Whether manual approval was requested */
+  /**
+   * Whether manual approval was requested by ISB.
+   * NOTE: This field is intentionally IGNORED by the approver.
+   * ISB routes ALL requests with requiresManualApproval=true because
+   * this approver IS the "manual approver" from ISB's perspective.
+   * Scoring determines approval decisions, not this flag.
+   * @deprecated Not used in decision logic - kept for schema compatibility
+   */
   requiresManualApproval: boolean;
   /** Optional comments from requester */
   comments?: string;
