@@ -527,21 +527,23 @@ describe('DECIDING handler', () => {
       expect(result.nextState).toBe(ApprovalState.ESCALATED);
     });
 
-    it('should transition to ESCALATED when requiresManualApproval is true', () => {
+    it('should IGNORE requiresManualApproval and approve based on score', () => {
+      // ISB always sets requiresManualApproval=true because this approver IS the
+      // "manual approver" from ISB's perspective. The flag should be ignored.
       const context: StateContext = {
         ...createInitialContext(),
         leaseId: 'abc-123',
         userEmail: 'user@example.gov.uk',
         templateId: 'web-hosting',
-        score: 5, // Low score, but manual approval requested
-        requiresManualApproval: true,
+        score: 5, // Low score should approve regardless of requiresManualApproval
+        requiresManualApproval: true, // This should be IGNORED
       };
 
       const result = handlers[ApprovalState.DECIDING](context);
 
-      expect(result.nextState).toBe(ApprovalState.ESCALATED);
-      expect(result.context.decision).toBe('escalated');
-      expect(result.context.reason).toBe('Manual approval requested by user');
+      // Should approve based on score, not escalate due to flag
+      expect(result.nextState).toBe(ApprovalState.APPROVED);
+      expect(result.context.decision).toBe('approved');
     });
   });
 

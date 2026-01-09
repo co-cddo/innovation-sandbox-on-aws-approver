@@ -39,6 +39,9 @@ export const LeaseRequestedDetailSchema = z
     leaseDurationInHours: z.number().optional(),
     expiresInHours: z.number().optional(),
     comments: z.string().optional(),
+    // NOTE: ISB always sets requiresManualApproval=true because this approver IS
+    // the "manual approver" from ISB's perspective. This field is intentionally
+    // IGNORED by the state machine - scoring determines approval decisions.
     requiresManualApproval: z.boolean().optional().default(false),
   })
   .transform((data) => ({

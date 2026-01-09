@@ -710,6 +710,10 @@ interface AccountReadinessCheck {
 
 /**
  * Prepares the initial state context from a validated event.
+ *
+ * Note: requiresManualApproval is included for schema compatibility but is
+ * intentionally ignored by the state machine. ISB routes ALL requests with
+ * requiresManualApproval=true - scoring determines approval decisions.
  */
 const prepareContext = (
   event: LeaseRequestedEvent,
@@ -731,7 +735,7 @@ const prepareContext = (
     templateId,
     budgetAmount,
     leaseDurationHours,
-    requiresManualApproval,
+    requiresManualApproval, // Ignored by DECIDING handler - kept for logging/auditing
     comments,
     userLeaseHistory,
     orgLeaseHistory,

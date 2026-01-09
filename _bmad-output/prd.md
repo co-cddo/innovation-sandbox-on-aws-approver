@@ -210,7 +210,7 @@ By 9:15am, the queue is clear. Priya moves on to her other work.
 
 The Innovation Sandbox doesn't know about the Approver - and that's by design.
 
-When a user clicks "Request Sandbox" in the ISB portal, ISB publishes a `LeaseRequested` event to EventBridge with the user's email, requested template, budget, and duration. ISB sets `requiresManualApproval: true` as its default.
+When a user clicks "Request Sandbox" in the ISB portal, ISB publishes a `LeaseRequested` event to EventBridge with the user's email, requested template, budget, and duration. ISB sets `requiresManualApproval: true` as its default (this flag is intentionally ignored by the Approver - since the Approver IS the "manual approver" from ISB's perspective, scoring alone determines the decision).
 
 The Approver's Lambda triggers on this event. It queries DynamoDB for the user's history, checks the domain list, calls Bedrock to analyze the email pattern, calculates the score, and makes a decision - all within 3-5 seconds.
 
@@ -269,7 +269,7 @@ The Approver is an **event-driven Lambda service** rather than a traditional RES
   detail: {
     leaseId: { userEmail: string, uuid: string },
     comments?: string,
-    requiresManualApproval: boolean
+    requiresManualApproval: boolean  // IGNORED - scoring determines decisions
   }
 }
 ```

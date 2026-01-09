@@ -150,7 +150,9 @@ interface StateContext {
   templateId: string;
   budgetAmount: number;
   leaseDurationHours: number;
-  requiresManualApproval: boolean;
+  // NOTE: requiresManualApproval is IGNORED - ISB always sets this to true
+  // because this approver IS the "manual approver". Scoring determines decisions.
+  requiresManualApproval: boolean; // @deprecated - kept for schema compatibility
   comments?: string;
 
   // Processing state

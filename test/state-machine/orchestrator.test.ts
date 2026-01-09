@@ -91,25 +91,31 @@ describe('orchestrator.run', () => {
       expect(result.context.decision).toBe('escalated');
     });
 
-    it('should process manual approval request to ESCALATED', () => {
+    it('should IGNORE requiresManualApproval and approve based on score', () => {
+      // ISB always sets requiresManualApproval=true because this approver IS the
+      // "manual approver" from ISB's perspective. The flag should be ignored.
       const config: OrchestratorConfig = {
         stateMachineConfig: { autoApproveThreshold: 20 },
         logger: mockLogger,
       };
       const orchestrator = createStateMachineOrchestrator(config);
 
+      // Start from DECIDING state to test the flag is ignored at decision time
+      // (SCORING would recalculate the score from rules)
       const context: StateContext = {
         ...createInitialContext(),
         leaseId: 'abc-123',
         userEmail: 'user@example.gov.uk',
         templateId: 'web-hosting',
-        requiresManualApproval: true,
+        requiresManualApproval: true, // This should be IGNORED
+        score: 5, // Low score should result in approval
       };
 
-      const result = orchestrator.run(ApprovalState.RECEIVED, context);
+      const result = orchestrator.run(ApprovalState.DECIDING, context);
 
-      expect(result.finalState).toBe(ApprovalState.ESCALATED);
-      expect(result.context.reason).toBe('Manual approval requested by user');
+      // Should approve based on score, not escalate due to flag
+      expect(result.finalState).toBe(ApprovalState.APPROVED);
+      expect(result.context.decision).toBe('approved');
     });
   });
 
