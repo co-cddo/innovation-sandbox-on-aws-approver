@@ -12,10 +12,11 @@ describe('allow-list', () => {
       expect(ALLOW_LIST_EMAILS).toContain('benjamin.bennett@dsit.gov.uk');
       expect(ALLOW_LIST_EMAILS).toContain('dimitris.perdikou@dsit.gov.uk');
       expect(ALLOW_LIST_EMAILS).toContain('edward.mccutcheon@dsit.gov.uk');
+      expect(ALLOW_LIST_EMAILS).toContain('peter.gale@dsit.gov.uk');
     });
 
-    it('should have exactly 5 entries', () => {
-      expect(ALLOW_LIST_EMAILS).toHaveLength(5);
+    it('should have exactly 6 entries', () => {
+      expect(ALLOW_LIST_EMAILS).toHaveLength(6);
     });
 
     it('should be readonly', () => {
@@ -47,6 +48,10 @@ describe('allow-list', () => {
 
     it('should return true for edward.mccutcheon@dsit.gov.uk', () => {
       expect(isAllowListed('edward.mccutcheon@dsit.gov.uk')).toBe(true);
+    });
+
+    it('should return true for peter.gale@dsit.gov.uk', () => {
+      expect(isAllowListed('peter.gale@dsit.gov.uk')).toBe(true);
     });
 
     it('should return false for non-allow-listed email', () => {

@@ -13,6 +13,7 @@ export const ALLOW_LIST_EMAILS: ReadonlyArray<string> = [
   'benjamin.bennett@dsit.gov.uk',
   'dimitris.perdikou@dsit.gov.uk',
   'edward.mccutcheon@dsit.gov.uk',
+  'peter.gale@dsit.gov.uk',
 ] as const;
 
 /**
