@@ -11,6 +11,8 @@ export interface ApproverLambdaProps {
   queuePositionTableName: string;
   delayQueueUrl: string;
   domainListBucketName: string;
+  /** SNS topic ARN for approval notifications (Story 7.1.1) */
+  notificationTopicArn?: string;
 }
 
 export class ApproverLambda extends Construct {
@@ -20,7 +22,7 @@ export class ApproverLambda extends Construct {
   constructor(scope: Construct, id: string, props: ApproverLambdaProps) {
     super(scope, id);
 
-    const { config, idempotencyTableName, queuePositionTableName, delayQueueUrl, domainListBucketName } = props;
+    const { config, idempotencyTableName, queuePositionTableName, delayQueueUrl, domainListBucketName, notificationTopicArn } = props;
 
     // Create explicit log group with GDPR-compliant retention (7 years)
     // Story 5.4: FR55 - GDPR compliance audit trail
@@ -59,6 +61,8 @@ export class ApproverLambda extends Construct {
         EVENT_BUS_NAME: config.isbEventBusName,
         ISB_LEASES_LAMBDA_NAME: config.isbLeasesLambdaName,
         ISB_ACCOUNTS_LAMBDA_NAME: config.isbAccountsLambdaName,
+        // Story 7.1.1: SNS notification topic for approval notifications
+        ...(notificationTopicArn && { NOTIFICATION_TOPIC_ARN: notificationTopicArn }),
       },
       tracing: lambda.Tracing.ACTIVE,
     });

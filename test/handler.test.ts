@@ -173,10 +173,15 @@ const mockGetAccounts = vi.fn().mockResolvedValue({
   totalFetched: 1,
   pagesTraversed: 1,
 });
+const mockGetLease = vi.fn().mockResolvedValue({
+  success: true,
+  templateName: 'Test Template',
+});
 const mockIsbLambdaService: IsbLambdaService = {
   approveLease: mockApproveLease,
   denyLease: mockDenyLease,
   getAccounts: mockGetAccounts,
+  getLease: mockGetLease,
 };
 
 // Mock SQS service for testing (used for delay queue operations)
@@ -576,6 +581,7 @@ describe('handler', () => {
           totalFetched: 1,
           pagesTraversed: 1,
         }),
+        getLease: vi.fn().mockResolvedValue({ success: true }),
       });
 
       const mockSQSService = createMockSQSService();
@@ -1609,6 +1615,7 @@ describe('handler', () => {
           totalFetched: 0,
           pagesTraversed: 0,
         }),
+        getLease: vi.fn().mockResolvedValue({ success: true }),
       });
 
       const mockSQSService = createMockSQSService({
@@ -2266,6 +2273,7 @@ describe('handler', () => {
         approveLease: mockApproveLease,
         denyLease: mockDenyLease,
         getAccounts: vi.fn().mockRejectedValue(new Error('Lambda invocation failed')),
+        getLease: mockGetLease,
       };
       setIsbLambdaService(mockIsbLambdaServiceWithError);
 

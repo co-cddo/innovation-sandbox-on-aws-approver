@@ -1,4 +1,4 @@
-# generated: 2025-12-29
+# generated: 2026-01-20
 # project: innovation-sandbox-on-aws-approver
 # project_key: isb-approver
 # tracking_system: file-system
@@ -34,7 +34,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - E2E Milestone stories (1.4, 2.5, 3.5, 5.5) require <promise>STOP</promise> for interactive testing
 
-generated: 2025-12-29
+generated: 2026-01-20
 project: innovation-sandbox-on-aws-approver
 project_key: isb-approver
 tracking_system: file-system
@@ -92,3 +92,37 @@ development_status:
   6-4-capacity-crunch-detection-and-operator-alerts: done
   6-5-e2e-milestone-account-cooldown-validation: done  # AC4 partial (Slack alert deferred)
   epic-6-retrospective: done
+
+  # Epic 7: Amazon Q Developer Slack Integration (added 2026-01-20)
+  # Replaces Slack webhooks with Amazon Q Developer for interactive approve/deny buttons
+  # 5 sub-epics, 17 stories - FR1-FR15, FR17-FR25 (FR16 dropped)
+  epic-7: in-progress
+
+  # Epic 7.1: Operators Receive Rich Notifications in Slack
+  7-1-1-integrate-sns-topic-into-approverstack: done
+  7-1-2-configure-amazon-q-developer-for-slack: done
+  7-1-3-format-rich-notification-with-action-buttons: done
+
+  # Epic 7.2: Operators Can Approve or Deny with One Click
+  7-2-1-create-approve-action-lambda: done
+  7-2-2-create-deny-action-lambda: done
+  7-2-3-configure-custom-actions-in-slack: done
+  7-2-4-implement-idempotency-for-action-lambdas: dropped  # ISB handles idempotency via 409 Conflict - no Lambda-layer idempotency needed
+
+  # Epic 7.3: Operators Get Clear Action Feedback
+  7-3-1-post-thread-reply-for-successful-actions: done
+  7-3-2-post-thread-reply-for-already-processed: backlog
+  7-3-3-post-thread-reply-for-errors: backlog
+
+  # Epic 7.4: Platform Team Monitors and Audits
+  7-4-1-implement-action-logging-to-cloudwatch: backlog
+  7-4-2-configure-cloudwatch-alarms: backlog
+
+  # Epic 7.5: Team Leads Manage Approvers & Migration
+  7-5-1-document-approver-access-management: backlog
+  7-5-2-create-operator-onboarding-canvas: backlog
+  7-5-3-create-custom-action-configuration-runbook: backlog
+  7-5-4-remove-legacy-webhook-code-and-poc: backlog
+  7-5-5-verify-fallback-mechanism-preserved: backlog
+
+  epic-7-retrospective: optional

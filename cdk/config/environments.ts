@@ -86,3 +86,18 @@ export const PROD_ENV: StackEnvironment = {
   account: process.env.CDK_DEFAULT_ACCOUNT!,
   region: 'us-west-2',
 };
+
+/**
+ * Slack configuration for Amazon Q Developer integration
+ */
+export interface SlackConfig {
+  /** Slack Workspace ID (format: T0XXXXXXX) */
+  workspaceId: string;
+  /** Slack Channel ID (format: C0XXXXXXX) */
+  channelId: string;
+}
+
+export const SLACK_CONFIG: SlackConfig = {
+  workspaceId: 'T8GT9416G',
+  channelId: 'C0A9B2ME5RV',
+};

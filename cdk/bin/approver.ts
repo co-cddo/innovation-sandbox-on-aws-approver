@@ -3,7 +3,8 @@ import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { ApproverStack } from '../lib/approver-stack.js';
 import { GitHubActionsStack } from '../lib/github-actions-stack.js';
-import { DEFAULT_CONFIG, PROD_ENV } from '../config/environments.js';
+import { AmazonQSlackPocStack } from '../lib/amazon-q-slack-poc-stack.js';
+import { DEFAULT_CONFIG, PROD_ENV, SLACK_CONFIG } from '../config/environments.js';
 
 const app = new cdk.App();
 
@@ -24,4 +25,13 @@ new ApproverStack(app, 'ApproverStack', {
   env: PROD_ENV,
   config: DEFAULT_CONFIG,
   description: 'Score-based lease approval system for Innovation Sandbox on AWS',
+});
+
+// Amazon Q Developer Slack POC Stack
+// Deploy separately: cdk deploy AmazonQSlackPocStack --profile NDX/InnovationSandboxHub
+new AmazonQSlackPocStack(app, 'AmazonQSlackPocStack', {
+  env: PROD_ENV,
+  description: 'POC: Amazon Q Developer Slack integration for approve/deny buttons',
+  slackWorkspaceId: SLACK_CONFIG.workspaceId,
+  slackChannelId: SLACK_CONFIG.channelId,
 });

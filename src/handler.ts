@@ -35,6 +35,12 @@ import {
   type SlackService,
   type EscalationNotificationParams,
 } from './services/slack.js';
+import {
+  createSNSNotificationService,
+  type SNSNotificationService,
+  type SNSEscalationParams,
+} from './services/sns-notification.js';
+import { createAWSSNSClient } from './services/sns.js';
 import { getSlackWebhookUrl } from './lib/secrets.js';
 import {
   createBusinessHoursChecker,
@@ -233,6 +239,12 @@ const isbConsoleUrl = process.env.ISB_CONSOLE_URL || '';
 
 // Slack service (initialized lazily on first escalation)
 let slackService: SlackService | undefined;
+
+// SNS notification service configuration (Story 7.1.1)
+const snsTopicArn = process.env.NOTIFICATION_TOPIC_ARN || '';
+
+// SNS notification service (initialized lazily on first escalation)
+let snsNotificationService: SNSNotificationService | undefined;
 
 // Bank holiday service for business hours checking
 let bankHolidayService: BankHolidayService = createBankHolidayService();
@@ -433,6 +445,21 @@ export const resetSlackService = (): void => {
 };
 
 /**
+ * Allows overriding the SNS notification service for testing purposes (Story 7.1.1).
+ */
+export const setSNSNotificationService = (service: SNSNotificationService | undefined): void => {
+  snsNotificationService = service;
+};
+
+/**
+ * Resets the SNS notification service to undefined (for test cleanup).
+ * The service is lazily initialized on first escalation.
+ */
+export const resetSNSNotificationService = (): void => {
+  snsNotificationService = undefined;
+};
+
+/**
  * Queries user lease history from DynamoDB with pessimistic fallback on error.
  * If DynamoDB is not configured or query fails, returns empty array (pessimistic fallback).
  */
@@ -575,6 +602,49 @@ const checkDomainVerification = async (domain: string): Promise<boolean> => {
       domain,
     });
     return false;
+  }
+};
+
+/**
+ * Resolves a template UUID to its human-readable name by querying the ISB Leases API.
+ * Returns the UUID as fallback if lookup fails or template not found.
+ * Fails silently to avoid blocking the approval flow.
+ */
+const resolveTemplateName = async (
+  leaseId: { userEmail: string; uuid: string },
+  templateUuid: string
+): Promise<string> => {
+  try {
+    const result = await isbLambdaService.getLease({
+      leaseId,
+      approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
+    });
+
+    if (result.success && result.templateName) {
+      logger.info('Template name resolved from ISB API', {
+        leaseId: leaseId.uuid,
+        templateUuid,
+        templateName: result.templateName,
+      });
+      return result.templateName;
+    }
+
+    // Name not found or lookup failed - use UUID as fallback
+    if (!result.success) {
+      logger.warn('Template lookup failed - using UUID as fallback', {
+        leaseId: leaseId.uuid,
+        templateUuid,
+        error: result.error,
+      });
+    }
+    return templateUuid;
+  } catch (error) {
+    logger.warn('Error resolving template name - using UUID as fallback', {
+      leaseId: leaseId.uuid,
+      templateUuid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return templateUuid;
   }
 };
 
@@ -827,6 +897,69 @@ const updateLeaseComments = async (
     logger.warn('Error updating lease comments', {
       leaseId: leaseId.uuid,
       userEmail: leaseId.userEmail,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+/**
+ * Sends an SNS notification for an escalated request (Story 7.1.1).
+ * Initializes SNS notification service lazily on first use.
+ * Fails silently to avoid blocking the approval flow.
+ *
+ * @param params - SNS escalation notification parameters
+ */
+const notifySNSEscalation = async (
+  params: SNSEscalationParams
+): Promise<void> => {
+  // If SNS service is already set (e.g., via dependency injection for testing),
+  // skip configuration checks and use it directly
+  /* c8 ignore start -- lazy initialization guards: tests inject snsNotificationService directly */
+  if (!snsNotificationService) {
+    // Check if SNS topic ARN is configured
+    if (!snsTopicArn) {
+      logger.info('NOTIFICATION_TOPIC_ARN not configured - skipping SNS notification', {
+        leaseId: params.leaseId,
+      });
+      return;
+    }
+
+    // Check if ISB console URL is configured (needed for deep links)
+    if (!isbConsoleUrl) {
+      logger.warn('ISB_CONSOLE_URL not configured - skipping SNS notification', {
+        leaseId: params.leaseId,
+      });
+      return;
+    }
+
+    // Initialize SNS notification service lazily
+    const snsClient = createAWSSNSClient();
+    snsNotificationService = createSNSNotificationService(
+      snsClient,
+      snsTopicArn,
+      isbConsoleUrl,
+      logger as unknown as import('./services/sns-notification.js').SNSNotificationLogger
+    );
+  }
+  /* c8 ignore stop */
+
+  try {
+    const result = await snsNotificationService.notifyEscalation(params);
+    if (!result.success) {
+      logger.warn('SNS notification failed - request still escalated', {
+        leaseId: params.leaseId,
+        error: result.error,
+      });
+    } else {
+      logger.info('SNS escalation notification sent', {
+        leaseId: params.leaseId,
+        messageId: result.messageId,
+      });
+    }
+  } catch (error) {
+    // Log and continue - fails silently to avoid blocking
+    logger.warn('Error sending SNS notification - request still escalated', {
+      leaseId: params.leaseId,
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -1303,6 +1436,18 @@ export const handler = async (
     };
   }
 
+  // Debug: Log raw event detail fields to understand what ISB is sending
+  const rawDetail = (event as Record<string, unknown>).detail as Record<string, unknown> | undefined;
+  if (rawDetail) {
+    logger.info('Raw event detail fields', {
+      keys: Object.keys(rawDetail),
+      leaseTemplateId: rawDetail.leaseTemplateId,
+      originalLeaseTemplateUuid: rawDetail.originalLeaseTemplateUuid,
+      templateId: rawDetail.templateId,
+      leaseTemplateUuid: rawDetail.leaseTemplateUuid,
+    });
+  }
+
   // Validate event against schema
   const parseResult = LeaseRequestedEventSchema.safeParse(event);
   if (!parseResult.success) {
@@ -1557,6 +1702,35 @@ export const handler = async (
         scoreBreakdown,
         templateId,
         referenceNumber,
+      });
+
+      // Send SNS notification for Amazon Q Developer (Story 7.1.1, enhanced in 7.1.3)
+      // Fails silently - request remains escalated regardless of notification status
+      // Get queue depth for notification context
+      let queueDepthForNotification = 0;
+      if (sqsService) {
+        const depthResult = await sqsService.getQueueDepth();
+        if (depthResult.success) {
+          queueDepthForNotification = depthResult.approximateNumberOfMessages ?? 0;
+        }
+      }
+
+      // Resolve template UUID to human-readable name for notification
+      const resolvedTemplateName = await resolveTemplateName(leaseId, templateId);
+
+      // Story 7.1.3: Include template details and comment in notification
+      await notifySNSEscalation({
+        leaseId: leaseId.uuid,
+        userEmail: leaseId.userEmail,
+        score,
+        scoreBreakdown,
+        templateId: resolvedTemplateName,
+        leaseDurationHours: validatedEvent.detail.leaseDurationHours,
+        budgetAmount: validatedEvent.detail.budgetAmount,
+        comment: validatedEvent.detail.comments,
+        referenceNumber,
+        threshold: stateMachineConfig.autoApproveThreshold,
+        queueDepth: queueDepthForNotification,
       });
 
       return {
