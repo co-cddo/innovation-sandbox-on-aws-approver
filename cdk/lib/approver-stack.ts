@@ -398,6 +398,114 @@ export class ApproverStack extends cdk.Stack {
     durationAlarm.addAlarmAction(new cdk.aws_cloudwatch_actions.SnsAction(alarmTopic));
 
     // ==========================================
+    // Slack Action CloudWatch Alarms (Story 7.4.2)
+    // ==========================================
+
+    // Slack Approve Lambda Error Rate Alarm (Story 7.4.2 AC1, AC3, AC4)
+    const slackApproveErrorAlarm = new cloudwatch.Alarm(
+      this,
+      'SlackApproveErrorAlarm',
+      {
+        alarmName: 'Approver-SlackApprove-Error-Rate',
+        alarmDescription: `Slack Approve Lambda error rate exceeded 1%.
+
+WHAT: Approve button clicks in Slack are failing.
+IMPACT: Operators cannot approve lease requests via Slack - manual approval via ISB console required.
+TROUBLESHOOTING:
+1. Check CloudWatch Logs: /aws/lambda/ApproverSlackApprove
+2. Look for ERROR entries with correlationId
+3. Common causes: ISB Lambda unavailable, permission issues, timeout
+RUNBOOK: docs/runbooks/slack-action-alarms.md`,
+        metric: new cloudwatch.MathExpression({
+          expression: '(errors / invocations) * 100',
+          usingMetrics: {
+            errors: slackApproveLambda.function.metricErrors({
+              period: cdk.Duration.minutes(5),
+              statistic: 'Sum',
+            }),
+            invocations: slackApproveLambda.function.metricInvocations({
+              period: cdk.Duration.minutes(5),
+              statistic: 'Sum',
+            }),
+          },
+          period: cdk.Duration.minutes(5),
+        }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }
+    );
+    slackApproveErrorAlarm.addAlarmAction(
+      new cdk.aws_cloudwatch_actions.SnsAction(alarmTopic)
+    );
+
+    // Slack Deny Lambda Error Rate Alarm (Story 7.4.2 AC1, AC3, AC4)
+    const slackDenyErrorAlarm = new cloudwatch.Alarm(this, 'SlackDenyErrorAlarm', {
+      alarmName: 'Approver-SlackDeny-Error-Rate',
+      alarmDescription: `Slack Deny Lambda error rate exceeded 1%.
+
+WHAT: Deny button clicks in Slack are failing.
+IMPACT: Operators cannot deny lease requests via Slack - manual denial via ISB console required.
+TROUBLESHOOTING:
+1. Check CloudWatch Logs: /aws/lambda/ApproverSlackDeny
+2. Look for ERROR entries with correlationId
+3. Common causes: ISB Lambda unavailable, permission issues, timeout
+RUNBOOK: docs/runbooks/slack-action-alarms.md`,
+      metric: new cloudwatch.MathExpression({
+        expression: '(errors / invocations) * 100',
+        usingMetrics: {
+          errors: slackDenyLambda.function.metricErrors({
+            period: cdk.Duration.minutes(5),
+            statistic: 'Sum',
+          }),
+          invocations: slackDenyLambda.function.metricInvocations({
+            period: cdk.Duration.minutes(5),
+            statistic: 'Sum',
+          }),
+        },
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    slackDenyErrorAlarm.addAlarmAction(
+      new cdk.aws_cloudwatch_actions.SnsAction(alarmTopic)
+    );
+
+    // SNS Notification Delivery Failure Alarm (Story 7.4.2 AC2, AC3, AC4)
+    const snsDeliveryFailureAlarm = new cloudwatch.Alarm(
+      this,
+      'SNSDeliveryFailureAlarm',
+      {
+        alarmName: 'Approver-SNS-Delivery-Failures',
+        alarmDescription: `SNS notification delivery to Slack failed.
+
+WHAT: Approval notifications are not reaching the Slack channel.
+IMPACT: Operators won't see lease requests requiring manual approval - they'll queue up.
+TROUBLESHOOTING:
+1. Check SNS topic metrics in CloudWatch
+2. Verify Chatbot subscription is active
+3. Check Chatbot/Slack integration status
+4. Fallback: 30-minute queue check will catch pending requests
+RUNBOOK: docs/runbooks/slack-action-alarms.md`,
+        metric: notificationTopic.metricNumberOfNotificationsFailed({
+          period: cdk.Duration.minutes(5),
+          statistic: 'Sum',
+        }),
+        threshold: 0,
+        evaluationPeriods: 1,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }
+    );
+    snsDeliveryFailureAlarm.addAlarmAction(
+      new cdk.aws_cloudwatch_actions.SnsAction(alarmTopic)
+    );
+
+    // ==========================================
     // Stack Outputs
     // ==========================================
     new cdk.CfnOutput(this, 'LambdaFunctionName', {
@@ -486,6 +594,22 @@ export class ApproverStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'SlackDenyLambdaName', {
       value: slackDenyLambda.function.functionName,
       description: 'Slack Deny Lambda function name (Story 7.2.2)',
+    });
+
+    // Slack Action Alarm Outputs (Story 7.4.2)
+    new cdk.CfnOutput(this, 'SlackApproveErrorAlarmArn', {
+      value: slackApproveErrorAlarm.alarmArn,
+      description: 'Slack Approve error rate alarm ARN (Story 7.4.2)',
+    });
+
+    new cdk.CfnOutput(this, 'SlackDenyErrorAlarmArn', {
+      value: slackDenyErrorAlarm.alarmArn,
+      description: 'Slack Deny error rate alarm ARN (Story 7.4.2)',
+    });
+
+    new cdk.CfnOutput(this, 'SNSDeliveryFailureAlarmArn', {
+      value: snsDeliveryFailureAlarm.alarmArn,
+      description: 'SNS delivery failure alarm ARN (Story 7.4.2)',
     });
   }
 }

@@ -514,6 +514,85 @@ describe('ApproverStack', () => {
     });
   });
 
+  describe('Slack Action CloudWatch Alarms (Story 7.4.2)', () => {
+    it('creates Slack Approve Lambda error rate alarm', () => {
+      template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+        AlarmName: 'Approver-SlackApprove-Error-Rate',
+        ComparisonOperator: 'GreaterThanThreshold',
+        Threshold: 1,
+        EvaluationPeriods: 1,
+        TreatMissingData: 'notBreaching',
+      });
+    });
+
+    it('creates Slack Deny Lambda error rate alarm', () => {
+      template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+        AlarmName: 'Approver-SlackDeny-Error-Rate',
+        ComparisonOperator: 'GreaterThanThreshold',
+        Threshold: 1,
+        EvaluationPeriods: 1,
+        TreatMissingData: 'notBreaching',
+      });
+    });
+
+    it('creates SNS delivery failure alarm', () => {
+      template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+        AlarmName: 'Approver-SNS-Delivery-Failures',
+        ComparisonOperator: 'GreaterThanThreshold',
+        Threshold: 0,
+        EvaluationPeriods: 1,
+        TreatMissingData: 'notBreaching',
+      });
+    });
+
+    it('configures alarms with SNS alarm actions', () => {
+      // All three new alarms should have alarm actions configured
+      // We verify they reference the alarm topic (by checking there are alarms with AlarmActions)
+      template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+        AlarmName: 'Approver-SlackApprove-Error-Rate',
+        AlarmActions: Match.anyValue(),
+      });
+      template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+        AlarmName: 'Approver-SlackDeny-Error-Rate',
+        AlarmActions: Match.anyValue(),
+      });
+      template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+        AlarmName: 'Approver-SNS-Delivery-Failures',
+        AlarmActions: Match.anyValue(),
+      });
+    });
+
+    it('includes troubleshooting context in alarm descriptions', () => {
+      // Verify alarms have multi-line descriptions with runbook reference
+      template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+        AlarmName: 'Approver-SlackApprove-Error-Rate',
+        AlarmDescription: Match.stringLikeRegexp('.*RUNBOOK.*'),
+      });
+      template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+        AlarmName: 'Approver-SlackDeny-Error-Rate',
+        AlarmDescription: Match.stringLikeRegexp('.*RUNBOOK.*'),
+      });
+      template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+        AlarmName: 'Approver-SNS-Delivery-Failures',
+        AlarmDescription: Match.stringLikeRegexp('.*RUNBOOK.*'),
+      });
+    });
+  });
+
+  describe('Slack Action Alarm Outputs (Story 7.4.2)', () => {
+    it('outputs SlackApproveErrorAlarmArn', () => {
+      template.hasOutput('SlackApproveErrorAlarmArn', {});
+    });
+
+    it('outputs SlackDenyErrorAlarmArn', () => {
+      template.hasOutput('SlackDenyErrorAlarmArn', {});
+    });
+
+    it('outputs SNSDeliveryFailureAlarmArn', () => {
+      template.hasOutput('SNSDeliveryFailureAlarmArn', {});
+    });
+  });
+
   // NOTE: Snapshot test intentionally removed - Lambda code asset hashes change with every
   // code modification, causing CI friction. The property-based tests above provide
   // comprehensive coverage of infrastructure configuration.

@@ -21,6 +21,17 @@ import { type CustomActionResponse, decodeLeaseCompositeKey } from '../lib/slack
 export type ActionType = 'approve' | 'deny';
 
 /**
+ * Valid outcome values for action log entries (Story 7.4.1).
+ * Used for audit trail and CloudWatch Insights queries.
+ */
+export const ACTION_LOG_OUTCOMES = ['success', 'already_processed', 'error'] as const;
+
+/**
+ * Type for action log outcomes derived from the constant.
+ */
+export type ActionLogOutcome = (typeof ACTION_LOG_OUTCOMES)[number];
+
+/**
  * Configuration for a Slack action handler.
  */
 export interface SlackActionConfig {
@@ -311,6 +322,9 @@ export const createSlackActionHandler = (config: SlackActionConfig) => {
    */
   const handler = async (event: unknown): Promise<CustomActionResponse> => {
     const correlationId = `${config.actionType}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    // Track decoded lease info for error logging (Story 7.4.1 AC1)
+    let decodedLeaseId: { userEmail: string; uuid: string } | undefined;
+    let operatorId: string | undefined;
 
     state.logger.info(`${config.successVerb.charAt(0).toUpperCase() + config.successVerb.slice(1).replace('ed', '')} action received`, {
       correlationId,
@@ -328,6 +342,7 @@ export const createSlackActionHandler = (config: SlackActionConfig) => {
       }
 
       const { leaseId: encodedLeaseId, slackUserId } = validation.payload;
+      operatorId = slackUserId;
 
       state.logger.info(`Processing ${config.actionType} action`, {
         correlationId,
@@ -338,6 +353,7 @@ export const createSlackActionHandler = (config: SlackActionConfig) => {
       let leaseId: { userEmail: string; uuid: string };
       try {
         leaseId = decodeLeaseCompositeKey(encodedLeaseId);
+        decodedLeaseId = leaseId; // Store for error logging
       } catch (decodeError) {
         state.logger.error('Failed to decode leaseId', {
           correlationId,
@@ -370,9 +386,11 @@ export const createSlackActionHandler = (config: SlackActionConfig) => {
       if (result.success) {
         state.logger.info(`Lease ${config.actionType}d successfully`, {
           correlationId,
+          action: config.actionType,
+          outcome: 'success' as ActionLogOutcome,
           leaseId: leaseId.uuid,
           userEmail: leaseId.userEmail,
-          slackUserId,
+          operator: slackUserId,
           statusCode: result.statusCode,
         });
         return createSuccessResponse(slackUserId, config);
@@ -382,9 +400,11 @@ export const createSlackActionHandler = (config: SlackActionConfig) => {
       if (isAlreadyProcessedResult(result)) {
         state.logger.info('Lease already processed', {
           correlationId,
+          action: config.actionType,
+          outcome: 'already_processed' as ActionLogOutcome,
           leaseId: leaseId.uuid,
           userEmail: leaseId.userEmail,
-          slackUserId,
+          operator: slackUserId,
           statusCode: result.statusCode,
           error: result.error,
         });
@@ -394,20 +414,35 @@ export const createSlackActionHandler = (config: SlackActionConfig) => {
       // Other errors - fail closed (request remains pending)
       state.logger.error('ISB Lambda returned error', {
         correlationId,
+        action: config.actionType,
+        outcome: 'error' as ActionLogOutcome,
         leaseId: leaseId.uuid,
         userEmail: leaseId.userEmail,
-        slackUserId,
+        operator: slackUserId,
         statusCode: result.statusCode,
         error: result.error,
       });
 
       return createErrorResponse(getUserFriendlyErrorMessage(result, config), correlationId);
     } catch (error) {
+      // Log error at ERROR level (without stack trace for production visibility)
       state.logger.error(`Unexpected error in ${config.actionType} handler`, {
         correlationId,
+        action: config.actionType,
+        outcome: 'error' as ActionLogOutcome,
         error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
+        // Include lease info when available (Story 7.4.1 AC1)
+        ...(decodedLeaseId && { leaseId: decodedLeaseId.uuid, userEmail: decodedLeaseId.userEmail }),
+        ...(operatorId && { operator: operatorId }),
       });
+
+      // Log stack trace at DEBUG level per AC4 requirement
+      if (error instanceof Error && error.stack) {
+        state.logger.debug(`Stack trace for ${correlationId}`, {
+          correlationId,
+          stack: error.stack,
+        });
+      }
 
       return createErrorResponse('Unexpected error, please try again', correlationId);
     }

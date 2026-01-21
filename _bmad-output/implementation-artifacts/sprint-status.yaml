@@ -112,11 +112,11 @@ development_status:
   # Epic 7.3: Operators Get Clear Action Feedback
   7-3-1-post-thread-reply-for-successful-actions: done
   7-3-2-post-thread-reply-for-already-processed: done
-  7-3-3-post-thread-reply-for-errors: backlog
+  7-3-3-post-thread-reply-for-errors: done
 
   # Epic 7.4: Platform Team Monitors and Audits
-  7-4-1-implement-action-logging-to-cloudwatch: backlog
-  7-4-2-configure-cloudwatch-alarms: backlog
+  7-4-1-implement-action-logging-to-cloudwatch: done
+  7-4-2-configure-cloudwatch-alarms: done
 
   # Epic 7.5: Team Leads Manage Approvers & Migration
   7-5-1-document-approver-access-management: backlog
