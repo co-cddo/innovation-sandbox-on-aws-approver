@@ -179,8 +179,8 @@ workflow_status:
         - "All items initialized to backlog status"
         - "Ready to begin implementation"
 
-# Project Status: COMPLETE
-# All BMM workflow phases and implementation epics are done!
+# Project Status: ACTIVE (New Feature Addition)
+# Core system complete, adding Amazon Q Slack integration
 completion:
   status: "done"
   completed: "2025-01-20"
@@ -193,3 +193,92 @@ completion:
     - "All 6 epics implemented and validated"
     - "Full system operational with scoring, timing, communications"
     - "Epic 6 added account cooldown features (FR58-FR67)"
+
+# ============================================================
+# NEW FEATURE: Amazon Q Developer Slack Integration
+# Added: 2026-01-20
+# ============================================================
+# Replaces direct Slack webhooks with Amazon Q Developer (AWS Chatbot)
+# for interactive approve/deny buttons in Slack notifications.
+
+new_feature_amazon_q_slack:
+  name: "Amazon Q Developer Slack Integration"
+  initiated: "2026-01-20"
+  poc_summary: "_bmad-output/amazon-q-slack-poc-summary.md"
+  status: "planning"
+
+  # POC Findings (Validated)
+  poc_validated:
+    - "SNS-to-Slack notifications via Amazon Q Developer"
+    - "Custom action buttons (Approve/Deny) invoking Lambda"
+    - "Intermediary Lambda calling ISB Leases Lambda"
+    - "Thread updates after approve/deny actions"
+    - "Minimal payload (just leaseId) - Lambda decodes rest"
+    - "IAM permissions model (guardrails + identity policies)"
+
+  # Workflow for New Feature
+  workflow_status:
+    phase-1-planning:
+      update-prd:
+        status: "_bmad-output/prd-amazon-q-slack.md"
+        completed: "2026-01-20"
+        agent: "pm"
+        command: "create-prd"
+        purpose: "Add Amazon Q integration requirements to PRD"
+        outputs:
+          - "_bmad-output/prd-amazon-q-slack.md"
+        notes:
+          - "25 FRs across 7 capability areas"
+          - "12 NFRs for reliability, security, integration"
+          - "5 user journeys covering operators, ad-hoc approvers, team leads, error scenarios"
+          - "API backend specific requirements with SNS schema and Lambda interfaces"
+
+    phase-2-solutioning:
+      update-architecture:
+        status: "_bmad-output/architecture.md"
+        completed: "2026-01-20"
+        agent: "architect"
+        command: "create-architecture"
+        purpose: "Document Amazon Q/SNS integration architecture"
+        scope:
+          - "SNS topic and Chatbot configuration"
+          - "Approve/Deny Lambda design"
+          - "IAM permissions model"
+          - "Notification format specification"
+        notes:
+          - "POC stack provides reference implementation"
+          - "Merge POC components into main ApproverStack"
+
+      create-epic-7:
+        status: "_bmad-output/epics-amazon-q-slack.md"
+        completed: "2026-01-20"
+        agent: "pm"
+        command: "create-epics-and-stories"
+        purpose: "Create Epic 7: Amazon Q Slack Integration"
+        outputs:
+          - "_bmad-output/epics-amazon-q-slack.md"
+        notes:
+          - "5 sub-epics, 17 stories"
+          - "24 FRs covered, 1 dropped (FR16 - DynamoDB not needed)"
+          - "All 12 NFRs addressed"
+          - "Stakeholder enhancements applied from Round Table"
+          - "Pre-mortem enhancement: POC stack AWS deletion verification"
+
+      implementation-readiness:
+        status: "_bmad-output/implementation-readiness-report-2026-01-20.md"
+        completed: "2026-01-20"
+        agent: "architect"
+        command: "check-implementation-readiness"
+        purpose: "Gate check for Epic 7"
+
+    phase-3-implementation:
+      sprint-planning:
+        status: "required"
+        agent: "sm"
+        command: "sprint-planning"
+        purpose: "Add Epic 7 to sprint status"
+
+  # Next Action
+  next_workflow: "sprint-planning"
+  next_agent: "sm"
+  next_command: "/bmad:bmm:workflows:sprint-planning"

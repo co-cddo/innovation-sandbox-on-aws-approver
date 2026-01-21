@@ -60,8 +60,9 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 | `approver` | SQS (delay queue) | Process delayed queue checks (30s delay) |
 | `approver` | EventBridge Scheduler: `rate(30 minutes)` | Fallback queue processing |
 | `approver` | EventBridge Scheduler: `cron(0 7 ? * MON-FRI *)` | 7am London business hours processing |
+| `slack-callback` | API Gateway: POST `/slack/interactions` | Handle Slack button callbacks (approve/deny) |
 
-**Note:** Single Lambda with multiple triggers. Slack is one-way notifications only (no interactive callbacks). Manual approval handled via ISB console deep links.
+**Note:** Two Lambda functions - `approver` for event processing, `slack-callback` for Slack interactive buttons. The callback handler verifies Slack signing secret, processes approve/deny actions, emits appropriate EventBridge events, and updates the Slack message with confirmation.
 
 ### Cross-Cutting Concerns Identified
 
@@ -92,7 +93,9 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 ```
 innovation-sandbox-on-aws-approver/
 ├── src/                           # Lambda source code
-│   ├── handler.ts                 # Single EventBridge handler
+│   ├── handlers/
+│   │   ├── approver.ts            # EventBridge handler (main processing)
+│   │   └── slack-callback.ts      # API Gateway handler (Slack buttons)
 │   ├── state-machine.ts           # Decision orchestration
 │   ├── scoring/
 │   │   ├── engine.ts              # Orchestrates rules
@@ -102,11 +105,12 @@ innovation-sandbox-on-aws-approver/
 │   │   ├── dynamodb.ts
 │   │   ├── eventbridge.ts
 │   │   ├── bedrock.ts
-│   │   ├── slack.ts               # One-way notifications
+│   │   ├── slack.ts               # Interactive webhook notifications
 │   │   └── domain-cache.ts
 │   └── lib/
 │       ├── config.ts              # SSM + AppConfig
 │       ├── logger.ts
+│       ├── slack-signature.ts     # Slack signing secret verification
 │       ├── business-hours.ts
 │       └── types.ts
 ├── cdk/                           # Infrastructure as Code
@@ -115,7 +119,8 @@ innovation-sandbox-on-aws-approver/
 │   ├── lib/
 │   │   ├── approver-stack.ts      # Main stack
 │   │   └── constructs/
-│   │       ├── approver-lambda.ts # Lambda + EventBridge rule
+│   │       ├── approver-lambda.ts # Approver Lambda + EventBridge rules
+│   │       ├── slack-api.ts       # API Gateway + Slack callback Lambda
 │   │       ├── config-params.ts   # SSM parameters
 │   │       └── monitoring.ts      # Alarms, dashboards, DLQ
 │   ├── config/
@@ -177,7 +182,9 @@ npm install -D typescript@^5.3 vitest@^4.0 @vitest/coverage-v8 \
 ```
 innovation-sandbox-on-aws-approver/
 ├── src/
-│   ├── handler.ts                 # Single EventBridge handler
+│   ├── handlers/
+│   │   ├── approver.ts            # EventBridge handler (main processing)
+│   │   └── slack-callback.ts      # API Gateway handler (Slack buttons)
 │   ├── state-machine.ts           # Decision orchestration
 │   ├── scoring/
 │   │   ├── engine.ts              # Orchestrates rules
@@ -187,11 +194,12 @@ innovation-sandbox-on-aws-approver/
 │   │   ├── dynamodb.ts
 │   │   ├── eventbridge.ts
 │   │   ├── bedrock.ts
-│   │   ├── slack.ts               # One-way webhook notifications
+│   │   ├── slack.ts               # Interactive webhook notifications
 │   │   └── domain-cache.ts
 │   ├── lib/
 │   │   ├── config.ts              # SSM + Secrets + AppConfig
 │   │   ├── logger.ts
+│   │   ├── slack-signature.ts     # Slack signing secret verification
 │   │   ├── business-hours.ts
 │   │   └── types.ts
 ├── cdk/
@@ -201,6 +209,7 @@ innovation-sandbox-on-aws-approver/
 │   │   ├── approver-stack.ts
 │   │   └── constructs/
 │   │       ├── approver-lambda.ts
+│   │       ├── slack-api.ts       # API Gateway + Slack callback Lambda
 │   │       ├── config-params.ts
 │   │       └── monitoring.ts
 │   ├── config/
@@ -290,14 +299,16 @@ Nova Micro is ~30x cheaper than Claude Haiku for our use case (50-500 requests/d
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Notification type | One-way webhook | No interactive buttons needed |
-| Manual approval | ISB console deep link | Leverage existing ISB UI |
-| Message format | Block Kit with link button | Rich formatting + clear CTA |
+| Notification type | Interactive webhook | Approve/deny directly from Slack |
+| Callback handling | API Gateway + Lambda | Process Slack button interactions |
+| Message format | Block Kit with action buttons | Rich formatting + approve/deny CTAs |
+| Fallback | ISB console deep link | Link included for context/edge cases |
 
-**No API Gateway required** - eliminates:
-- Second Lambda function
-- Slack signing secret verification
-- Interactive message callback handling
+**Interactive Slack buttons require:**
+- API Gateway endpoint for Slack callbacks
+- Slack signing secret verification (request authenticity)
+- Button payload processing (approve/deny actions)
+- Response URL for message updates (confirmation feedback)
 
 ### ISB AppConfig Integration
 
@@ -326,6 +337,8 @@ const consoleUrl = isbConfig.auth.webAppUrl;
 
 ### IAM Permissions Required
 
+**Approver Lambda:**
+
 | Service | Actions | Resource |
 |---------|---------|----------|
 | DynamoDB | GetItem, Query, UpdateItem, PutItem | Lease table, Sandbox Account table, Idempotency table |
@@ -338,7 +351,18 @@ const consoleUrl = isbConfig.auth.webAppUrl;
 | Secrets Manager | GetSecretValue | Slack webhook URL |
 | CloudWatch Logs | CreateLogGroup, CreateLogStream, PutLogEvents | Lambda log group |
 
+**Slack Callback Lambda:**
+
+| Service | Actions | Resource |
+|---------|---------|----------|
+| DynamoDB | GetItem, UpdateItem | Lease table (read request, update status) |
+| EventBridge | PutEvents | Default event bus (LeaseApproved/LeaseDenied) |
+| Secrets Manager | GetSecretValue | Slack signing secret |
+| CloudWatch Logs | CreateLogGroup, CreateLogStream, PutLogEvents | Lambda log group |
+
 ### Environment Variables
+
+**Approver Lambda:**
 
 | Variable | Source | Purpose |
 |----------|--------|---------|
@@ -348,12 +372,21 @@ const consoleUrl = isbConfig.auth.webAppUrl;
 | `DELAY_QUEUE_URL` | CDK | SQS queue for delayed processing |
 | `EVENT_BUS_NAME` | CDK | EventBridge bus (default) |
 | `DOMAIN_LIST_BUCKET` | CDK | S3 bucket for domain cache |
-| `SLACK_WEBHOOK_SECRET_ARN` | CDK | Secrets Manager ARN |
+| `SLACK_WEBHOOK_SECRET_ARN` | CDK | Secrets Manager ARN for webhook URL |
 | `SSM_CONFIG_PREFIX` | CDK | SSM parameter path prefix |
 | `ISB_APPCONFIG_APP` | CDK | ISB AppConfig application ID |
 | `ISB_APPCONFIG_CONFIG` | CDK | ISB AppConfig configuration ID |
 | `BEDROCK_MODEL_ID` | CDK | `amazon.nova-micro-v1:0` |
 | `AUTO_APPROVE_THRESHOLD` | CDK | Score threshold (default: 20) |
+| `LOG_LEVEL` | CDK | Logging verbosity |
+
+**Slack Callback Lambda:**
+
+| Variable | Source | Purpose |
+|----------|--------|---------|
+| `LEASE_TABLE_NAME` | CDK | DynamoDB lease table |
+| `EVENT_BUS_NAME` | CDK | EventBridge bus (default) |
+| `SLACK_SIGNING_SECRET_ARN` | CDK | Secrets Manager ARN for Slack signing secret |
 | `LOG_LEVEL` | CDK | Logging verbosity |
 
 ### S3 Domain List Sync
@@ -582,7 +615,7 @@ export class CircuitBreaker {
 
 ### Slack Notification Pattern
 
-**One-way webhook with Block Kit formatting:**
+**Interactive webhook with Block Kit formatting:**
 
 ```typescript
 // services/slack.ts
@@ -606,17 +639,82 @@ const buildBlockKitMessage = (
   },
   {
     type: 'actions',
-    elements: [{
-      type: 'button',
-      text: { type: 'plain_text', text: 'Review in ISB Console' },
-      url: `${consoleUrl}/leases/${request.leaseId}`,
-      style: 'primary'
-    }]
+    block_id: `approval_${request.leaseId}`,
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Approve' },
+        action_id: 'approve_lease',
+        value: JSON.stringify({ leaseId: request.leaseId, userEmail: request.userEmail }),
+        style: 'primary'
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Deny' },
+        action_id: 'deny_lease',
+        value: JSON.stringify({ leaseId: request.leaseId, userEmail: request.userEmail }),
+        style: 'danger'
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'View in ISB Console' },
+        url: `${consoleUrl}/leases/${request.leaseId}`
+      }
+    ]
   }
 ];
 ```
 
-**Non-blocking:** Slack failures logged but don't block approval flow.
+**Callback handler pattern:**
+
+```typescript
+// handlers/slack-callback.ts
+import { createHmac, timingSafeEqual } from 'crypto';
+
+export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  // 1. Verify Slack signature
+  const signature = event.headers['x-slack-signature'];
+  const timestamp = event.headers['x-slack-request-timestamp'];
+  const signingSecret = await getSecret(process.env.SLACK_SIGNING_SECRET_ARN!);
+
+  if (!verifySlackSignature(event.body!, timestamp!, signature!, signingSecret)) {
+    return { statusCode: 401, body: 'Invalid signature' };
+  }
+
+  // 2. Parse payload
+  const payload = JSON.parse(decodeURIComponent(event.body!.replace('payload=', '')));
+  const action = payload.actions[0];
+  const { leaseId, userEmail } = JSON.parse(action.value);
+  const operatorEmail = payload.user.name; // Slack user who clicked
+
+  // 3. Process action
+  if (action.action_id === 'approve_lease') {
+    await emitLeaseApproved(leaseId, userEmail, operatorEmail);
+  } else if (action.action_id === 'deny_lease') {
+    await emitLeaseDenied(leaseId, userEmail, operatorEmail, 'Denied by operator');
+  }
+
+  // 4. Update Slack message with confirmation
+  return {
+    statusCode: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      replace_original: true,
+      text: `Lease ${leaseId} ${action.action_id === 'approve_lease' ? 'approved' : 'denied'} by ${operatorEmail}`
+    })
+  };
+};
+
+function verifySlackSignature(body: string, timestamp: string, signature: string, secret: string): boolean {
+  const baseString = `v0:${timestamp}:${body}`;
+  const hmac = createHmac('sha256', secret).update(baseString).digest('hex');
+  const computed = Buffer.from(`v0=${hmac}`);
+  const received = Buffer.from(signature);
+  return timingSafeEqual(computed, received);
+}
+```
+
+**Non-blocking:** Initial Slack notification failures logged but don't block approval flow. Callback failures return 500 to Slack (will retry).
 
 ### Testing Strategy
 
@@ -629,6 +727,8 @@ const buildBlockKitMessage = (
 | EventBridge service | Unit + Contract | 80% | Mock client + schema validation |
 | Bedrock service | Unit + Contract | N/A | Mock responses + prompt format |
 | Slack service | Unit + Contract | N/A | Mock fetch + Block Kit schema |
+| Slack signature verification | Unit | 100% | Test valid/invalid signatures, timing |
+| Slack callback handler | Unit + Integration | 80% | Mock API Gateway events, verify actions |
 | Handler (e2e) | Integration | Happy path | Full flow with mocked AWS |
 
 **Circuit breaker test cases:**
@@ -761,7 +861,7 @@ export const handler = makeIdempotent(processLeaseRequest, {
 | Circuit Breaker | Custom class | Bedrock resilience |
 | Logging | Powertools + correlation ID | Full audit trail |
 | Service Layer | Injected clients | Testable integrations |
-| Slack | One-way webhook | Simple, non-blocking |
+| Slack | Interactive webhook + API Gateway callback | Approve/deny directly in Slack |
 | Delayed Processing | Event + 30min scheduled fallback | Reliability |
 | Idempotency | Powertools + DynamoDB | Duplicate prevention |
 
@@ -769,7 +869,7 @@ export const handler = makeIdempotent(processLeaseRequest, {
 
 ### System Overview
 
-Single Lambda function triggered by multiple EventBridge rules, processing lease approval requests through a score-based decision engine with AI-assisted analysis.
+Two Lambda functions: the main **approver** triggered by EventBridge rules for lease processing, and **slack-callback** triggered by API Gateway for handling interactive Slack button clicks. Together they process lease approval requests through a score-based decision engine with AI-assisted analysis and enable operators to approve/deny directly from Slack.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -796,27 +896,41 @@ Single Lambda function triggered by multiple EventBridge rules, processing lease
 │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐               │
 │  │  Scoring   │ │  Bedrock   │ │   Slack    │ │  Config    │               │
 │  │  Engine    │ │  (Nova     │ │  Webhook   │ │  (SSM +    │               │
-│  │  (16 rules)│ │  Micro)    │ │  (one-way) │ │  AppConfig)│               │
+│  │  (16 rules)│ │  Micro)    │ │(interactive)│ │  AppConfig)│               │
 │  └────────────┘ └────────────┘ └────────────┘ └────────────┘               │
 └─────────────────────────────────────────────────────────────────────────────┘
             │                           │                     │
             ▼                           ▼                     ▼
 ┌──────────────────┐         ┌──────────────────┐   ┌──────────────────┐
 │    DynamoDB      │         │   EventBridge    │   │     Slack        │
-│  (Lease table,   │         │  (LeaseApproved/ │   │   (Webhook)      │
-│   Accounts,      │         │   LeaseDenied)   │   │                  │
-│   Idempotency)   │         └──────────────────┘   └──────────────────┘
-└──────────────────┘
+│  (Lease table,   │         │  (LeaseApproved/ │   │   (Webhook +     │
+│   Accounts,      │         │   LeaseDenied)   │   │    Buttons)      │
+│   Idempotency)   │         └──────────────────┘   └────────┬─────────┘
+└──────────────────┘                                         │
+                                                             │ Button Click
+                                                             ▼
+                                              ┌──────────────────────────────┐
+                                              │     API Gateway (HTTP)       │
+                                              │   POST /slack/interactions   │
+                                              └──────────────┬───────────────┘
+                                                             │
+                                                             ▼
+                                              ┌──────────────────────────────┐
+                                              │   Slack Callback Lambda      │
+                                              │  - Verify signing secret     │
+                                              │  - Emit LeaseApproved/Denied │
+                                              │  - Update Slack message      │
+                                              └──────────────────────────────┘
 ```
 
 ### Key Decisions Summary
 
 | Area | Decision |
 |------|----------|
-| **Architecture** | Single Lambda, multiple EventBridge triggers |
+| **Architecture** | Two Lambdas: approver (event processing) + slack-callback (button handling) |
 | **Region** | us-west-2 (co-located with ISB) |
 | **AI Model** | Amazon Nova Micro (~$0.05-$0.47/month) |
-| **Slack** | One-way webhook + ISB console deep link |
+| **Slack** | Interactive buttons via webhook + API Gateway callback |
 | **Delayed Processing** | Event-driven + 30min scheduled fallback |
 | **Queue Processing** | FIFO via DynamoDB `queuedAt` timestamp |
 | **Idempotency** | Powertools with DynamoDB backend |
@@ -828,6 +942,8 @@ Single Lambda function triggered by multiple EventBridge rules, processing lease
 | Resource | Type | Purpose |
 |----------|------|---------|
 | `ApproverFunction` | Lambda | Main processing function |
+| `SlackCallbackFunction` | Lambda | Handle Slack button interactions |
+| `SlackCallbackApi` | API Gateway (HTTP API) | Endpoint for Slack callbacks |
 | `LeaseRequestedRule` | EventBridge Rule | Trigger on LeaseRequested |
 | `CleanupSucceededRule` | EventBridge Rule | Trigger on AccountCleanupSucceeded |
 | `QueueCheckSchedule` | EventBridge Scheduler | Every 30 minutes |
@@ -836,6 +952,7 @@ Single Lambda function triggered by multiple EventBridge rules, processing lease
 | `IdempotencyTable` | DynamoDB Table | Duplicate event prevention |
 | `ConfigParams` | SSM Parameters | Scoring weights, thresholds |
 | `DomainListBucket` | S3 Bucket | UK council domain cache |
+| `SlackSigningSecret` | Secrets Manager | Slack app signing secret |
 | `ApproverAlarms` | CloudWatch Alarms | Error rate, DLQ depth |
 
 ### Next Steps
