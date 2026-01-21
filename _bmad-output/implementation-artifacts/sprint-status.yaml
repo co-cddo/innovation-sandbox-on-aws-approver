@@ -119,10 +119,10 @@ development_status:
   7-4-2-configure-cloudwatch-alarms: done
 
   # Epic 7.5: Team Leads Manage Approvers & Migration
-  7-5-1-document-approver-access-management: backlog
-  7-5-2-create-operator-onboarding-canvas: backlog
-  7-5-3-create-custom-action-configuration-runbook: backlog
-  7-5-4-remove-legacy-webhook-code-and-poc: backlog
-  7-5-5-verify-fallback-mechanism-preserved: backlog
+  7-5-1-document-approver-access-management: done
+  7-5-2-create-operator-onboarding-canvas: done
+  7-5-3-create-custom-action-configuration-runbook: done  # Pre-completed in Story 7.2.3; screenshots TODO (placeholders added)
+  7-5-4-remove-legacy-webhook-code-and-poc: review
+  7-5-5-verify-fallback-mechanism-preserved: ready-for-dev
 
   epic-7-retrospective: optional

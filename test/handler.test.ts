@@ -17,14 +17,11 @@ import {
   resetSQSService,
   setBankHolidayService,
   resetBankHolidayService,
-  setSlackService,
-  resetSlackService,
 } from '../src/handler.js';
 import type { DynamoDBService } from '../src/services/dynamodb.js';
 import type { DomainAllowlistService } from '../src/services/domain-allowlist.js';
 import type { BedrockService } from '../src/services/bedrock.js';
 import type { SQSService } from '../src/services/sqs.js';
-import type { SlackService } from '../src/services/slack.js';
 import type { EventBridgeEvent, Context } from 'aws-lambda';
 import type { EventBridgeService } from '../src/services/eventbridge.js';
 import type { IsbLambdaService } from '../src/services/isb-lambda.js';
@@ -303,7 +300,6 @@ describe('handler', () => {
     resetOrchestrator();
     resetSQSService();
     resetBankHolidayService();
-    resetSlackService();
   });
 
   describe('LeaseRequested events', () => {
@@ -1736,126 +1732,8 @@ describe('handler', () => {
       expect(mockApproveLease).not.toHaveBeenCalled();
     });
 
-    it('should send Slack notification when escalated and service is configured (Story 5.2)', async () => {
-      const mockNotifyEscalation = vi.fn().mockResolvedValue({ success: true, statusCode: 200 });
-      const mockSlackService: SlackService = {
-        notifyEscalation: mockNotifyEscalation,
-        notifyCapacityCrunch: vi.fn().mockResolvedValue({ success: true }),
-      };
-      setSlackService(mockSlackService);
-
-      const mockOrchestrator: StateMachineOrchestrator = {
-        run: vi.fn().mockReturnValue({
-          finalState: ApprovalState.ESCALATED,
-          success: true,
-          context: {
-            ...createInitialContext(),
-            leaseId: '123e4567-e89b-12d3-a456-426614174000',
-            userEmail: 'user@example.gov.uk',
-            templateId: 'web-hosting',
-            score: 25,
-            scoreBreakdown: [
-              { ruleId: 'first_time_user', name: 'First Time User', points: 5, triggered: true },
-              { ruleId: 'group_mailbox_detected', name: 'Group Mailbox', points: 20, triggered: true },
-            ],
-            decision: 'escalated',
-            reason: 'Score 25 meets or exceeds threshold 20',
-          },
-        }),
-      };
-      setOrchestrator(mockOrchestrator);
-
-      const event = createValidLeaseRequestedEvent();
-      const result = await handler(event, mockContext);
-
-      expect(result.statusCode).toBe(200);
-      expect(mockNotifyEscalation).toHaveBeenCalledWith(
-        expect.objectContaining({
-          leaseId: '123e4567-e89b-12d3-a456-426614174000',
-          userEmail: 'user@example.gov.uk',
-          score: 25,
-          templateId: 'web-hosting',
-        })
-      );
-    });
-
-    it('should continue processing even if Slack notification fails (AC6)', async () => {
-      const mockNotifyEscalation = vi.fn().mockResolvedValue({ success: false, error: 'Webhook error' });
-      const mockSlackService: SlackService = {
-        notifyEscalation: mockNotifyEscalation,
-        notifyCapacityCrunch: vi.fn().mockResolvedValue({ success: true }),
-      };
-      setSlackService(mockSlackService);
-
-      const mockOrchestrator: StateMachineOrchestrator = {
-        run: vi.fn().mockReturnValue({
-          finalState: ApprovalState.ESCALATED,
-          success: true,
-          context: {
-            ...createInitialContext(),
-            leaseId: '123e4567-e89b-12d3-a456-426614174000',
-            userEmail: 'user@example.gov.uk',
-            templateId: 'web-hosting',
-            score: 25,
-            decision: 'escalated',
-            reason: 'Score 25 meets or exceeds threshold 20',
-          },
-        }),
-      };
-      setOrchestrator(mockOrchestrator);
-
-      const event = createValidLeaseRequestedEvent();
-      const result = await handler(event, mockContext);
-
-      // Request should still succeed even though Slack notification failed
-      expect(result.statusCode).toBe(200);
-      expect(result.body).toBe('OK');
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Slack notification failed - request still escalated',
-        expect.objectContaining({
-          leaseId: '123e4567-e89b-12d3-a456-426614174000',
-        })
-      );
-    });
-
-    it('should continue processing even if Slack notification throws (AC6)', async () => {
-      const mockNotifyEscalation = vi.fn().mockRejectedValue(new Error('Network error'));
-      const mockSlackService: SlackService = {
-        notifyEscalation: mockNotifyEscalation,
-        notifyCapacityCrunch: vi.fn().mockResolvedValue({ success: true }),
-      };
-      setSlackService(mockSlackService);
-
-      const mockOrchestrator: StateMachineOrchestrator = {
-        run: vi.fn().mockReturnValue({
-          finalState: ApprovalState.ESCALATED,
-          success: true,
-          context: {
-            ...createInitialContext(),
-            leaseId: '123e4567-e89b-12d3-a456-426614174000',
-            userEmail: 'user@example.gov.uk',
-            templateId: 'web-hosting',
-            score: 25,
-            decision: 'escalated',
-            reason: 'Score 25 meets or exceeds threshold 20',
-          },
-        }),
-      };
-      setOrchestrator(mockOrchestrator);
-
-      const event = createValidLeaseRequestedEvent();
-      const result = await handler(event, mockContext);
-
-      // Request should still succeed even though Slack notification threw
-      expect(result.statusCode).toBe(200);
-      expect(result.body).toBe('OK');
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Error sending Slack notification - request still escalated',
-        expect.objectContaining({
-          leaseId: '123e4567-e89b-12d3-a456-426614174000',
-        })
-      );
-    });
+    // Note: Legacy Slack webhook notification tests removed in Story 7.5.4
+    // Notifications now go through SNS → Amazon Q Developer → Slack
 
     it('should return 200 OK for escalated request without calling ISB Lambda', async () => {
       // After removing temporary auto-approval, escalated requests should:
@@ -3089,97 +2967,8 @@ describe('handler', () => {
       );
     });
 
-    it('should send capacity crunch alert when all accounts are active', async () => {
-      setSQSService(mockSQSService);
-      const mockNotifyCapacityCrunch = vi.fn().mockResolvedValue({ success: true });
-      const mockSlackService: SlackService = {
-        notifyEscalation: vi.fn().mockResolvedValue({ success: true }),
-        notifyCapacityCrunch: mockNotifyCapacityCrunch,
-      };
-      setSlackService(mockSlackService);
-
-      const mockOrchestrator: StateMachineOrchestrator = {
-        run: vi.fn().mockReturnValue({
-          finalState: ApprovalState.DELAYED,
-          success: true,
-          context: {
-            ...createInitialContext(),
-            leaseId: '123e4567-e89b-12d3-a456-426614174000',
-            userEmail: 'user@example.gov.uk',
-            templateId: 'web-hosting',
-            score: 5,
-            decision: 'delayed',
-            reason: 'Capacity crunch - all accounts active',
-            accountDelayReason: 'NO_READY_ACCOUNTS',
-            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
-            coolingAccountCount: 0, // No cooling accounts = capacity crunch
-            activeAccountCount: 8,
-            nextProcessingTime: '2025-12-31T12:00:00Z',
-          },
-        }),
-      };
-      setOrchestrator(mockOrchestrator);
-
-      const event = createValidLeaseRequestedEvent();
-      const result = await handler(event, mockContext);
-
-      expect(result.statusCode).toBe(200);
-      expect(mockNotifyCapacityCrunch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          alertType: 'capacity_crunch',
-          activeAccounts: 8,
-          availableAccounts: 0,
-        })
-      );
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Capacity crunch alert sent to Slack',
-        expect.objectContaining({
-          activeAccounts: 8,
-        })
-      );
-    });
-
-    it('should continue processing when capacity crunch alert fails', async () => {
-      setSQSService(mockSQSService);
-      const mockNotifyCapacityCrunch = vi.fn().mockResolvedValue({ success: false, error: 'Slack error' });
-      const mockSlackService: SlackService = {
-        notifyEscalation: vi.fn().mockResolvedValue({ success: true }),
-        notifyCapacityCrunch: mockNotifyCapacityCrunch,
-      };
-      setSlackService(mockSlackService);
-
-      const mockOrchestrator: StateMachineOrchestrator = {
-        run: vi.fn().mockReturnValue({
-          finalState: ApprovalState.DELAYED,
-          success: true,
-          context: {
-            ...createInitialContext(),
-            leaseId: '123e4567-e89b-12d3-a456-426614174000',
-            userEmail: 'user@example.gov.uk',
-            templateId: 'web-hosting',
-            score: 5,
-            decision: 'delayed',
-            accountDelayReason: 'NO_READY_ACCOUNTS',
-            coolingAccountCount: 0,
-            activeAccountCount: 8,
-            nextProcessingTime: '2025-12-31T12:00:00Z',
-          },
-        }),
-      };
-      setOrchestrator(mockOrchestrator);
-
-      const event = createValidLeaseRequestedEvent();
-      const result = await handler(event, mockContext);
-
-      // Should still succeed even though alert failed
-      expect(result.statusCode).toBe(200);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Failed to send capacity crunch alert to Slack',
-        expect.objectContaining({
-          error: 'Slack error',
-        })
-      );
-    });
+    // Note: Legacy Slack webhook capacity crunch alert tests removed in Story 7.5.4
+    // Alerts now go through SNS → Amazon Q Developer → Slack
 
     it('should escalate when SQS service is not configured for delayed request', async () => {
       setSQSService(undefined);
@@ -3281,88 +3070,8 @@ describe('handler', () => {
       );
     });
 
-    it('should handle capacity crunch alert exception gracefully', async () => {
-      setSQSService(mockSQSService);
-      const mockNotifyCapacityCrunch = vi.fn().mockRejectedValue(new Error('Slack API down'));
-      const mockSlackService: SlackService = {
-        notifyEscalation: vi.fn().mockResolvedValue({ success: true }),
-        notifyCapacityCrunch: mockNotifyCapacityCrunch,
-      };
-      setSlackService(mockSlackService);
-
-      const mockOrchestrator: StateMachineOrchestrator = {
-        run: vi.fn().mockReturnValue({
-          finalState: ApprovalState.DELAYED,
-          success: true,
-          context: {
-            ...createInitialContext(),
-            leaseId: '123e4567-e89b-12d3-a456-426614174000',
-            userEmail: 'user@example.gov.uk',
-            templateId: 'web-hosting',
-            score: 5,
-            decision: 'delayed',
-            accountDelayReason: 'NO_READY_ACCOUNTS',
-            coolingAccountCount: 0,
-            activeAccountCount: 8,
-            nextProcessingTime: '2025-12-31T12:00:00Z',
-          },
-        }),
-      };
-      setOrchestrator(mockOrchestrator);
-
-      const event = createValidLeaseRequestedEvent();
-      const result = await handler(event, mockContext);
-
-      // Should still succeed even though alert threw an exception
-      expect(result.statusCode).toBe(200);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Error processing capacity crunch alert',
-        expect.objectContaining({
-          error: 'Slack API down',
-        })
-      );
-    });
-
-    it('should handle non-Error exception in capacity crunch alert', async () => {
-      setSQSService(mockSQSService);
-      const mockNotifyCapacityCrunch = vi.fn().mockRejectedValue('String error');
-      const mockSlackService: SlackService = {
-        notifyEscalation: vi.fn().mockResolvedValue({ success: true }),
-        notifyCapacityCrunch: mockNotifyCapacityCrunch,
-      };
-      setSlackService(mockSlackService);
-
-      const mockOrchestrator: StateMachineOrchestrator = {
-        run: vi.fn().mockReturnValue({
-          finalState: ApprovalState.DELAYED,
-          success: true,
-          context: {
-            ...createInitialContext(),
-            leaseId: '123e4567-e89b-12d3-a456-426614174000',
-            userEmail: 'user@example.gov.uk',
-            templateId: 'web-hosting',
-            score: 5,
-            decision: 'delayed',
-            accountDelayReason: 'NO_READY_ACCOUNTS',
-            coolingAccountCount: 0,
-            activeAccountCount: 8,
-            nextProcessingTime: '2025-12-31T12:00:00Z',
-          },
-        }),
-      };
-      setOrchestrator(mockOrchestrator);
-
-      const event = createValidLeaseRequestedEvent();
-      const result = await handler(event, mockContext);
-
-      expect(result.statusCode).toBe(200);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Error processing capacity crunch alert',
-        expect.objectContaining({
-          error: 'String error',
-        })
-      );
-    });
+    // Note: More legacy Slack webhook capacity crunch alert tests removed in Story 7.5.4
+    // Exception handling tests no longer relevant as alerts go through SNS
 
     it('should handle non-Error exception in SQS send failure', async () => {
       mockSendDelayedRequest.mockRejectedValueOnce('String SQS error');
@@ -3563,57 +3272,8 @@ describe('handler', () => {
       );
     });
 
-    it('should throttle capacity crunch alert when recently sent (line 1651)', async () => {
-      setSQSService(mockSQSService);
-      const mockNotifyCapacityCrunch = vi.fn().mockResolvedValue({ success: true });
-      const mockSlackService: SlackService = {
-        notifyEscalation: vi.fn().mockResolvedValue({ success: true }),
-        notifyCapacityCrunch: mockNotifyCapacityCrunch,
-      };
-      setSlackService(mockSlackService);
-
-      // Set last alert time to 30 minutes ago (within 1-hour throttle period)
-      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-      mockGetLastCapacityCrunchAlertTime.mockResolvedValueOnce({
-        success: true,
-        lastAlertTime: thirtyMinutesAgo,
-      });
-
-      const mockOrchestrator: StateMachineOrchestrator = {
-        run: vi.fn().mockReturnValue({
-          finalState: ApprovalState.DELAYED,
-          success: true,
-          context: {
-            ...createInitialContext(),
-            leaseId: '123e4567-e89b-12d3-a456-426614174000',
-            userEmail: 'user@example.gov.uk',
-            templateId: 'web-hosting',
-            score: 5,
-            decision: 'delayed',
-            accountDelayReason: 'NO_READY_ACCOUNTS',
-            coolingAccountCount: 0, // Capacity crunch condition
-            activeAccountCount: 8,
-            nextProcessingTime: '2025-12-31T12:00:00Z',
-          },
-        }),
-      };
-      setOrchestrator(mockOrchestrator);
-
-      const event = createValidLeaseRequestedEvent();
-      const result = await handler(event, mockContext);
-
-      // Request should succeed
-      expect(result.statusCode).toBe(200);
-      // Alert should NOT be sent (throttled)
-      expect(mockNotifyCapacityCrunch).not.toHaveBeenCalled();
-      // Should log the throttle
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Capacity crunch alert throttled',
-        expect.objectContaining({
-          lastAlertTime: thirtyMinutesAgo.toISOString(),
-        })
-      );
-    });
+    // Note: Capacity crunch alert throttle test removed in Story 7.5.4
+    // Alert throttling now handled by SNS/Amazon Q Developer integration
   });
 
 });

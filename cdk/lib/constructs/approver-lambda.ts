@@ -54,7 +54,6 @@ export class ApproverLambda extends Construct {
         QUEUE_POSITION_TABLE_NAME: queuePositionTableName,
         DELAY_QUEUE_URL: delayQueueUrl,
         DOMAIN_ALLOWLIST_BUCKET: domainListBucketName,
-        SLACK_WEBHOOK_SECRET_ARN: config.slackWebhookSecretArn,
         BEDROCK_MODEL_ID: config.bedrockModelId,
         LOG_LEVEL: config.logLevel,
         RULE_WEIGHTS: config.ruleWeights,

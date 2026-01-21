@@ -29,8 +29,6 @@ export interface ApproverConfig {
   isbEventBusName: string;
   /** KMS key ID for ISB DynamoDB table encryption */
   isbKmsKeyId: string;
-  /** Slack webhook secret ARN (pre-created) */
-  slackWebhookSecretArn: string;
   /** Bedrock model ID for AI analysis */
   bedrockModelId: string;
   /** Log level */
@@ -53,8 +51,6 @@ export const DEFAULT_CONFIG: ApproverConfig = {
   isbAccountsLambdaName: 'ISB-AccountsLambdaFunction-ndx',
   isbEventBusName: 'InnovationSandboxComputeISBEventBus6697FE33',
   isbKmsKeyId: '4682f54a-cf9a-4a2f-941c-aba8795ac878',
-  slackWebhookSecretArn:
-    'arn:aws:secretsmanager:us-west-2:568672915267:secret:/approver/slack-webhook-url-FXJl1d',
   bedrockModelId: 'us.amazon.nova-micro-v1:0', // Inference profile for on-demand throughput
   logLevel: 'INFO',
   ruleWeights: JSON.stringify({
