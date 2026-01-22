@@ -23,14 +23,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          # Disable npm cache to avoid platform-specific rollup dependency issues
+          # https://github.com/npm/cli/issues/4828
 
       - name: Install dependencies
-        # Clean install with explicit optional dependencies handling
-        # Workaround for rollup optional dependencies issue: https://github.com/npm/cli/issues/4828
-        run: |
-          rm -rf node_modules
-          npm ci --include=optional
+        run: npm ci
 
       - name: Build
         run: npm run build
