@@ -197,7 +197,7 @@ export class ApproverStack extends cdk.Stack {
     // ==========================================
     const slackApproveLambda = new SlackApproveLambda(this, 'SlackApproveLambda', {
       isbLeasesLambdaName: config.isbLeasesLambdaName,
-      approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
+      approverEmail: config.approverEmail,
       snsTopicArn: notificationTopic.topicArn,
       logLevel: config.logLevel,
     });
@@ -208,7 +208,7 @@ export class ApproverStack extends cdk.Stack {
     // ==========================================
     const slackDenyLambda = new SlackDenyLambda(this, 'SlackDenyLambda', {
       isbLeasesLambdaName: config.isbLeasesLambdaName,
-      approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
+      approverEmail: config.approverEmail,
       snsTopicArn: notificationTopic.topicArn,
       logLevel: config.logLevel,
     });
@@ -504,6 +504,43 @@ RUNBOOK: docs/runbooks/slack-action-alarms.md`,
     snsDeliveryFailureAlarm.addAlarmAction(
       new cdk.aws_cloudwatch_actions.SnsAction(alarmTopic)
     );
+
+    // ==========================================
+    // CloudWatch Dashboard for Slack Actions (Proactive 3)
+    // ==========================================
+    new cloudwatch.Dashboard(this, 'SlackActionsDashboard', {
+      dashboardName: 'ISB-Approver-Slack-Actions',
+      widgets: [
+        [
+          new cloudwatch.GraphWidget({
+            title: 'Approve Lambda - Invocations & Errors',
+            left: [slackApproveLambda.function.metricInvocations()],
+            right: [slackApproveLambda.function.metricErrors()],
+            width: 12,
+          }),
+          new cloudwatch.GraphWidget({
+            title: 'Deny Lambda - Invocations & Errors',
+            left: [slackDenyLambda.function.metricInvocations()],
+            right: [slackDenyLambda.function.metricErrors()],
+            width: 12,
+          }),
+        ],
+        [
+          new cloudwatch.GraphWidget({
+            title: 'Approve Lambda - Duration',
+            left: [slackApproveLambda.function.metricDuration({ statistic: 'avg' })],
+            right: [slackApproveLambda.function.metricDuration({ statistic: 'p95' })],
+            width: 12,
+          }),
+          new cloudwatch.GraphWidget({
+            title: 'Deny Lambda - Duration',
+            left: [slackDenyLambda.function.metricDuration({ statistic: 'avg' })],
+            right: [slackDenyLambda.function.metricDuration({ statistic: 'p95' })],
+            width: 12,
+          }),
+        ],
+      ],
+    });
 
     // ==========================================
     // Stack Outputs

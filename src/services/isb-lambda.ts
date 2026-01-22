@@ -7,6 +7,7 @@
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import type { LeaseId, Account, GetAccountsResult } from '../lib/types.js';
 import { AccountsPageResponseSchema } from '../lib/types.js';
+import { leaseIdToCompositeKey } from '../lib/lease-id-codec.js';
 
 /**
  * Parameters for approving a lease via ISB Lambda
@@ -76,17 +77,6 @@ export interface IsbLambdaService {
   getAccounts(params: GetAccountsLambdaParams): Promise<GetAccountsResult>;
   getLease(params: GetLeaseLambdaParams): Promise<GetLeaseResult>;
 }
-
-/**
- * Creates a base64-encoded composite key for the leaseId path parameter
- */
-const encodeLeaseId = (leaseId: LeaseId): string => {
-  const json = JSON.stringify({
-    userEmail: leaseId.userEmail,
-    uuid: leaseId.uuid,
-  });
-  return Buffer.from(json).toString('base64');
-};
 
 /**
  * Creates a JWT token with the approver user info
@@ -268,7 +258,7 @@ export const createIsbLambdaService = (
   config: IsbLambdaServiceConfig
 ): IsbLambdaService => ({
   approveLease: async (params: ApproveLeaseLambdaParams): Promise<IsbLambdaResult> => {
-    const leaseIdB64 = encodeLeaseId(params.leaseId);
+    const leaseIdB64 = leaseIdToCompositeKey(params.leaseId);
     const approverJwt = createApproverJwt(params.approverEmail);
     const payload = createApiGatewayEvent(leaseIdB64, 'Approve', approverJwt);
 
@@ -292,7 +282,7 @@ export const createIsbLambdaService = (
   },
 
   denyLease: async (params: DenyLeaseLambdaParams): Promise<IsbLambdaResult> => {
-    const leaseIdB64 = encodeLeaseId(params.leaseId);
+    const leaseIdB64 = leaseIdToCompositeKey(params.leaseId);
     const approverJwt = createApproverJwt(params.approverEmail);
     const payload = createApiGatewayEvent(leaseIdB64, 'Deny', approverJwt);
 
@@ -430,7 +420,7 @@ export const createIsbLambdaService = (
   },
 
   getLease: async (params: GetLeaseLambdaParams): Promise<GetLeaseResult> => {
-    const leaseIdB64 = encodeLeaseId(params.leaseId);
+    const leaseIdB64 = leaseIdToCompositeKey(params.leaseId);
     const approverJwt = createApproverJwt(params.approverEmail);
     const payload = createGetLeaseApiGatewayEvent(leaseIdB64, approverJwt);
 

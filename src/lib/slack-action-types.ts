@@ -7,6 +7,13 @@
  * @see https://docs.aws.amazon.com/chatbot/latest/adminguide/custom-actions.html
  */
 
+// Re-export from consolidated lease-id-codec module (Issue 4)
+export {
+  decodeLeaseCompositeKey,
+  encodeLeaseCompositeKey,
+  type CompositeLeaseId,
+} from './lease-id-codec.js';
+
 /**
  * Amazon Q Custom Action Lambda Event
  *
@@ -71,45 +78,7 @@ export interface CustomActionResponse {
 }
 
 /**
- * Decoded lease ID from base64 composite key
+ * Decoded lease ID from base64 composite key.
+ * @deprecated Use CompositeLeaseId from lease-id-codec.js instead
  */
-export interface DecodedLeaseId {
-  userEmail: string;
-  uuid: string;
-}
-
-/**
- * Decodes the base64 composite key back to LeaseId.
- *
- * The composite key is a base64-encoded JSON string containing
- * {userEmail, uuid}. This matches the format created by
- * encodeLeaseCompositeKey() in sns-notification.ts.
- *
- * IMPORTANT: This decode function MUST stay in sync with encodeLeaseCompositeKey()
- * in src/services/sns-notification.ts. The test in test/lib/slack-action-types.test.ts
- * verifies this compatibility - see "matches format produced by encodeLeaseCompositeKey" test.
- *
- * @param encoded - Base64-encoded JSON string
- * @returns Decoded LeaseId object
- * @throws Error if decoding or parsing fails
- */
-export const decodeLeaseCompositeKey = (encoded: string): DecodedLeaseId => {
-  try {
-    const json = Buffer.from(encoded, 'base64').toString('utf8');
-    const parsed = JSON.parse(json) as { userEmail?: string; uuid?: string };
-
-    if (!parsed.userEmail || !parsed.uuid) {
-      throw new Error('Missing userEmail or uuid in decoded payload');
-    }
-
-    return {
-      userEmail: parsed.userEmail,
-      uuid: parsed.uuid,
-    };
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      throw new Error(`Invalid JSON in base64 payload: ${error.message}`);
-    }
-    throw error;
-  }
-};
+export type DecodedLeaseId = import('./lease-id-codec.js').CompositeLeaseId;

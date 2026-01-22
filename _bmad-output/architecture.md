@@ -861,7 +861,7 @@ export const handler = makeIdempotent(processLeaseRequest, {
 | Circuit Breaker | Custom class | Bedrock resilience |
 | Logging | Powertools + correlation ID | Full audit trail |
 | Service Layer | Injected clients | Testable integrations |
-| Slack | Interactive webhook + API Gateway callback | Approve/deny directly in Slack |
+| Slack | Amazon Q Developer (AWS Chatbot) custom actions | No API Gateway needed, direct Lambda invoke |
 | Delayed Processing | Event + 30min scheduled fallback | Reliability |
 | Idempotency | Powertools + DynamoDB | Duplicate prevention |
 
@@ -869,7 +869,7 @@ export const handler = makeIdempotent(processLeaseRequest, {
 
 ### System Overview
 
-Two Lambda functions: the main **approver** triggered by EventBridge rules for lease processing, and **slack-callback** triggered by API Gateway for handling interactive Slack button clicks. Together they process lease approval requests through a score-based decision engine with AI-assisted analysis and enable operators to approve/deny directly from Slack.
+Three Lambda functions: the main **Approver** triggered by EventBridge rules for lease processing, plus **SlackApprove** and **SlackDeny** Lambdas invoked by Amazon Q Developer (AWS Chatbot) custom actions when operators click buttons in Slack. Together they process lease approval requests through a score-based decision engine with AI-assisted analysis and enable operators to approve/deny directly from Slack.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -879,58 +879,48 @@ Two Lambda functions: the main **approver** triggered by EventBridge rules for l
 │  └────────┬────────┘  └──────────┬───────────┘  └───────────┬────────────┘  │
 └───────────┼──────────────────────┼──────────────────────────┼───────────────┘
             │                      │                          │
-            │                      ▼                          │
-            │              ┌──────────────┐                   │
-            │              │  SQS Queue   │                   │
-            │              │  (30s delay) │                   │
-            │              └──────┬───────┘                   │
-            │                     │                           │
-            ▼                     ▼                           ▼
+            ▼                      ▼                          ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           Approver Lambda                                    │
-│  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                        State Machine                                  │   │
-│  │  RECEIVED → ALLOW_LIST → ACCOUNTS → HOURS → SCORING → AI → DECISION │   │
-│  └──────────────────────────────────────────────────────────────────────┘   │
-│                                                                              │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐               │
-│  │  Scoring   │ │  Bedrock   │ │   Slack    │ │  Config    │               │
-│  │  Engine    │ │  (Nova     │ │  Webhook   │ │  (SSM +    │               │
-│  │  (16 rules)│ │  Micro)    │ │(interactive)│ │  AppConfig)│               │
-│  └────────────┘ └────────────┘ └────────────┘ └────────────┘               │
-└─────────────────────────────────────────────────────────────────────────────┘
-            │                           │                     │
-            ▼                           ▼                     ▼
-┌──────────────────┐         ┌──────────────────┐   ┌──────────────────┐
-│    DynamoDB      │         │   EventBridge    │   │     Slack        │
-│  (Lease table,   │         │  (LeaseApproved/ │   │   (Webhook +     │
-│   Accounts,      │         │   LeaseDenied)   │   │    Buttons)      │
-│   Idempotency)   │         └──────────────────┘   └────────┬─────────┘
-└──────────────────┘                                         │
-                                                             │ Button Click
-                                                             ▼
-                                              ┌──────────────────────────────┐
-                                              │     API Gateway (HTTP)       │
-                                              │   POST /slack/interactions   │
-                                              └──────────────┬───────────────┘
-                                                             │
-                                                             ▼
-                                              ┌──────────────────────────────┐
-                                              │   Slack Callback Lambda      │
-                                              │  - Verify signing secret     │
-                                              │  - Emit LeaseApproved/Denied │
-                                              │  - Update Slack message      │
-                                              └──────────────────────────────┘
+│  - Scoring Engine (19 rules)                                                │
+│  - Bedrock AI Analysis (Nova Micro)                                         │
+│  - SNS Notification Publishing                                              │
+└────────────┬────────────────────────────────────────────────────────────────┘
+             │
+             ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    SNS Topic (isb-approval-notifications)                   │
+└────────────┬────────────────────────────────────────────────────────────────┘
+             │
+             ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Amazon Q Developer (AWS Chatbot)                         │
+│  - Subscribes to SNS                                                        │
+│  - Renders Slack notifications with Approve/Deny buttons                   │
+│  - Custom Actions invoke Lambdas on button click                           │
+└────────────┬────────────────────────────────────────────────────────────────┘
+             │
+       ┌─────┴─────┐
+       ▼           ▼
+┌─────────────┐ ┌─────────────┐
+│SlackApprove │ │ SlackDeny   │
+│  Lambda     │ │  Lambda     │
+└──────┬──────┘ └──────┬──────┘
+       └───────┬───────┘
+               ▼
+┌─────────────────────────────────┐
+│  ISB Leases Lambda (External)   │
+└─────────────────────────────────┘
 ```
 
 ### Key Decisions Summary
 
 | Area | Decision |
 |------|----------|
-| **Architecture** | Two Lambdas: approver (event processing) + slack-callback (button handling) |
+| **Architecture** | Three Lambdas: Approver (event processing) + SlackApprove/SlackDeny (button handling via Amazon Q Developer) |
 | **Region** | us-west-2 (co-located with ISB) |
 | **AI Model** | Amazon Nova Micro (~$0.05-$0.47/month) |
-| **Slack** | Interactive buttons via webhook + API Gateway callback |
+| **Slack** | Amazon Q Developer (AWS Chatbot) with custom actions - no API Gateway needed |
 | **Delayed Processing** | Event-driven + 30min scheduled fallback |
 | **Queue Processing** | FIFO via DynamoDB `queuedAt` timestamp |
 | **Idempotency** | Powertools with DynamoDB backend |
@@ -942,18 +932,20 @@ Two Lambda functions: the main **approver** triggered by EventBridge rules for l
 | Resource | Type | Purpose |
 |----------|------|---------|
 | `ApproverFunction` | Lambda | Main processing function |
-| `SlackCallbackFunction` | Lambda | Handle Slack button interactions |
-| `SlackCallbackApi` | API Gateway (HTTP API) | Endpoint for Slack callbacks |
+| `SlackApproveLambda` | Lambda | Handle Approve button clicks from Slack |
+| `SlackDenyLambda` | Lambda | Handle Deny button clicks from Slack |
+| `SlackChannel` | AWS Chatbot | Amazon Q Developer Slack integration |
+| `ApproveCustomAction` | Chatbot Custom Action | Approve button for Slack notifications |
+| `DenyCustomAction` | Chatbot Custom Action | Deny button for Slack notifications |
+| `NotificationTopic` | SNS Topic | Escalation notifications to Slack |
 | `LeaseRequestedRule` | EventBridge Rule | Trigger on LeaseRequested |
 | `CleanupSucceededRule` | EventBridge Rule | Trigger on AccountCleanupSucceeded |
 | `QueueCheckSchedule` | EventBridge Scheduler | Every 30 minutes |
-| `BusinessHoursSchedule` | EventBridge Scheduler | 7am London weekdays |
 | `DelayQueue` | SQS Queue | 30s delay for queue processing |
 | `IdempotencyTable` | DynamoDB Table | Duplicate event prevention |
-| `ConfigParams` | SSM Parameters | Scoring weights, thresholds |
+| `QueuePositionTable` | DynamoDB Table | FIFO queue tracking |
 | `DomainListBucket` | S3 Bucket | UK council domain cache |
-| `SlackSigningSecret` | Secrets Manager | Slack app signing secret |
-| `ApproverAlarms` | CloudWatch Alarms | Error rate, DLQ depth |
+| `ApproverAlarms` | CloudWatch Alarms | Error rate, DLQ depth, SNS delivery |
 
 ### Next Steps
 

@@ -35,6 +35,8 @@ export interface ApproverConfig {
   logLevel: string;
   /** Default rule weights as JSON string */
   ruleWeights: string;
+  /** Email address for automated Slack approvals (Issue 7 - config consolidation) */
+  approverEmail: string;
 }
 
 export const DEFAULT_CONFIG: ApproverConfig = {
@@ -71,6 +73,7 @@ export const DEFAULT_CONFIG: ApproverConfig = {
     orgCleanRecord: -2,
     groupMailboxDetected: 20,
   }),
+  approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
 };
 
 export interface StackEnvironment {

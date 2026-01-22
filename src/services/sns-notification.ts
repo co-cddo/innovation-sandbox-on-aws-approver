@@ -9,6 +9,10 @@
  */
 
 import type { ScoreBreakdown } from '../scoring/types.js';
+import { encodeLeaseCompositeKey } from '../lib/lease-id-codec.js';
+
+// Re-export for backwards compatibility (Issue 4 - consolidated in lease-id-codec)
+export { encodeLeaseCompositeKey };
 
 /**
  * Logger interface for SNS notification service.
@@ -169,19 +173,6 @@ export const hasHighRiskFactors = (breakdown: ScoreBreakdown): boolean => {
   return Object.values(breakdown).some(
     (value) => Math.abs(value) > RISK_HIGHLIGHT_THRESHOLD
   );
-};
-
-/**
- * Encodes lease composite key for console URL.
- * Creates base64-encoded JSON containing userEmail and uuid.
- *
- * @param userEmail - User's email address
- * @param uuid - Lease UUID
- * @returns Base64-encoded JSON string
- */
-export const encodeLeaseCompositeKey = (userEmail: string, uuid: string): string => {
-  const json = JSON.stringify({ userEmail, uuid });
-  return Buffer.from(json, 'utf8').toString('base64');
 };
 
 /**
