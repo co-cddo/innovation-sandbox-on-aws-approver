@@ -96,7 +96,7 @@ development_status:
   # Epic 7: Amazon Q Developer Slack Integration (added 2026-01-20)
   # Replaces Slack webhooks with Amazon Q Developer for interactive approve/deny buttons
   # 5 sub-epics, 17 stories - FR1-FR15, FR17-FR25 (FR16 dropped)
-  epic-7: in-progress
+  epic-7: done
 
   # Epic 7.1: Operators Receive Rich Notifications in Slack
   7-1-1-integrate-sns-topic-into-approverstack: done
@@ -122,7 +122,7 @@ development_status:
   7-5-1-document-approver-access-management: done
   7-5-2-create-operator-onboarding-canvas: done
   7-5-3-create-custom-action-configuration-runbook: done  # Pre-completed in Story 7.2.3; screenshots TODO (placeholders added)
-  7-5-4-remove-legacy-webhook-code-and-poc: review
-  7-5-5-verify-fallback-mechanism-preserved: ready-for-dev
+  7-5-4-remove-legacy-webhook-code-and-poc: done
+  7-5-5-verify-fallback-mechanism-preserved: done
 
-  epic-7-retrospective: optional
+  epic-7-retrospective: done

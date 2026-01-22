@@ -23,6 +23,15 @@ As of Story 7.2.3, custom actions are **managed via CDK** using `AWS::Chatbot::C
 
 ## Prerequisites
 
+### Access Requirements
+
+Before configuring or troubleshooting custom actions, ensure you have:
+
+1. **AWS Console access** - with permissions to view CloudFormation, Lambda, and AWS Chatbot
+2. **Slack workspace access** - member of the `#isb-approvals` channel (admin access required for channel configuration changes)
+
+### Infrastructure Requirements
+
 Before custom actions can work, ensure:
 
 1. **ApproverStack is deployed** - provides Lambda functions and custom action definitions
@@ -133,6 +142,22 @@ To view the CDK-managed custom actions:
    - `isb-deny` with alias `deny-lease`
 
 **Note:** These actions are managed by CloudFormation. Do not edit them manually in the console, as changes will be overwritten on the next `cdk deploy`.
+
+### Screenshots
+
+> **TODO:** Capture and add the following screenshots to `docs/runbooks/images/`:
+>
+> 1. `chatbot-custom-actions-list.png` - AWS Chatbot console showing both custom actions
+> 2. `custom-action-approve-detail.png` - Detail view of the isb-approve action configuration
+> 3. `custom-action-deny-detail.png` - Detail view of the isb-deny action configuration
+> 4. `slack-notification-with-buttons.png` - Example Slack notification showing Approve/Deny buttons
+> 5. `slack-thread-reply-success.png` - Example thread reply after successful action
+>
+> To capture screenshots:
+> 1. Deploy ApproverStack to the target environment
+> 2. Navigate to AWS Chatbot console > Custom actions
+> 3. Use browser screenshot tools or OS screenshot utilities
+> 4. Save images to `docs/runbooks/images/` directory
 
 ## Verification Checklist
 
