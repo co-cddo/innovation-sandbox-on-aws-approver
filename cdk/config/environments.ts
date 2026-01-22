@@ -29,14 +29,14 @@ export interface ApproverConfig {
   isbEventBusName: string;
   /** KMS key ID for ISB DynamoDB table encryption */
   isbKmsKeyId: string;
-  /** Slack webhook secret ARN (pre-created) */
-  slackWebhookSecretArn: string;
   /** Bedrock model ID for AI analysis */
   bedrockModelId: string;
   /** Log level */
   logLevel: string;
   /** Default rule weights as JSON string */
   ruleWeights: string;
+  /** Email address for automated Slack approvals (Issue 7 - config consolidation) */
+  approverEmail: string;
 }
 
 export const DEFAULT_CONFIG: ApproverConfig = {
@@ -53,8 +53,6 @@ export const DEFAULT_CONFIG: ApproverConfig = {
   isbAccountsLambdaName: 'ISB-AccountsLambdaFunction-ndx',
   isbEventBusName: 'InnovationSandboxComputeISBEventBus6697FE33',
   isbKmsKeyId: '4682f54a-cf9a-4a2f-941c-aba8795ac878',
-  slackWebhookSecretArn:
-    'arn:aws:secretsmanager:us-west-2:568672915267:secret:/approver/slack-webhook-url-FXJl1d',
   bedrockModelId: 'us.amazon.nova-micro-v1:0', // Inference profile for on-demand throughput
   logLevel: 'INFO',
   ruleWeights: JSON.stringify({
@@ -75,6 +73,7 @@ export const DEFAULT_CONFIG: ApproverConfig = {
     orgCleanRecord: -2,
     groupMailboxDetected: 20,
   }),
+  approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
 };
 
 export interface StackEnvironment {
@@ -85,4 +84,19 @@ export interface StackEnvironment {
 export const PROD_ENV: StackEnvironment = {
   account: process.env.CDK_DEFAULT_ACCOUNT!,
   region: 'us-west-2',
+};
+
+/**
+ * Slack configuration for Amazon Q Developer integration
+ */
+export interface SlackConfig {
+  /** Slack Workspace ID (format: T0XXXXXXX) */
+  workspaceId: string;
+  /** Slack Channel ID (format: C0XXXXXXX) */
+  channelId: string;
+}
+
+export const SLACK_CONFIG: SlackConfig = {
+  workspaceId: 'T8GT9416G',
+  channelId: 'C0A9B2ME5RV',
 };

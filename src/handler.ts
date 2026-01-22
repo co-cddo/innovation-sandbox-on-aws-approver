@@ -31,11 +31,11 @@ import {
   type ReceivedMessage,
 } from './services/sqs.js';
 import {
-  createSlackService,
-  type SlackService,
-  type EscalationNotificationParams,
-} from './services/slack.js';
-import { getSlackWebhookUrl } from './lib/secrets.js';
+  createSNSNotificationService,
+  type SNSNotificationService,
+  type SNSEscalationParams,
+} from './services/sns-notification.js';
+import { createAWSSNSClient } from './services/sns.js';
 import {
   createBusinessHoursChecker,
   isQueueExpired,
@@ -75,15 +75,8 @@ import {
   getQueueDepth,
   getOldestPending,
   keyToLeaseId,
-  getLastCapacityCrunchAlertTime,
-  updateLastCapacityCrunchAlertTime,
   type QueuePositionServiceConfig,
 } from './services/queue-position.js';
-import {
-  shouldSendCapacityCrunchAlert,
-  buildCapacityCrunchAlert,
-  type CapacityStatus,
-} from './lib/capacity-crunch.js';
 import {
   ApprovalState,
   createInitialContext,
@@ -227,12 +220,15 @@ const queuePositionConfig: QueuePositionServiceConfig = {
   ttlDays: 7,
 };
 
-// Slack service configuration (Story 5.2)
+// SNS notification service configuration (Story 7.1.1)
 // ISB Console URL for deep links in notifications
 const isbConsoleUrl = process.env.ISB_CONSOLE_URL || '';
 
-// Slack service (initialized lazily on first escalation)
-let slackService: SlackService | undefined;
+// SNS notification service configuration (Story 7.1.1)
+const snsTopicArn = process.env.NOTIFICATION_TOPIC_ARN || '';
+
+// SNS notification service (initialized lazily on first escalation)
+let snsNotificationService: SNSNotificationService | undefined;
 
 // Bank holiday service for business hours checking
 let bankHolidayService: BankHolidayService = createBankHolidayService();
@@ -418,18 +414,18 @@ export const resetBankHolidayService = (): void => {
 };
 
 /**
- * Allows overriding the Slack service for testing purposes (Story 5.2).
+ * Allows overriding the SNS notification service for testing purposes (Story 7.1.1).
  */
-export const setSlackService = (service: SlackService | undefined): void => {
-  slackService = service;
+export const setSNSNotificationService = (service: SNSNotificationService | undefined): void => {
+  snsNotificationService = service;
 };
 
 /**
- * Resets the Slack service to undefined (for test cleanup).
+ * Resets the SNS notification service to undefined (for test cleanup).
  * The service is lazily initialized on first escalation.
  */
-export const resetSlackService = (): void => {
-  slackService = undefined;
+export const resetSNSNotificationService = (): void => {
+  snsNotificationService = undefined;
 };
 
 /**
@@ -575,6 +571,49 @@ const checkDomainVerification = async (domain: string): Promise<boolean> => {
       domain,
     });
     return false;
+  }
+};
+
+/**
+ * Resolves a template UUID to its human-readable name by querying the ISB Leases API.
+ * Returns the UUID as fallback if lookup fails or template not found.
+ * Fails silently to avoid blocking the approval flow.
+ */
+const resolveTemplateName = async (
+  leaseId: { userEmail: string; uuid: string },
+  templateUuid: string
+): Promise<string> => {
+  try {
+    const result = await isbLambdaService.getLease({
+      leaseId,
+      approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
+    });
+
+    if (result.success && result.templateName) {
+      logger.info('Template name resolved from ISB API', {
+        leaseId: leaseId.uuid,
+        templateUuid,
+        templateName: result.templateName,
+      });
+      return result.templateName;
+    }
+
+    // Name not found or lookup failed - use UUID as fallback
+    if (!result.success) {
+      logger.warn('Template lookup failed - using UUID as fallback', {
+        leaseId: leaseId.uuid,
+        templateUuid,
+        error: result.error,
+      });
+    }
+    return templateUuid;
+  } catch (error) {
+    logger.warn('Error resolving template name - using UUID as fallback', {
+      leaseId: leaseId.uuid,
+      templateUuid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return templateUuid;
   }
 };
 
@@ -833,67 +872,62 @@ const updateLeaseComments = async (
 };
 
 /**
- * Sends a Slack notification for an escalated request (Story 5.2).
- * Initializes Slack service lazily on first use.
- * Fails silently to avoid blocking the approval flow (AC6).
+ * Sends an SNS notification for an escalated request (Story 7.1.1).
+ * Initializes SNS notification service lazily on first use.
+ * Fails silently to avoid blocking the approval flow.
  *
- * @param params - Escalation notification parameters
+ * @param params - SNS escalation notification parameters
  */
-const notifySlackEscalation = async (
-  params: EscalationNotificationParams
+const notifySNSEscalation = async (
+  params: SNSEscalationParams
 ): Promise<void> => {
-  // If Slack service is already set (e.g., via dependency injection for testing),
+  // If SNS service is already set (e.g., via dependency injection for testing),
   // skip configuration checks and use it directly
-  /* c8 ignore start -- lazy initialization guards: tests inject slackService directly */
-  if (!slackService) {
-    // Check if ISB console URL is configured
+  /* c8 ignore start -- lazy initialization guards: tests inject snsNotificationService directly */
+  if (!snsNotificationService) {
+    // Check if SNS topic ARN is configured
+    if (!snsTopicArn) {
+      logger.info('NOTIFICATION_TOPIC_ARN not configured - skipping SNS notification', {
+        leaseId: params.leaseId,
+      });
+      return;
+    }
+
+    // Check if ISB console URL is configured (needed for deep links)
     if (!isbConsoleUrl) {
-      logger.warn('ISB_CONSOLE_URL not configured - skipping Slack notification', {
+      logger.warn('ISB_CONSOLE_URL not configured - skipping SNS notification', {
         leaseId: params.leaseId,
       });
       return;
     }
 
-    // Check if SQS service is available for queue depth
-    if (!sqsService) {
-      logger.warn('SQS service not configured - skipping Slack notification', {
-        leaseId: params.leaseId,
-      });
-      return;
-    }
-
-    // Initialize Slack service lazily
-    const webhookResult = await getSlackWebhookUrl();
-    if (!webhookResult.success) {
-      logger.warn('Failed to get Slack webhook URL - skipping notification', {
-        leaseId: params.leaseId,
-        error: webhookResult.error,
-      });
-      return;
-    }
-
-    slackService = createSlackService(
-      webhookResult.webhookUrl!,
+    // Initialize SNS notification service lazily
+    const snsClient = createAWSSNSClient();
+    snsNotificationService = createSNSNotificationService(
+      snsClient,
+      snsTopicArn,
       isbConsoleUrl,
-      sqsService,
-      logger as unknown as import('./services/slack.js').SlackLogger,
-      stateMachineConfig.autoApproveThreshold
+      logger as unknown as import('./services/sns-notification.js').SNSNotificationLogger
     );
   }
   /* c8 ignore stop */
 
   try {
-    const result = await slackService.notifyEscalation(params);
+    const result = await snsNotificationService.notifyEscalation(params);
     if (!result.success) {
-      logger.warn('Slack notification failed - request still escalated', {
+      logger.warn('SNS notification failed - request still escalated', {
         leaseId: params.leaseId,
         error: result.error,
-        statusCode: result.statusCode,
+      });
+    } else {
+      logger.info('SNS escalation notification sent', {
+        leaseId: params.leaseId,
+        messageId: result.messageId,
       });
     }
   } catch (error) {
-    // Log and continue - AC6 requires graceful failure
-    logger.warn('Error sending Slack notification - request still escalated', {
+    // Log and continue - fails silently to avoid blocking
+    logger.warn('Error sending SNS notification - request still escalated', {
       leaseId: params.leaseId,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -1303,6 +1337,18 @@ export const handler = async (
     };
   }
 
+  // Debug: Log raw event detail fields to understand what ISB is sending
+  const rawDetail = (event as unknown as Record<string, unknown>).detail as Record<string, unknown> | undefined;
+  if (rawDetail) {
+    logger.info('Raw event detail fields', {
+      keys: Object.keys(rawDetail),
+      leaseTemplateId: rawDetail.leaseTemplateId,
+      originalLeaseTemplateUuid: rawDetail.originalLeaseTemplateUuid,
+      templateId: rawDetail.templateId,
+      leaseTemplateUuid: rawDetail.leaseTemplateUuid,
+    });
+  }
+
   // Validate event against schema
   const parseResult = LeaseRequestedEventSchema.safeParse(event);
   if (!parseResult.success) {
@@ -1548,15 +1594,33 @@ export const handler = async (
       );
       await updateLeaseComments(leaseId, escalatedMessage);
 
-      // Send Slack notification (Story 5.2)
-      // AC6: Fails silently - request remains escalated regardless of notification status
-      await notifySlackEscalation({
+      // Send SNS notification for Amazon Q Developer (Story 7.1.1, enhanced in 7.1.3)
+      // Fails silently - request remains escalated regardless of notification status
+      // Get queue depth for notification context
+      let queueDepthForNotification = 0;
+      if (sqsService) {
+        const depthResult = await sqsService.getQueueDepth();
+        if (depthResult.success) {
+          queueDepthForNotification = depthResult.approximateNumberOfMessages ?? 0;
+        }
+      }
+
+      // Resolve template UUID to human-readable name for notification
+      const resolvedTemplateName = await resolveTemplateName(leaseId, templateId);
+
+      // Story 7.1.3: Include template details and comment in notification
+      await notifySNSEscalation({
         leaseId: leaseId.uuid,
         userEmail: leaseId.userEmail,
         score,
         scoreBreakdown,
-        templateId,
+        templateId: resolvedTemplateName,
+        leaseDurationHours: validatedEvent.detail.leaseDurationHours,
+        budgetAmount: validatedEvent.detail.budgetAmount,
+        comment: validatedEvent.detail.comments,
         referenceNumber,
+        threshold: stateMachineConfig.autoApproveThreshold,
+        queueDepth: queueDepthForNotification,
       });
 
       return {
@@ -1620,58 +1684,13 @@ export const handler = async (
               estimatedFulfillmentTime: estimatedTime?.toISOString(),
             });
 
-            // Story 6.4: Send capacity crunch alert to Slack if applicable
-            if (isCapacityCrunch && slackService) {
-              try {
-                const now = new Date();
-
-                // Get last alert time from DynamoDB
-                const lastAlertResult = await getLastCapacityCrunchAlertTime(dynamoDBClient, queuePositionConfig);
-                const lastAlertTime = lastAlertResult.success ? lastAlertResult.lastAlertTime : null;
-
-                // Check if we should send alert (throttled to once per hour)
-                if (shouldSendCapacityCrunchAlert(true, lastAlertTime, now)) {
-                  // Build capacity status for alert
-                  const capacityStatus: CapacityStatus = {
-                    isCapacityCrunch: true,
-                    totalAccounts: (activeAccountCount ?? 0),
-                    activeCount: activeAccountCount ?? 0,
-                    availableCount: 0,
-                    readyCount: 0,
-                    coolingCount: 0,
-                    pendingRequests: queueDepth,
-                    soonestAvailableHours: estimatedTime
-                      ? Math.max(0, (estimatedTime.getTime() - now.getTime()) / (60 * 60 * 1000))
-                      : null,
-                  };
-
-                  const alert = buildCapacityCrunchAlert(capacityStatus);
-                  const alertResult = await slackService.notifyCapacityCrunch(alert);
-
-                  if (alertResult.success) {
-                    // Update last alert time in DynamoDB
-                    await updateLastCapacityCrunchAlertTime(dynamoDBClient, queuePositionConfig, now);
-                    logger.info('Capacity crunch alert sent to Slack', {
-                      activeAccounts: capacityStatus.activeCount,
-                      pendingRequests: capacityStatus.pendingRequests,
-                    });
-                  } else {
-                    // Don't fail the request if alert fails
-                    logger.warn('Failed to send capacity crunch alert to Slack', {
-                      error: alertResult.error,
-                    });
-                  }
-                } else {
-                  logger.debug('Capacity crunch alert throttled', {
-                    lastAlertTime: lastAlertTime?.toISOString(),
-                  });
-                }
-              } catch (error) {
-                // Don't fail the request if alert handling fails
-                logger.warn('Error processing capacity crunch alert', {
-                  error: error instanceof Error ? error.message : String(error),
-                });
-              }
+            // Note: Capacity crunch alerts now go through SNS → Amazon Q Developer → Slack
+            // The legacy direct Slack webhook code has been removed (Story 7.5.4)
+            if (isCapacityCrunch) {
+              logger.info('Capacity crunch detected - notification via SNS/Amazon Q', {
+                activeAccounts: activeAccountCount ?? 0,
+                pendingRequests: queueDepth,
+              });
             }
           } else {
             logger.warn('Failed to add to queue position table - continuing with delay', {

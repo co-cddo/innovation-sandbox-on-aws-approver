@@ -7,6 +7,7 @@
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import type { LeaseId, Account, GetAccountsResult } from '../lib/types.js';
 import { AccountsPageResponseSchema } from '../lib/types.js';
+import { leaseIdToCompositeKey } from '../lib/lease-id-codec.js';
 
 /**
  * Parameters for approving a lease via ISB Lambda
@@ -51,24 +52,31 @@ export interface GetAccountsLambdaParams {
 }
 
 /**
+ * Parameters for getting a single lease via ISB Lambda
+ */
+export interface GetLeaseLambdaParams {
+  readonly leaseId: LeaseId;
+  readonly approverEmail: string;
+}
+
+/**
+ * Result from getting lease details
+ */
+export interface GetLeaseResult {
+  readonly success: boolean;
+  readonly templateName?: string;
+  readonly error?: string;
+}
+
+/**
  * ISB Lambda service interface for type-safe dependency injection
  */
 export interface IsbLambdaService {
   approveLease(params: ApproveLeaseLambdaParams): Promise<IsbLambdaResult>;
   denyLease(params: DenyLeaseLambdaParams): Promise<IsbLambdaResult>;
   getAccounts(params: GetAccountsLambdaParams): Promise<GetAccountsResult>;
+  getLease(params: GetLeaseLambdaParams): Promise<GetLeaseResult>;
 }
-
-/**
- * Creates a base64-encoded composite key for the leaseId path parameter
- */
-const encodeLeaseId = (leaseId: LeaseId): string => {
-  const json = JSON.stringify({
-    userEmail: leaseId.userEmail,
-    uuid: leaseId.uuid,
-  });
-  return Buffer.from(json).toString('base64');
-};
 
 /**
  * Creates a JWT token with the approver user info
@@ -151,6 +159,31 @@ const createAccountsApiGatewayEvent = (
 });
 
 /**
+ * Creates the API Gateway event payload for GET /leases/{leaseId} endpoint
+ */
+const createGetLeaseApiGatewayEvent = (
+  leaseIdB64: string,
+  approverJwt: string
+): Record<string, unknown> => ({
+  httpMethod: 'GET',
+  path: `/leases/${leaseIdB64}`,
+  pathParameters: {
+    leaseId: leaseIdB64,
+  },
+  headers: {
+    Authorization: `Bearer ${approverJwt}`,
+    'Content-Type': 'application/json',
+  },
+  requestContext: {
+    httpMethod: 'GET',
+    path: `/leases/${leaseIdB64}`,
+    extendedRequestId: `approver-getlease-${Date.now()}`,
+  },
+  resource: '/leases/{leaseId}',
+  isBase64Encoded: false,
+});
+
+/**
  * Maximum pages to traverse (safety limit to prevent infinite loops)
  */
 const MAX_PAGINATION_PAGES = 100;
@@ -225,7 +258,7 @@ export const createIsbLambdaService = (
   config: IsbLambdaServiceConfig
 ): IsbLambdaService => ({
   approveLease: async (params: ApproveLeaseLambdaParams): Promise<IsbLambdaResult> => {
-    const leaseIdB64 = encodeLeaseId(params.leaseId);
+    const leaseIdB64 = leaseIdToCompositeKey(params.leaseId);
     const approverJwt = createApproverJwt(params.approverEmail);
     const payload = createApiGatewayEvent(leaseIdB64, 'Approve', approverJwt);
 
@@ -249,7 +282,7 @@ export const createIsbLambdaService = (
   },
 
   denyLease: async (params: DenyLeaseLambdaParams): Promise<IsbLambdaResult> => {
-    const leaseIdB64 = encodeLeaseId(params.leaseId);
+    const leaseIdB64 = leaseIdToCompositeKey(params.leaseId);
     const approverJwt = createApproverJwt(params.approverEmail);
     const payload = createApiGatewayEvent(leaseIdB64, 'Deny', approverJwt);
 
@@ -384,5 +417,67 @@ export const createIsbLambdaService = (
       totalFetched: allAccounts.length,
       pagesTraversed,
     };
+  },
+
+  getLease: async (params: GetLeaseLambdaParams): Promise<GetLeaseResult> => {
+    const leaseIdB64 = leaseIdToCompositeKey(params.leaseId);
+    const approverJwt = createApproverJwt(params.approverEmail);
+    const payload = createGetLeaseApiGatewayEvent(leaseIdB64, approverJwt);
+
+    const command = new InvokeCommand({
+      FunctionName: config.functionName,
+      Payload: Buffer.from(JSON.stringify(payload)),
+    });
+
+    try {
+      const response = await client.send(command);
+
+      // Check for Lambda invocation errors
+      if (response.FunctionError) {
+        return {
+          success: false,
+          error: `Lambda function error: ${response.FunctionError}`,
+        };
+      }
+
+      if (!response.Payload) {
+        return {
+          success: false,
+          error: 'Empty response from ISB Lambda',
+        };
+      }
+
+      const rawResponse = JSON.parse(Buffer.from(response.Payload).toString());
+      const statusCode = rawResponse.statusCode ?? 500;
+
+      if (statusCode < 200 || statusCode >= 300) {
+        const body =
+          typeof rawResponse.body === 'string' ? JSON.parse(rawResponse.body) : rawResponse.body;
+        const errorMessage =
+          body?.data?.errors?.[0]?.message ?? body?.message ?? 'Unknown error from ISB';
+        return {
+          success: false,
+          error: errorMessage,
+        };
+      }
+
+      // Parse body - ISB returns JSend format: { status: "success", data: { ... } }
+      const body =
+        typeof rawResponse.body === 'string' ? JSON.parse(rawResponse.body) : rawResponse.body;
+
+      // Extract template name from lease details
+      const templateName = body?.data?.originalLeaseTemplateName;
+
+      return {
+        success: true,
+        templateName: templateName ?? undefined,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        /* c8 ignore next -- defensive: JSON.parse throws Error objects */
+        error: `Failed to get lease details: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
   },
 });
