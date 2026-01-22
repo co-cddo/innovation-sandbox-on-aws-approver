@@ -26,7 +26,11 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        # Clean install with explicit optional dependencies handling
+        # Workaround for rollup optional dependencies issue: https://github.com/npm/cli/issues/4828
+        run: |
+          rm -rf node_modules
+          npm ci --include=optional
 
       - name: Build
         run: npm run build
