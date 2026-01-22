@@ -231,9 +231,8 @@ export const buildAmazonQNotification = (
   const consoleUrl = `${isbConsoleUrl}/leases/edit/${compositeKey}`;
   const scoreBreakdownText = formatScoreBreakdown(params.scoreBreakdown);
 
-  // Format timestamp for title (Story 7.1.3 AC#1)
+  // Current time for context (used in additionalContext)
   const now = new Date();
-  const timestamp = formatTimestamp(now);
 
   // Determine header based on risk level (Story 7.1.3 AC#2)
   // Note: Slack mrkdwn uses *text* for bold (not **text**)
