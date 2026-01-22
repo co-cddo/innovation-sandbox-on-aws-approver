@@ -234,7 +234,7 @@ describe('SNS Notification Service (Story 7.1.1)', () => {
 
         await service.notifyEscalation(defaultParams);
 
-        const publishCall = (mockClient.publish as ReturnType<typeof vi.fn>).mock.calls[0];
+        const publishCall = (mockClient.publish as ReturnType<typeof vi.fn>).mock.calls[0]!;
         const messagePayload = JSON.parse(publishCall[1]);
 
         expect(messagePayload.version).toBe('1.0');
@@ -543,7 +543,7 @@ describe('SNS Notification Service (Story 7.1.1)', () => {
         // leaseId should be base64-encoded composite key
         expect(result.metadata.additionalContext!.leaseId).toBeDefined();
         const decoded = JSON.parse(
-          Buffer.from(result.metadata.additionalContext!.leaseId, 'base64').toString('utf8')
+          Buffer.from(result.metadata.additionalContext!.leaseId!, 'base64').toString('utf8')
         );
         expect(decoded.userEmail).toBe(defaultParams.userEmail);
         expect(decoded.uuid).toBe(defaultParams.leaseId);
@@ -574,7 +574,7 @@ describe('SNS Notification Service (Story 7.1.1)', () => {
 
       await service.notifyEscalation(defaultParams);
 
-      const publishCall = (mockClient.publish as ReturnType<typeof vi.fn>).mock.calls[0];
+      const publishCall = (mockClient.publish as ReturnType<typeof vi.fn>).mock.calls[0]!;
       const message = publishCall[1];
 
       // Verify it's valid JSON
@@ -594,7 +594,7 @@ describe('SNS Notification Service (Story 7.1.1)', () => {
 
       await service.notifyEscalation(defaultParams);
 
-      const publishCall = (mockClient.publish as ReturnType<typeof vi.fn>).mock.calls[0];
+      const publishCall = (mockClient.publish as ReturnType<typeof vi.fn>).mock.calls[0]!;
       const payload = JSON.parse(publishCall[1]);
 
       // Required Amazon Q Developer fields

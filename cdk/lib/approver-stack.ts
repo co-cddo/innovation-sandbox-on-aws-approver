@@ -161,7 +161,7 @@ export class ApproverStack extends cdk.Stack {
 
     // Grant the Slack channel configuration role permission to invoke our action Lambdas (Story 7.2.3)
     // This is required in addition to guardrail policies which only set upper bounds
-    slackChannel.role.attachInlinePolicy(
+    slackChannel.role!.attachInlinePolicy(
       new iam.Policy(this, 'SlackChannelLambdaInvokePolicy', {
         statements: [
           new iam.PolicyStatement({

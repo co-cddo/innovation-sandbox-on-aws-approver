@@ -1338,7 +1338,7 @@ export const handler = async (
   }
 
   // Debug: Log raw event detail fields to understand what ISB is sending
-  const rawDetail = (event as Record<string, unknown>).detail as Record<string, unknown> | undefined;
+  const rawDetail = (event as unknown as Record<string, unknown>).detail as Record<string, unknown> | undefined;
   if (rawDetail) {
     logger.info('Raw event detail fields', {
       keys: Object.keys(rawDetail),

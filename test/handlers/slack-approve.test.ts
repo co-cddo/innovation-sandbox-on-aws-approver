@@ -57,7 +57,8 @@ describe('Slack Approve Handler', () => {
       approveLease: mockApproveLease,
       denyLease: vi.fn(),
       getAccounts: vi.fn(),
-    };
+      getLease: vi.fn(),
+    } as IsbLambdaService;
 
     setIsbLambdaService(mockIsbService);
   });

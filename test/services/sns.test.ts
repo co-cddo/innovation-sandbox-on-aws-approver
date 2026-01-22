@@ -110,7 +110,7 @@ describe('AWS SNS Client Wrapper (Story 7.1.1)', () => {
 
       // Verify send was called with a PublishCommand instance
       expect(mockSend).toHaveBeenCalledTimes(1);
-      const command = mockSend.mock.calls[0][0];
+      const command = mockSend.mock.calls[0]![0];
       expect(command.TopicArn).toBe(topicArn);
       expect(command.Message).toBe(message);
     });

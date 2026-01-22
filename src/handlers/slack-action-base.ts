@@ -224,7 +224,7 @@ export const isAlreadyProcessedResult = (result: IsbLambdaResult): boolean => {
   // ISB returns 409 when lease is already approved/denied
   // Also check error message for explicit "already" or "processed" keywords
   // Note: 400 alone doesn't mean "already processed" - could be "Invalid uuid" etc.
-  return (
+  return Boolean(
     result.statusCode === 409 ||
     result.error?.toLowerCase().includes('already') ||
     result.error?.toLowerCase().includes('processed') ||
