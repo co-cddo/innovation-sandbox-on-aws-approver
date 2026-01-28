@@ -9,14 +9,13 @@ import {
   getQueueDepth,
   getOldestPending,
   getQueuePosition,
-  updateEstimatedTime,
   getLastCapacityCrunchAlertTime,
   updateLastCapacityCrunchAlertTime,
   leaseIdToKey,
   keyToLeaseId,
   type QueuePositionServiceConfig,
 } from '../../src/services/queue-position.js';
-import { DynamoDBClient, QueryCommand, DeleteItemCommand, UpdateItemCommand, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, QueryCommand, DeleteItemCommand, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import type { LeaseId } from '../../src/lib/types.js';
 
@@ -143,7 +142,6 @@ describe('Queue Position Service', () => {
 
       const result = await addToQueue(mockClient, config, {
         leaseId,
-        estimatedFulfillmentTime: new Date('2025-12-31T12:00:00Z'),
       });
 
       expect(result).toEqual({
@@ -165,7 +163,6 @@ describe('Queue Position Service', () => {
 
       const result = await addToQueue(mockClient, config, {
         leaseId,
-        estimatedFulfillmentTime: null,
       });
 
       expect(result).toEqual({
@@ -188,7 +185,6 @@ describe('Queue Position Service', () => {
 
       const result = await addToQueue(mockClient, config, {
         leaseId,
-        estimatedFulfillmentTime: null,
       });
 
       expect(result).toEqual({
@@ -220,7 +216,6 @@ describe('Queue Position Service', () => {
 
       const result = await addToQueue(mockClient, config, {
         leaseId,
-        estimatedFulfillmentTime: null,
       });
 
       expect(result).toEqual({
@@ -236,7 +231,6 @@ describe('Queue Position Service', () => {
 
       const result = await addToQueue(mockClient, config, {
         leaseId,
-        estimatedFulfillmentTime: null,
       });
 
       expect(result).toEqual({
@@ -259,7 +253,6 @@ describe('Queue Position Service', () => {
 
       const result = await addToQueue(mockClient, configNoTtl, {
         leaseId,
-        estimatedFulfillmentTime: null,
       });
 
       expect(result.success).toBe(true);
@@ -280,7 +273,6 @@ describe('Queue Position Service', () => {
 
       const result = await addToQueue(mockClient, config, {
         leaseId,
-        estimatedFulfillmentTime: null,
       });
 
       // Should return error since we couldn't recover the position
@@ -323,7 +315,6 @@ describe('Queue Position Service', () => {
         position: 1,
         queuedAt: '2025-12-30T10:00:00Z',
         userEmail: 'user@example.gov.uk',
-        estimatedFulfillmentTime: '2025-12-31T12:00:00Z',
         positionStatus: 'PENDING',
         ttl: 1735639200,
       };
@@ -433,51 +424,6 @@ describe('Queue Position Service', () => {
       expect(result).toEqual({
         success: false,
         error: 'GetItem failed',
-      });
-    });
-  });
-
-  describe('updateEstimatedTime', () => {
-    const leaseId: LeaseId = {
-      userEmail: 'user@example.gov.uk',
-      uuid: '12345678-1234-1234-1234-123456789012',
-    };
-
-    it('should update estimated time successfully', async () => {
-      mockSend.mockResolvedValueOnce({});
-
-      const result = await updateEstimatedTime(
-        mockClient,
-        config,
-        leaseId,
-        new Date('2025-12-31T18:00:00Z')
-      );
-
-      expect(result).toEqual({ success: true });
-      expect(mockSend).toHaveBeenCalledWith(expect.any(UpdateItemCommand));
-    });
-
-    it('should handle null estimated time', async () => {
-      mockSend.mockResolvedValueOnce({});
-
-      const result = await updateEstimatedTime(mockClient, config, leaseId, null);
-
-      expect(result).toEqual({ success: true });
-    });
-
-    it('should handle errors gracefully', async () => {
-      mockSend.mockRejectedValueOnce(new Error('Update failed'));
-
-      const result = await updateEstimatedTime(
-        mockClient,
-        config,
-        leaseId,
-        new Date('2025-12-31T18:00:00Z')
-      );
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Update failed',
       });
     });
   });
@@ -608,7 +554,6 @@ describe('Queue Position Service', () => {
 
       const result = await addToQueue(mockClient, config, {
         leaseId,
-        estimatedFulfillmentTime: null,
       });
 
       expect(result).toEqual({
@@ -650,22 +595,6 @@ describe('Queue Position Service', () => {
       });
     });
 
-    it('should handle non-Error in updateEstimatedTime', async () => {
-      mockSend.mockRejectedValueOnce(undefined);
-
-      const result = await updateEstimatedTime(
-        mockClient,
-        config,
-        leaseId,
-        new Date('2025-12-31T18:00:00Z')
-      );
-
-      expect(result).toEqual({
-        success: false,
-        error: 'undefined',
-      });
-    });
-
     it('should handle non-Error in getLastCapacityCrunchAlertTime', async () => {
       mockSend.mockRejectedValueOnce('Network timeout');
 
@@ -695,7 +624,6 @@ describe('Queue Position Service', () => {
 
       const result = await addToQueue(mockClient, config, {
         leaseId,
-        estimatedFulfillmentTime: null,
       });
 
       // Should succeed with position 1 (default when getNextPosition fails)

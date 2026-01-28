@@ -45,8 +45,6 @@ export class ApproverLambda extends Construct {
         BUSINESS_HOURS_START: config.businessHoursStart.toString(),
         BUSINESS_HOURS_END: config.businessHoursEnd.toString(),
         BUSINESS_HOURS_TZ: config.businessHoursTz,
-        ACCOUNT_COOLDOWN_HOURS: config.accountCooldownHours.toString(),
-        NEW_ACCOUNT_GRACE_MINUTES: config.newAccountGraceMinutes.toString(),
         ISB_CONSOLE_URL: config.isbConsoleUrl,
         ISB_LEASES_TABLE_NAME: config.isbLeasesTableName,
         ISB_ACCOUNTS_TABLE_NAME: config.isbAccountsTableName,

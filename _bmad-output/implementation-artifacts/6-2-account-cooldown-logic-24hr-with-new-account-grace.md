@@ -1,6 +1,8 @@
 # Story 6.2: Account Cooldown Logic (24hr with New Account Grace)
 
-Status: done
+> **SUPERSEDED** (2026-01-28): This implementation has been removed. ISB's Billing Separator now handles account cooldown natively via a 72-hour Quarantine OU. The cooldown logic, queue estimation, and related code were removed as redundant. See the innovation-sandbox-on-aws-billing-seperator repository for the current implementation.
+
+Status: superseded
 
 ## Story
 

@@ -41,9 +41,8 @@ vi.mock('../src/lib/logger.ts', () => ({
 }));
 
 // Use vi.hoisted() for queue-position mocks (Vitest v4 compatible)
-const { mockAddToQueue, mockGetQueueEstimate, mockRemoveFromQueue, mockGetLastCapacityCrunchAlertTime, mockUpdateLastCapacityCrunchAlertTime, mockGetOldestPending } = vi.hoisted(() => ({
+const { mockAddToQueue, mockRemoveFromQueue, mockGetLastCapacityCrunchAlertTime, mockUpdateLastCapacityCrunchAlertTime, mockGetOldestPending } = vi.hoisted(() => ({
   mockAddToQueue: vi.fn(),
-  mockGetQueueEstimate: vi.fn(),
   mockRemoveFromQueue: vi.fn(),
   mockGetLastCapacityCrunchAlertTime: vi.fn(),
   mockUpdateLastCapacityCrunchAlertTime: vi.fn(),
@@ -66,7 +65,6 @@ vi.mock('../src/services/queue-position.js', async () => {
   return {
     ...actual,
     addToQueue: mockAddToQueue,
-    getQueueEstimate: mockGetQueueEstimate,
     removeFromQueue: mockRemoveFromQueue,
     getLastCapacityCrunchAlertTime: mockGetLastCapacityCrunchAlertTime,
     updateLastCapacityCrunchAlertTime: mockUpdateLastCapacityCrunchAlertTime,
@@ -259,13 +257,6 @@ describe('handler', () => {
     mockAddToQueue.mockResolvedValue({
       success: true,
       position: 1,
-    });
-    mockGetQueueEstimate.mockResolvedValue({
-      position: 1,
-      estimatedFulfillmentTime: new Date('2025-12-31T12:00:00Z'),
-      isCapacityCrunch: false,
-      message: 'Your request is next in queue',
-      queueDepth: 1,
     });
     mockRemoveFromQueue.mockResolvedValue({
       success: true,
@@ -2161,7 +2152,7 @@ describe('handler', () => {
       // Should still succeed - error is handled gracefully
       expect(result.statusCode).toBe(200);
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'Error checking account readiness - proceeding to scoring',
+        'Error checking account availability - proceeding to scoring',
         expect.objectContaining({
           error: 'Lambda invocation failed',
         })
@@ -2939,8 +2930,7 @@ describe('handler', () => {
             decision: 'delayed',
             reason: 'No ready accounts',
             accountDelayReason: 'NO_READY_ACCOUNTS',
-            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
-            coolingAccountCount: 3,
+            availableAccountCount: 0,
             activeAccountCount: 5,
             nextProcessingTime: '2025-12-31T12:00:00Z',
           },
@@ -2961,7 +2951,7 @@ describe('handler', () => {
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Request delayed',
         expect.objectContaining({
-          delayReason: 'account_cooldown',
+          delayReason: 'no_accounts_available',
           accountDelayReason: 'NO_READY_ACCOUNTS',
         })
       );
@@ -3049,8 +3039,7 @@ describe('handler', () => {
             decision: 'delayed',
             reason: 'No ready accounts',
             accountDelayReason: 'NO_READY_ACCOUNTS',
-            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
-            coolingAccountCount: 2,
+            availableAccountCount: 0,
             activeAccountCount: 6,
             nextProcessingTime: '2025-12-31T12:00:00Z',
           },
@@ -3065,7 +3054,7 @@ describe('handler', () => {
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Request sent to delay queue',
         expect.objectContaining({
-          delayReason: 'account_cooldown',
+          delayReason: 'no_accounts_available',
         })
       );
     });
@@ -3123,8 +3112,7 @@ describe('handler', () => {
             decision: 'delayed',
             reason: 'No ready accounts',
             accountDelayReason: 'NO_READY_ACCOUNTS',
-            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
-            coolingAccountCount: 3,
+            availableAccountCount: 0,
             activeAccountCount: 5,
             nextProcessingTime: '2025-12-31T12:00:00Z',
           },
@@ -3148,12 +3136,11 @@ describe('handler', () => {
     it('should use cooldown delay message when queue estimate is not available (line 1778)', async () => {
       setSQSService(mockSQSService);
 
-      // addToQueue succeeds but getQueueEstimate returns null (no estimate)
+      // addToQueue succeeds
       mockAddToQueue.mockResolvedValueOnce({
         success: true,
         position: 1,
       });
-      mockGetQueueEstimate.mockResolvedValueOnce(null);
 
       const mockOrchestrator: StateMachineOrchestrator = {
         run: vi.fn().mockReturnValue({
@@ -3168,8 +3155,7 @@ describe('handler', () => {
             decision: 'delayed',
             reason: 'No ready accounts',
             accountDelayReason: 'NO_READY_ACCOUNTS',
-            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
-            coolingAccountCount: 2,
+            availableAccountCount: 0,
             activeAccountCount: 6,
             nextProcessingTime: '2025-12-31T12:00:00Z',
           },
@@ -3185,7 +3171,7 @@ describe('handler', () => {
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Request sent to delay queue',
         expect.objectContaining({
-          delayReason: 'account_cooldown',
+          delayReason: 'no_accounts_available',
         })
       );
     });
@@ -3209,8 +3195,7 @@ describe('handler', () => {
             decision: 'delayed',
             reason: 'No ready accounts',
             accountDelayReason: 'NO_READY_ACCOUNTS',
-            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
-            coolingAccountCount: 3,
+            availableAccountCount: 0,
             activeAccountCount: 5,
             nextProcessingTime: '2025-12-31T12:00:00Z',
           },
@@ -3250,8 +3235,7 @@ describe('handler', () => {
             decision: 'delayed',
             reason: 'No ready accounts',
             accountDelayReason: 'NO_READY_ACCOUNTS',
-            estimatedAccountReadyTime: '2025-12-31T12:00:00Z',
-            coolingAccountCount: 3,
+            availableAccountCount: 0,
             activeAccountCount: 5,
             nextProcessingTime: '2025-12-31T12:00:00Z',
           },

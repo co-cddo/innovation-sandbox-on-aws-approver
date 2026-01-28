@@ -207,8 +207,6 @@ export interface QueuePositionRecord {
   readonly queuedAt: string;
   /** User email for logging/debugging */
   readonly userEmail: string;
-  /** ISO 8601 estimated fulfillment time (null if capacity crunch) */
-  readonly estimatedFulfillmentTime: string | null;
   /** Status for GSI query - always "PENDING" until processed */
   readonly positionStatus: 'PENDING';
   /** TTL for automatic cleanup (epoch seconds) - 7 days after queued */
@@ -220,7 +218,6 @@ export interface QueuePositionRecord {
  */
 export interface QueuePositionInput {
   readonly leaseId: LeaseId;
-  readonly estimatedFulfillmentTime: Date | null;
 }
 
 /**

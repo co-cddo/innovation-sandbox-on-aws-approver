@@ -1,15 +1,24 @@
 /**
  * Capacity Crunch Detection (Story 6.4)
  *
- * Detects when all sandbox accounts are in active use (none available or cooling).
- * This is distinct from normal cooldown where some accounts are Available but cooling.
+ * Detects when all sandbox accounts are in active use (none available).
+ * ISB's Billing Separator handles the 72-hour cooldown via Quarantine OU,
+ * so we only see accounts that are truly available or active.
  *
  * When capacity crunch is detected:
- * - Users see a 36-48 hour wait estimate
+ * - Users see a high-demand message
  * - Operators receive Slack alert (throttled to 1 per hour)
  */
 
-import type { AccountReadinessResult } from './account-cooldown.js';
+/**
+ * Input for capacity analysis - simple counts from ISB
+ */
+export interface AccountCounts {
+  /** Accounts available for assignment */
+  readonly availableCount: number;
+  /** Accounts currently in use */
+  readonly activeCount: number;
+}
 
 /**
  * Capacity status of the account pool
@@ -21,16 +30,10 @@ export interface CapacityStatus {
   readonly totalAccounts: number;
   /** Accounts currently in use */
   readonly activeCount: number;
-  /** Accounts available (ready or cooling) */
+  /** Accounts available for assignment */
   readonly availableCount: number;
-  /** Ready accounts (cooled down, can be assigned) */
-  readonly readyCount: number;
-  /** Cooling accounts (available but in 24hr cooldown) */
-  readonly coolingCount: number;
   /** Pending requests in queue */
   readonly pendingRequests: number;
-  /** Estimated hours until soonest account ready (null if unknown) */
-  readonly soonestAvailableHours: number | null;
 }
 
 /**
@@ -41,47 +44,32 @@ export interface CapacityCrunchAlert {
   readonly activeAccounts: number;
   readonly availableAccounts: number;
   readonly pendingRequests: number;
-  readonly soonestAvailableHours: number | null;
   readonly message: string;
 }
 
 /**
  * Analyze account pool and determine capacity status.
  *
- * @param readinessResult - Result from checkAccountReadiness()
+ * @param accountCounts - Available and active account counts from ISB
  * @param pendingRequests - Number of pending requests in queue
- * @param nowTimestamp - Current time for calculations
  * @returns Capacity status analysis
  */
 export const analyzeCapacityStatus = (
-  readinessResult: AccountReadinessResult,
-  pendingRequests: number = 0,
-  nowTimestamp: Date = new Date()
+  accountCounts: AccountCounts,
+  pendingRequests: number = 0
 ): CapacityStatus => {
-  const { readyAccounts, coolingAccounts, activeAccounts, estimatedReadyTime } = readinessResult;
-
-  const totalAccounts = readyAccounts.length + coolingAccounts.length + activeAccounts.length;
-  const availableCount = readyAccounts.length + coolingAccounts.length;
+  const { availableCount, activeCount } = accountCounts;
+  const totalAccounts = availableCount + activeCount;
 
   // Capacity crunch: All accounts are Active, none Available
-  const isCapacityCrunch = availableCount === 0 && activeAccounts.length > 0;
-
-  // Calculate hours until soonest ready
-  let soonestAvailableHours: number | null = null;
-  if (estimatedReadyTime) {
-    const hoursUntilReady = (estimatedReadyTime.getTime() - nowTimestamp.getTime()) / (60 * 60 * 1000);
-    soonestAvailableHours = Math.max(0, Math.round(hoursUntilReady * 10) / 10); // Round to 1 decimal
-  }
+  const isCapacityCrunch = availableCount === 0 && activeCount > 0;
 
   return {
     isCapacityCrunch,
     totalAccounts,
-    activeCount: activeAccounts.length,
+    activeCount,
     availableCount,
-    readyCount: readyAccounts.length,
-    coolingCount: coolingAccounts.length,
     pendingRequests,
-    soonestAvailableHours,
   };
 };
 
@@ -123,18 +111,14 @@ export const shouldSendCapacityCrunchAlert = (
  * @returns Alert payload for Slack webhook
  */
 export const buildCapacityCrunchAlert = (status: CapacityStatus): CapacityCrunchAlert => {
-  const hoursText =
-    status.soonestAvailableHours !== null ? `~${status.soonestAvailableHours} hours` : 'unknown';
-
   return {
     alertType: 'capacity_crunch',
     activeAccounts: status.activeCount,
     availableAccounts: status.availableCount,
     pendingRequests: status.pendingRequests,
-    soonestAvailableHours: status.soonestAvailableHours,
-    message: `All sandbox accounts are in active use (${status.activeCount}/${status.totalAccounts}). ` +
-      `${status.pendingRequests} pending requests. ` +
-      `Soonest availability in ${hoursText}. Consider provisioning additional capacity.`,
+    message:
+      `All sandbox accounts are in active use (${status.activeCount}/${status.totalAccounts}). ` +
+      `${status.pendingRequests} pending requests. Consider provisioning additional capacity.`,
   };
 };
 
@@ -149,8 +133,7 @@ export const buildCapacityCrunchAlert = (status: CapacityStatus): CapacityCrunch
 export const buildCapacityCrunchMessage = (referenceNumber: string): string => {
   return [
     'Your request has been received. All sandbox sessions are currently in active use.',
-    'Based on current demand, your request may take 36-48 hours to fulfill.',
-    "Our team is aware of high demand. You'll be notified as soon as a session becomes available.",
+    "You'll be notified as soon as a session becomes available.",
     `Reference: ${referenceNumber}`,
   ].join('\n');
 };

@@ -341,26 +341,13 @@ describe('Lease Comments Message Builders (Story 5.1)', () => {
   });
 
   describe('buildCooldownDelayMessage (Epic 6)', () => {
-    it('should include maintenance explanation and reference', () => {
+    it('should include explanation and reference', () => {
       const message = buildCooldownDelayMessage(testReference);
 
       expect(message).toContain('Your request has been received');
-      expect(message).toContain('routine maintenance');
+      expect(message).toContain('All sandbox accounts are currently in use');
       expect(message).toContain('will be processed automatically');
       expect(message).toContain(`Reference: ${testReference}`);
-    });
-
-    it('should include estimated availability when provided', () => {
-      const estimatedTime = '2025-01-02T14:00:00Z';
-      const message = buildCooldownDelayMessage(testReference, estimatedTime);
-
-      expect(message).toContain(`Estimated availability: ${estimatedTime}`);
-    });
-
-    it('should not include estimated availability when not provided', () => {
-      const message = buildCooldownDelayMessage(testReference);
-
-      expect(message).not.toContain('Estimated availability');
     });
 
     it('should use neutral language (no technical jargon)', () => {
@@ -369,7 +356,7 @@ describe('Lease Comments Message Builders (Story 5.1)', () => {
       // Should NOT contain technical terms
       expect(message).not.toContain('cooldown');
       expect(message).not.toContain('billing');
-      expect(message).not.toContain('24 hour');
+      expect(message).not.toContain('quarantine');
     });
   });
 
