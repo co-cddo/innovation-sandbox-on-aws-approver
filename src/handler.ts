@@ -62,14 +62,6 @@ import {
   ruleResultsToBreakdown,
 } from './lib/lease-comments.js';
 import {
-  checkAccountReadiness,
-  getConfigFromEnvironment,
-} from './lib/account-cooldown.js';
-import {
-  calculateQueueEstimate,
-  buildQueueEstimateComment,
-} from './lib/queue-estimate.js';
-import {
   addToQueue,
   removeFromQueue,
   getQueueDepth,
@@ -618,16 +610,16 @@ const resolveTemplateName = async (
 };
 
 /**
- * Checks account readiness by querying ISB Lambda and applying cooldown logic.
- * Returns account readiness result for inclusion in state context.
+ * Checks account availability by querying ISB Lambda.
+ * ISB's Billing Separator handles the 72-hour cooldown via Quarantine OU,
+ * so we only see accounts that are truly available.
+ *
  * Returns a "proceed" result on failure (pessimistic: let scoring decide).
  */
 const checkAccountReadinessNow = async (): Promise<{
   hasReadyAccount: boolean;
-  readyAccountCount: number;
-  coolingAccountCount: number;
+  availableAccountCount: number;
   activeAccountCount: number;
-  estimatedAccountReadyTime: string | undefined;
   accountDelayReason: 'NO_READY_ACCOUNTS' | 'ACCOUNT_FETCH_ERROR' | undefined;
 }> => {
   try {
@@ -645,47 +637,41 @@ const checkAccountReadinessNow = async (): Promise<{
       // Don't block requests if we can't check accounts
       return {
         hasReadyAccount: true, // Assume ready to proceed
-        readyAccountCount: 0,
-        coolingAccountCount: 0,
+        availableAccountCount: 0,
         activeAccountCount: 0,
-        estimatedAccountReadyTime: undefined,
         accountDelayReason: undefined, // No delay, proceed with warning
       };
     }
 
-    // Apply cooldown logic
-    const cooldownConfig = getConfigFromEnvironment();
-    const now = new Date();
-    const readinessResult = checkAccountReadiness(accountsResult.accounts, now, cooldownConfig);
+    // Count Available vs Active accounts
+    // ISB's Billing Separator handles cooldown - Available means truly available
+    const availableAccounts = accountsResult.accounts.filter((a) => a.status === 'Available');
+    const activeAccounts = accountsResult.accounts.filter((a) => a.status === 'Active');
 
-    logger.info('Account readiness check completed', {
+    const hasReadyAccount = availableAccounts.length > 0;
+
+    logger.info('Account availability check completed', {
       totalAccounts: accountsResult.accounts.length,
-      readyAccounts: readinessResult.readyAccounts.length,
-      coolingAccounts: readinessResult.coolingAccounts.length,
-      activeAccounts: readinessResult.activeAccounts.length,
-      hasReadyAccount: readinessResult.hasReadyAccount,
-      estimatedReadyTime: readinessResult.estimatedReadyTime?.toISOString(),
+      availableAccounts: availableAccounts.length,
+      activeAccounts: activeAccounts.length,
+      hasReadyAccount,
     });
 
     return {
-      hasReadyAccount: readinessResult.hasReadyAccount,
-      readyAccountCount: readinessResult.readyAccounts.length,
-      coolingAccountCount: readinessResult.coolingAccounts.length,
-      activeAccountCount: readinessResult.activeAccounts.length,
-      estimatedAccountReadyTime: readinessResult.estimatedReadyTime?.toISOString(),
-      accountDelayReason: readinessResult.hasReadyAccount ? undefined : 'NO_READY_ACCOUNTS',
+      hasReadyAccount,
+      availableAccountCount: availableAccounts.length,
+      activeAccountCount: activeAccounts.length,
+      accountDelayReason: hasReadyAccount ? undefined : 'NO_READY_ACCOUNTS',
     };
   } catch (error) {
-    logger.error('Error checking account readiness - proceeding to scoring', {
+    logger.error('Error checking account availability - proceeding to scoring', {
       error: error instanceof Error ? error.message : String(error),
     });
     // On error, proceed (let scoring decide)
     return {
       hasReadyAccount: true,
-      readyAccountCount: 0,
-      coolingAccountCount: 0,
+      availableAccountCount: 0,
       activeAccountCount: 0,
-      estimatedAccountReadyTime: undefined,
       accountDelayReason: undefined,
     };
   }
@@ -737,13 +723,11 @@ const checkBusinessHoursNow = async (): Promise<BusinessHoursResult> => {
   /* c8 ignore stop */
 };
 
-/** Account readiness check result for context preparation */
+/** Account availability check result for context preparation */
 interface AccountReadinessCheck {
   hasReadyAccount: boolean;
-  readyAccountCount: number;
-  coolingAccountCount: number;
+  availableAccountCount: number;
   activeAccountCount: number;
-  estimatedAccountReadyTime: string | undefined;
   accountDelayReason: 'NO_READY_ACCOUNTS' | 'ACCOUNT_FETCH_ERROR' | undefined;
 }
 
@@ -784,12 +768,10 @@ const prepareContext = (
     isWithinBusinessHours: businessHoursResult.isWithinBusinessHours,
     isEndOfWindow: businessHoursResult.isEndOfWindow,
     nextProcessingTime: businessHoursResult.nextProcessingTime,
-    // Account readiness data from cooldown check (Epic 6)
+    // Account availability data (ISB Billing Separator handles cooldown)
     hasReadyAccount: accountReadinessCheck.hasReadyAccount,
-    readyAccountCount: accountReadinessCheck.readyAccountCount,
-    coolingAccountCount: accountReadinessCheck.coolingAccountCount,
+    availableAccountCount: accountReadinessCheck.availableAccountCount,
     activeAccountCount: accountReadinessCheck.activeAccountCount,
-    estimatedAccountReadyTime: accountReadinessCheck.estimatedAccountReadyTime,
     accountDelayReason: accountReadinessCheck.accountDelayReason,
   };
 };
@@ -1112,10 +1094,8 @@ const processDelayQueue = async (
   if (!accountReadiness.hasReadyAccount) {
     logger.info('No ready accounts available - skipping queue processing', {
       triggerType,
-      readyAccountCount: accountReadiness.readyAccountCount,
-      coolingAccountCount: accountReadiness.coolingAccountCount,
+      availableAccountCount: accountReadiness.availableAccountCount,
       activeAccountCount: accountReadiness.activeAccountCount,
-      estimatedAccountReadyTime: accountReadiness.estimatedAccountReadyTime,
     });
     return {
       statusCode: 200,
@@ -1630,16 +1610,15 @@ export const handler = async (
     }
 
     if (decision === 'delayed') {
-      // Determine delay reason: business hours or account cooldown
-      const { accountDelayReason, estimatedAccountReadyTime, coolingAccountCount, activeAccountCount } = result.context;
-      const isAccountCooldownDelay = accountDelayReason === 'NO_READY_ACCOUNTS';
+      // Determine delay reason: business hours or no available accounts
+      const { accountDelayReason, activeAccountCount } = result.context;
+      const isNoAccountsDelay = accountDelayReason === 'NO_READY_ACCOUNTS';
 
-      // For account cooldown delays, add to queue position table (Story 6.3)
+      // For no-accounts delays, add to queue position table (Story 6.3)
       let queuePosition: number | undefined;
       let queueDepth: number | undefined;
-      let queueEstimateMessage: string | undefined;
 
-      if (isAccountCooldownDelay) {
+      if (isNoAccountsDelay) {
         try {
           // Get current queue depth first
           const depthResult = await getQueueDepth(dynamoDBClient, queuePositionConfig);
@@ -1647,47 +1626,26 @@ export const handler = async (
             queueDepth = depthResult.queueDepth;
           }
 
-          // Parse estimated fulfillment time if available
-          const estimatedTime = estimatedAccountReadyTime
-            ? new Date(estimatedAccountReadyTime)
-            : null;
-
-          // Add to queue position table
+          // Add to queue position table (no estimated fulfillment time - ISB handles cooldown)
           const addResult = await addToQueue(dynamoDBClient, queuePositionConfig, {
             leaseId,
-            estimatedFulfillmentTime: estimatedTime,
           });
 
           if (addResult.success && addResult.position) {
             queuePosition = addResult.position;
             queueDepth = (queueDepth ?? 0) + 1; // Increment if we just added
 
-            // Calculate queue estimate with user-friendly message
-            // Use empty arrays but pass isCapacityCrunch override since we have the counts
-            const isCapacityCrunch = (coolingAccountCount ?? 0) === 0 && (activeAccountCount ?? 0) > 0;
-            const queueEstimate = calculateQueueEstimate(
-              [], // cooling accounts - not available in this context
-              [], // active accounts - not available in this context
-              queuePosition,
-              queueDepth,
-              new Date(),
-              undefined, // use default cooldown config
-              { isCapacityCrunchOverride: isCapacityCrunch }
-            );
-
-            queueEstimateMessage = queueEstimate.message;
-
             logger.info('Added request to queue position table', {
               leaseId: leaseId.uuid,
               queuePosition,
               queueDepth,
-              estimatedFulfillmentTime: estimatedTime?.toISOString(),
             });
 
-            // Note: Capacity crunch alerts now go through SNS → Amazon Q Developer → Slack
-            // The legacy direct Slack webhook code has been removed (Story 7.5.4)
+            // Log capacity status for monitoring
+            // All accounts being active means high demand
+            const isCapacityCrunch = (activeAccountCount ?? 0) > 0;
             if (isCapacityCrunch) {
-              logger.info('Capacity crunch detected - notification via SNS/Amazon Q', {
+              logger.info('All accounts in use - notification via SNS/Amazon Q', {
                 activeAccounts: activeAccountCount ?? 0,
                 pendingRequests: queueDepth,
               });
@@ -1713,9 +1671,8 @@ export const handler = async (
         leaseId: leaseId.uuid,
         userEmail: leaseId.userEmail,
         reason,
-        delayReason: isAccountCooldownDelay ? 'account_cooldown' : 'outside_business_hours',
+        delayReason: isNoAccountsDelay ? 'no_accounts_available' : 'outside_business_hours',
         nextProcessingTime: result.context.nextProcessingTime,
-        estimatedAccountReadyTime,
         accountDelayReason,
         queuePosition,
         queueDepth,
@@ -1751,7 +1708,7 @@ export const handler = async (
         originalEvent: validatedEvent,
         receivedAt: new Date().toISOString(),
         processAfter: result.context.nextProcessingTime ?? new Date().toISOString(),
-        reason: reason ?? (isAccountCooldownDelay ? 'No ready accounts' : 'Outside business hours'),
+        reason: reason ?? (isNoAccountsDelay ? 'No available accounts' : 'Outside business hours'),
       };
 
       const sqsResult = await sqsService.sendDelayedRequest(delayMessage);
@@ -1786,7 +1743,7 @@ export const handler = async (
         leaseId: leaseId.uuid,
         userEmail: leaseId.userEmail,
         processAfter: delayMessage.processAfter,
-        delayReason: isAccountCooldownDelay ? 'account_cooldown' : 'outside_business_hours',
+        delayReason: isNoAccountsDelay ? 'no_accounts_available' : 'outside_business_hours',
         queuePosition,
       });
 
@@ -1794,21 +1751,9 @@ export const handler = async (
       const referenceNumber = generateReferenceNumber(leaseId.uuid);
       let delayedMessage: string;
 
-      if (isAccountCooldownDelay && queueEstimateMessage) {
-        // Use the queue estimate message with position info
-        delayedMessage = buildQueueEstimateComment(
-          {
-            position: queuePosition ?? 1,
-            estimatedFulfillmentTime: estimatedAccountReadyTime ? new Date(estimatedAccountReadyTime) : null,
-            isCapacityCrunch: (coolingAccountCount ?? 0) === 0 && (activeAccountCount ?? 0) > 0,
-            message: queueEstimateMessage,
-            queueDepth: queueDepth ?? 1,
-          },
-          referenceNumber
-        );
-      } else if (isAccountCooldownDelay) {
-        // Fallback to cooldown message without queue position
-        delayedMessage = buildCooldownDelayMessage(referenceNumber, estimatedAccountReadyTime);
+      if (isNoAccountsDelay) {
+        // No accounts available - use simple cooldown message
+        delayedMessage = buildCooldownDelayMessage(referenceNumber);
       } else {
         // Business hours delay
         delayedMessage = buildDelayedMessage(referenceNumber);

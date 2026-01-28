@@ -268,13 +268,13 @@ describe('ACCOUNT_COOLDOWN_CHECK handler (Epic 6)', () => {
       userEmail: 'user@example.gov.uk',
       templateId: 'web-hosting',
       hasReadyAccount: true,
-      readyAccountCount: 2,
+      availableAccountCount: 2,
     };
 
     const result = handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
 
     expect(result.nextState).toBe(ApprovalState.SCORING);
-    expect(result.context.reason).toContain('Ready sandbox account available');
+    expect(result.context.reason).toContain('Available sandbox account exists');
   });
 
   it('should transition to SCORING when hasReadyAccount is undefined (backwards compatibility)', () => {
@@ -289,7 +289,7 @@ describe('ACCOUNT_COOLDOWN_CHECK handler (Epic 6)', () => {
     const result = handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
 
     expect(result.nextState).toBe(ApprovalState.SCORING);
-    expect(result.context.reason).toContain('Account readiness not checked');
+    expect(result.context.reason).toContain('Account availability not checked');
   });
 
   it('should transition to DELAYED when hasReadyAccount is false', () => {
@@ -299,9 +299,8 @@ describe('ACCOUNT_COOLDOWN_CHECK handler (Epic 6)', () => {
       userEmail: 'user@example.gov.uk',
       templateId: 'web-hosting',
       hasReadyAccount: false,
-      readyAccountCount: 0,
-      coolingAccountCount: 3,
-      estimatedAccountReadyTime: '2025-01-02T14:00:00Z',
+      availableAccountCount: 0,
+      activeAccountCount: 3,
     };
 
     const result = handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
@@ -310,7 +309,6 @@ describe('ACCOUNT_COOLDOWN_CHECK handler (Epic 6)', () => {
     expect(result.context.decision).toBe('delayed');
     expect(result.context.accountDelayReason).toBe('NO_READY_ACCOUNTS');
     expect(result.context.reason).toContain('No sandbox accounts currently available');
-    expect(result.context.reason).toContain('2025-01-02T14:00:00Z');
   });
 
   it('should set default delay reason when not specified', () => {
@@ -325,7 +323,7 @@ describe('ACCOUNT_COOLDOWN_CHECK handler (Epic 6)', () => {
     const result = handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
 
     expect(result.context.accountDelayReason).toBe('NO_READY_ACCOUNTS');
-    expect(result.context.reason).toContain('Estimated availability: unknown');
+    expect(result.context.reason).toContain('No sandbox accounts currently available');
   });
 
   it('should be a pure function (no mutation)', () => {

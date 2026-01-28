@@ -1,49 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import type { Account } from '../../src/lib/types.js';
-import type { AccountReadinessResult } from '../../src/lib/account-cooldown.js';
 import {
   analyzeCapacityStatus,
   shouldSendCapacityCrunchAlert,
   buildCapacityCrunchAlert,
   buildCapacityCrunchMessage,
+  type AccountCounts,
 } from '../../src/lib/capacity-crunch.js';
 
 describe('capacity-crunch', () => {
-  // Helper to create test accounts
-  const createAccount = (status: 'Available' | 'Active' = 'Available'): Account => ({
-    awsAccountId: '123456789012',
-    name: 'pool-001',
-    status,
-    meta: {
-      createdTime: '2025-01-01T00:00:00Z',
-      lastEditTime: '2025-01-01T00:00:00Z',
-    },
-  });
-
-  // Helper to create readiness result
-  const createReadinessResult = (
-    ready: number,
-    cooling: number,
-    active: number,
-    estimatedReadyTime: Date | null = null
-  ): AccountReadinessResult => ({
-    hasReadyAccount: ready > 0,
-    readyAccounts: Array(ready)
-      .fill(null)
-      .map(() => createAccount('Available')),
-    coolingAccounts: Array(cooling)
-      .fill(null)
-      .map(() => createAccount('Available')),
-    activeAccounts: Array(active)
-      .fill(null)
-      .map(() => createAccount('Active')),
-    estimatedReadyTime,
-  });
-
   describe('analyzeCapacityStatus', () => {
     it('detects capacity crunch when all accounts are active', () => {
-      const readiness = createReadinessResult(0, 0, 8); // 8 active, 0 available
-      const status = analyzeCapacityStatus(readiness, 5);
+      const counts: AccountCounts = { availableCount: 0, activeCount: 8 };
+      const status = analyzeCapacityStatus(counts, 5);
 
       expect(status.isCapacityCrunch).toBe(true);
       expect(status.totalAccounts).toBe(8);
@@ -52,46 +20,27 @@ describe('capacity-crunch', () => {
       expect(status.pendingRequests).toBe(5);
     });
 
-    it('does not detect capacity crunch when some accounts are cooling', () => {
-      const readiness = createReadinessResult(0, 3, 5); // 5 active, 3 cooling
-      const status = analyzeCapacityStatus(readiness, 2);
+    it('does not detect capacity crunch when some accounts are available', () => {
+      const counts: AccountCounts = { availableCount: 3, activeCount: 5 };
+      const status = analyzeCapacityStatus(counts, 2);
 
       expect(status.isCapacityCrunch).toBe(false);
       expect(status.availableCount).toBe(3);
-      expect(status.coolingCount).toBe(3);
-    });
-
-    it('does not detect capacity crunch when ready accounts exist', () => {
-      const readiness = createReadinessResult(2, 1, 5); // 2 ready, 1 cooling, 5 active
-      const status = analyzeCapacityStatus(readiness, 0);
-
-      expect(status.isCapacityCrunch).toBe(false);
-      expect(status.readyCount).toBe(2);
-    });
-
-    it('calculates soonest available hours from estimated time', () => {
-      const now = new Date('2025-01-02T12:00:00Z');
-      const estimatedReady = new Date('2025-01-02T18:00:00Z'); // 6 hours from now
-
-      const readiness = createReadinessResult(0, 2, 6, estimatedReady);
-      const status = analyzeCapacityStatus(readiness, 3, now);
-
-      expect(status.soonestAvailableHours).toBe(6);
-    });
-
-    it('returns null soonest hours when no estimated time', () => {
-      const readiness = createReadinessResult(0, 0, 8, null);
-      const status = analyzeCapacityStatus(readiness, 2);
-
-      expect(status.soonestAvailableHours).toBeNull();
     });
 
     it('handles no accounts gracefully', () => {
-      const readiness = createReadinessResult(0, 0, 0);
-      const status = analyzeCapacityStatus(readiness, 0);
+      const counts: AccountCounts = { availableCount: 0, activeCount: 0 };
+      const status = analyzeCapacityStatus(counts, 0);
 
       expect(status.isCapacityCrunch).toBe(false);
       expect(status.totalAccounts).toBe(0);
+    });
+
+    it('defaults pending requests to zero', () => {
+      const counts: AccountCounts = { availableCount: 2, activeCount: 6 };
+      const status = analyzeCapacityStatus(counts);
+
+      expect(status.pendingRequests).toBe(0);
     });
   });
 
@@ -147,10 +96,7 @@ describe('capacity-crunch', () => {
         totalAccounts: 8,
         activeCount: 8,
         availableCount: 0,
-        readyCount: 0,
-        coolingCount: 0,
         pendingRequests: 5,
-        soonestAvailableHours: 6,
       };
 
       const alert = buildCapacityCrunchAlert(status);
@@ -159,29 +105,10 @@ describe('capacity-crunch', () => {
       expect(alert.activeAccounts).toBe(8);
       expect(alert.availableAccounts).toBe(0);
       expect(alert.pendingRequests).toBe(5);
-      expect(alert.soonestAvailableHours).toBe(6);
       expect(alert.message).toContain('All sandbox accounts are in active use');
       expect(alert.message).toContain('8/8');
       expect(alert.message).toContain('5 pending requests');
-      expect(alert.message).toContain('~6 hours');
       expect(alert.message).toContain('Consider provisioning');
-    });
-
-    it('handles unknown soonest availability', () => {
-      const status = {
-        isCapacityCrunch: true,
-        totalAccounts: 8,
-        activeCount: 8,
-        availableCount: 0,
-        readyCount: 0,
-        coolingCount: 0,
-        pendingRequests: 3,
-        soonestAvailableHours: null,
-      };
-
-      const alert = buildCapacityCrunchAlert(status);
-
-      expect(alert.message).toContain('unknown');
     });
   });
 
@@ -191,8 +118,6 @@ describe('capacity-crunch', () => {
 
       expect(message).toContain('Your request has been received');
       expect(message).toContain('All sandbox sessions are currently in active use');
-      expect(message).toContain('36-48 hours');
-      expect(message).toContain('Our team is aware');
       expect(message).toContain("You'll be notified");
       expect(message).toContain('Reference: ISB-2025-0042');
     });
