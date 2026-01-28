@@ -2,7 +2,10 @@
  * Queue Position Service (Story 6.3 - FR62, FR67)
  *
  * Manages queue position in DynamoDB for FIFO processing when
- * sandbox accounts are in cooldown.
+ * no sandbox accounts are available.
+ *
+ * ISB's Billing Separator handles the 72-hour cooldown via Quarantine OU,
+ * so we only track queue position (not estimated fulfillment time).
  *
  * Uses:
  * - DynamoDB for persistence (survives Lambda cold starts)
@@ -10,7 +13,7 @@
  * - TTL for automatic cleanup of stale entries
  */
 
-import { DynamoDBClient, QueryCommand, PutItemCommand, DeleteItemCommand, UpdateItemCommand, GetItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, QueryCommand, PutItemCommand, DeleteItemCommand, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import type { LeaseId, QueuePositionRecord, QueuePositionInput, QueuePositionResult } from '../lib/types.js';
 import { logger } from '../lib/logger.js';
@@ -182,7 +185,6 @@ export const addToQueue = async (
       position,
       queuedAt: new Date().toISOString(),
       userEmail: input.leaseId.userEmail,
-      estimatedFulfillmentTime: input.estimatedFulfillmentTime?.toISOString() ?? null,
       positionStatus: 'PENDING',
       ttl,
     };
@@ -198,7 +200,6 @@ export const addToQueue = async (
     logger.info('Added request to queue', {
       leaseId: leaseKey,
       position,
-      estimatedFulfillmentTime: record.estimatedFulfillmentTime,
     });
 
     return {
@@ -363,54 +364,6 @@ export const getQueuePosition = async (
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('Failed to get queue position', { leaseId: leaseKey, error: errorMessage });
-    return {
-      success: false,
-      error: errorMessage,
-    };
-  }
-};
-
-/**
- * Update estimated fulfillment time for a queued request.
- *
- * NOTE: This function is currently not called but is exported for future use cases:
- * - When an account becomes ready, update remaining queue estimates
- * - When queue positions shift after a request is processed
- * - Periodic recalculation of estimates based on actual throughput
- *
- * TODO: Integrate when Story 6.4 (Capacity Crunch Alerts) is complete,
- * or when delay queue processing triggers estimate recalculation.
- */
-export const updateEstimatedTime = async (
-  client: DynamoDBClient,
-  config: QueuePositionServiceConfig,
-  leaseId: LeaseId,
-  estimatedFulfillmentTime: Date | null
-): Promise<QueuePositionResult> => {
-  const leaseKey = leaseIdToKey(leaseId);
-
-  try {
-    const command = new UpdateItemCommand({
-      TableName: config.tableName,
-      Key: marshall({ leaseId: leaseKey }),
-      UpdateExpression: 'SET estimatedFulfillmentTime = :eft',
-      ExpressionAttributeValues: marshall({
-        ':eft': estimatedFulfillmentTime?.toISOString() ?? null,
-      }),
-      ConditionExpression: 'attribute_exists(leaseId)',
-    });
-
-    await client.send(command);
-
-    logger.info('Updated estimated fulfillment time', {
-      leaseId: leaseKey,
-      estimatedFulfillmentTime: estimatedFulfillmentTime?.toISOString() ?? null,
-    });
-
-    return { success: true };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error('Failed to update estimated time', { leaseId: leaseKey, error: errorMessage });
     return {
       success: false,
       error: errorMessage,

@@ -139,17 +139,13 @@ export interface StateContext {
   /** Next processing time if delayed (ISO string) */
   nextProcessingTime?: string;
 
-  // Account availability data (populated in ACCOUNT_COOLDOWN_CHECK state - Epic 6)
-  /** Whether at least one sandbox account is ready for assignment */
+  // Account availability data (ISB Billing Separator handles 72hr cooldown)
+  /** Whether at least one sandbox account is available for assignment */
   hasReadyAccount?: boolean;
-  /** Count of accounts ready for immediate assignment */
-  readyAccountCount?: number;
-  /** Count of accounts in cooldown period */
-  coolingAccountCount?: number;
+  /** Count of accounts available for assignment */
+  availableAccountCount?: number;
   /** Count of accounts currently in use */
   activeAccountCount?: number;
-  /** Estimated time when first cooling account will be ready (ISO string) */
-  estimatedAccountReadyTime?: string;
   /** Delay reason if no accounts available */
   accountDelayReason?: 'NO_READY_ACCOUNTS' | 'ACCOUNT_FETCH_ERROR';
 

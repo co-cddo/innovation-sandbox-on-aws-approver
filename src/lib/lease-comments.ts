@@ -184,34 +184,21 @@ export const buildExpiredMessage = (
 };
 
 /**
- * Builds the message for a request delayed due to account cooldown (Epic 6).
+ * Builds the message for a request delayed due to no available accounts.
  *
  * Used when no sandbox accounts are currently available because all accounts
- * are either in use (Active) or in their 24-hour billing separation cooldown.
+ * are in use. ISB's Billing Separator handles the 72-hour cooldown via
+ * Quarantine OU, so we only see truly available accounts.
  *
- * @param estimatedAvailability - Estimated time when an account will be ready (optional)
  * @param referenceNumber - Reference in ISB-YYYY-NNNN format
  * @returns Formatted message string
  */
-export const buildCooldownDelayMessage = (
-  referenceNumber: string,
-  estimatedAvailability?: string
-): string => {
-  const lines = [
-    'Your request has been received. All sandbox accounts are currently undergoing',
-    'routine maintenance to ensure a clean environment for each user.',
-  ];
-
-  if (estimatedAvailability) {
-    lines.push(`Estimated availability: ${estimatedAvailability}`);
-  }
-
-  lines.push(
+export const buildCooldownDelayMessage = (referenceNumber: string): string => {
+  return [
+    'Your request has been received. All sandbox accounts are currently in use.',
     'Your request will be processed automatically when an account becomes available.',
-    `Reference: ${referenceNumber}`
-  );
-
-  return lines.join('\n');
+    `Reference: ${referenceNumber}`,
+  ].join('\n');
 };
 
 /**

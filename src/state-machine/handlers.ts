@@ -161,37 +161,37 @@ export const createStateHandlers = (
 
   /**
    * ACCOUNT_COOLDOWN_CHECK state handler.
-   * Checks if a sandbox account is ready for assignment (Epic 6).
-   * Account readiness data is pre-populated in context by the handler.
+   * Checks if a sandbox account is available for assignment.
+   * ISB's Billing Separator handles the 72-hour cooldown via Quarantine OU.
+   * Account availability data is pre-populated in context by the handler.
    */
   [ApprovalState.ACCOUNT_COOLDOWN_CHECK]: (context: StateContext): StateHandlerResult => {
-    const { hasReadyAccount, estimatedAccountReadyTime, accountDelayReason } = context;
+    const { hasReadyAccount, accountDelayReason } = context;
 
-    // If account readiness hasn't been checked yet (undefined), proceed to scoring
+    // If account availability hasn't been checked yet (undefined), proceed to scoring
     // This allows backwards compatibility and testing without account check setup
     if (hasReadyAccount === undefined || hasReadyAccount === true) {
-      // Ready account available - proceed to scoring
+      // Available account exists - proceed to scoring
       return {
         nextState: ApprovalState.SCORING,
         context: {
           ...context,
           reason:
             hasReadyAccount === undefined
-              ? 'Account readiness not checked - proceeding'
-              : 'Ready sandbox account available',
+              ? 'Account availability not checked - proceeding'
+              : 'Available sandbox account exists',
         },
       };
     }
 
-    // No ready accounts - delay the request
-    const estimatedTime = estimatedAccountReadyTime ?? 'unknown';
+    // No available accounts - delay the request
     return {
       nextState: ApprovalState.DELAYED,
       context: {
         ...context,
         decision: 'delayed',
         accountDelayReason: accountDelayReason ?? 'NO_READY_ACCOUNTS',
-        reason: `No sandbox accounts currently available. Estimated availability: ${estimatedTime}`,
+        reason: 'No sandbox accounts currently available',
       },
     };
   },
