@@ -128,7 +128,7 @@ export class ApproverLambda extends Construct {
       })
     );
 
-    // Grant ISB Accounts table read (GetItem/Query/Scan for account cooldown checks - Story 6.2)
+    // Grant ISB Accounts table read (GetItem/Query/Scan for account availability checks)
     // Scan required for getAvailableAccountsCount() and checkAccountReadinessNow()
     this.function.addToRolePolicy(
       new iam.PolicyStatement({

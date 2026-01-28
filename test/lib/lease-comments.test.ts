@@ -12,7 +12,7 @@ import {
   buildDelayedMessage,
   buildQueuedMessage,
   buildExpiredMessage,
-  buildCooldownDelayMessage,
+  buildNoAccountsDelayMessage,
   buildReprocessingMessage,
   formatScoreBreakdown,
   ruleResultsToBreakdown,
@@ -340,9 +340,9 @@ describe('Lease Comments Message Builders (Story 5.1)', () => {
     });
   });
 
-  describe('buildCooldownDelayMessage (Epic 6)', () => {
+  describe('buildNoAccountsDelayMessage (Epic 6)', () => {
     it('should include explanation and reference', () => {
-      const message = buildCooldownDelayMessage(testReference);
+      const message = buildNoAccountsDelayMessage(testReference);
 
       expect(message).toContain('Your request has been received');
       expect(message).toContain('All sandbox accounts are currently in use');
@@ -351,7 +351,7 @@ describe('Lease Comments Message Builders (Story 5.1)', () => {
     });
 
     it('should use neutral language (no technical jargon)', () => {
-      const message = buildCooldownDelayMessage(testReference);
+      const message = buildNoAccountsDelayMessage(testReference);
 
       // Should NOT contain technical terms
       expect(message).not.toContain('cooldown');

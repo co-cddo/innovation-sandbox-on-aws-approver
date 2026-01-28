@@ -2,8 +2,6 @@
  * Capacity Crunch Detection (Story 6.4)
  *
  * Detects when all sandbox accounts are in active use (none available).
- * ISB's Billing Separator handles the 72-hour cooldown via Quarantine OU,
- * so we only see accounts that are truly available or active.
  *
  * When capacity crunch is detected:
  * - Users see a high-demand message

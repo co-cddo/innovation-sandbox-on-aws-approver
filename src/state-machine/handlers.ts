@@ -133,12 +133,12 @@ export const createStateHandlers = (
   [ApprovalState.TIMING_CHECK]: (context: StateContext): StateHandlerResult => {
     const { isWithinBusinessHours, nextProcessingTime } = context;
 
-    // If timing hasn't been checked yet (undefined), proceed to account cooldown check
+    // If timing hasn't been checked yet (undefined), proceed to account availability check
     // This allows backwards compatibility and testing without timing setup
     if (isWithinBusinessHours === undefined || isWithinBusinessHours === true) {
-      // Within business hours - proceed to account cooldown check
+      // Within business hours - proceed to account availability check
       return {
-        nextState: ApprovalState.ACCOUNT_COOLDOWN_CHECK,
+        nextState: ApprovalState.ACCOUNT_AVAILABILITY_CHECK,
         context: {
           ...context,
           reason: isWithinBusinessHours === undefined
@@ -160,12 +160,11 @@ export const createStateHandlers = (
   },
 
   /**
-   * ACCOUNT_COOLDOWN_CHECK state handler.
+   * ACCOUNT_AVAILABILITY_CHECK state handler.
    * Checks if a sandbox account is available for assignment.
-   * ISB's Billing Separator handles the 72-hour cooldown via Quarantine OU.
    * Account availability data is pre-populated in context by the handler.
    */
-  [ApprovalState.ACCOUNT_COOLDOWN_CHECK]: (context: StateContext): StateHandlerResult => {
+  [ApprovalState.ACCOUNT_AVAILABILITY_CHECK]: (context: StateContext): StateHandlerResult => {
     const { hasReadyAccount, accountDelayReason } = context;
 
     // If account availability hasn't been checked yet (undefined), proceed to scoring

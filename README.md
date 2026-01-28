@@ -65,8 +65,6 @@ The ISB Approver listens for `LeaseRequested` events from the Innovation Sandbox
 
 ### Account Availability
 
-Sandbox account cooldown is managed by ISB's Billing Separator (72-hour quarantine via Quarantine OU). The Approver only sees accounts that are truly available.
-
 **Queue Management:**
 - Requests queue FIFO when no accounts are available
 - Users receive queue position notification
@@ -123,7 +121,7 @@ LeaseRequested Event
  (to SQS)       │
                 ▼
 ┌─────────────────────────┐
-│ ACCOUNT_COOLDOWN_CHECK  │ Account ready (48h cooldown)?
+│ ACCOUNT_AVAILABILITY_CHECK │ Account available?
 └───────────┬─────────────┘
             │
       ┌─────┴─────┐
@@ -282,8 +280,6 @@ cd cdk && npx cdk deploy ApproverStack --profile YOUR_PROFILE
 | `BEDROCK_MODEL_ID` | Bedrock model for AI analysis | `us.amazon.nova-micro-v1:0` |
 | `DELAY_QUEUE_URL` | SQS queue for delayed requests | - |
 | `DOMAIN_ALLOWLIST_BUCKET` | S3 bucket for domain list | - |
-| `ACCOUNT_COOLDOWN_HOURS` | Hours before account reuse | `48` |
-| `NEW_ACCOUNT_GRACE_MINUTES` | Grace period for new accounts | `60` |
 
 ### Rule Weight Customization
 
@@ -319,7 +315,7 @@ Detailed project documentation is available in the `_bmad-output/` directory:
 | 3 | Intelligent Scoring | 5 |
 | 4 | Timing & Queue Management | 4 |
 | 5 | Communications & Operations | 5 |
-| 6 | Account Cooldown & Capacity | 1 |
+| 6 | Account Availability | 1 |
 
 ## Integration with Innovation Sandbox
 

@@ -42,7 +42,7 @@ export class ApproverStack extends cdk.Stack {
 
     // ==========================================
     // DynamoDB Queue Position Table (Story 6.3 - FR62, FR67)
-    // Tracks queue position for FIFO processing when accounts are in cooldown
+    // Tracks queue position for FIFO processing when no accounts are available
     // ==========================================
     const queuePositionTable = new dynamodb.Table(this, 'QueuePositionTable', {
       tableName: 'ApproverQueuePosition',

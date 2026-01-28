@@ -187,13 +187,12 @@ export const buildExpiredMessage = (
  * Builds the message for a request delayed due to no available accounts.
  *
  * Used when no sandbox accounts are currently available because all accounts
- * are in use. ISB's Billing Separator handles the 72-hour cooldown via
- * Quarantine OU, so we only see truly available accounts.
+ * are in use.
  *
  * @param referenceNumber - Reference in ISB-YYYY-NNNN format
  * @returns Formatted message string
  */
-export const buildCooldownDelayMessage = (referenceNumber: string): string => {
+export const buildNoAccountsDelayMessage = (referenceNumber: string): string => {
   return [
     'Your request has been received. All sandbox accounts are currently in use.',
     'Your request will be processed automatically when an account becomes available.',
