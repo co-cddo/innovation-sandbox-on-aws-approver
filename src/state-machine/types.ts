@@ -16,8 +16,8 @@ export enum ApprovalState {
   VALIDATING = 'VALIDATING',
   /** Checking business hours and timing */
   TIMING_CHECK = 'TIMING_CHECK',
-  /** Checking if a sandbox account is ready for assignment (Epic 6) */
-  ACCOUNT_COOLDOWN_CHECK = 'ACCOUNT_COOLDOWN_CHECK',
+  /** Checking if a sandbox account is available for assignment */
+  ACCOUNT_AVAILABILITY_CHECK = 'ACCOUNT_AVAILABILITY_CHECK',
   /** Running scoring rules */
   SCORING = 'SCORING',
   /** Making approval/denial/escalation decision */
@@ -139,7 +139,7 @@ export interface StateContext {
   /** Next processing time if delayed (ISO string) */
   nextProcessingTime?: string;
 
-  // Account availability data (ISB Billing Separator handles 72hr cooldown)
+  // Account availability data (ISB Billing Separator manages account lifecycle)
   /** Whether at least one sandbox account is available for assignment */
   hasReadyAccount?: boolean;
   /** Count of accounts available for assignment */
@@ -149,7 +149,7 @@ export interface StateContext {
   /** Delay reason if no accounts available */
   accountDelayReason?: 'NO_READY_ACCOUNTS' | 'ACCOUNT_FETCH_ERROR';
 
-  // Queue position data (populated when request is delayed due to cooldown - Story 6.3)
+  // Queue position data (populated when request is delayed due to no accounts available)
   /** Queue position for FIFO processing (1-based) */
   queuePosition?: number;
   /** Total queue depth (pending requests) */

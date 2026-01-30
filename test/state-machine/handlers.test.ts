@@ -177,7 +177,7 @@ describe('VALIDATING handler', () => {
 describe('TIMING_CHECK handler', () => {
   const handlers = createStateHandlers();
 
-  it('should transition to ACCOUNT_COOLDOWN_CHECK when within business hours', () => {
+  it('should transition to ACCOUNT_AVAILABILITY_CHECK when within business hours', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
@@ -188,7 +188,7 @@ describe('TIMING_CHECK handler', () => {
 
     const result = handlers[ApprovalState.TIMING_CHECK](context);
 
-    expect(result.nextState).toBe(ApprovalState.ACCOUNT_COOLDOWN_CHECK);
+    expect(result.nextState).toBe(ApprovalState.ACCOUNT_AVAILABILITY_CHECK);
     expect(result.context.reason).toBe('Within business hours');
   });
 
@@ -227,7 +227,7 @@ describe('TIMING_CHECK handler', () => {
     expect(result.context.reason).toContain('unknown');
   });
 
-  it('should proceed to ACCOUNT_COOLDOWN_CHECK when timing not checked (undefined)', () => {
+  it('should proceed to ACCOUNT_AVAILABILITY_CHECK when timing not checked (undefined)', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
@@ -238,7 +238,7 @@ describe('TIMING_CHECK handler', () => {
 
     const result = handlers[ApprovalState.TIMING_CHECK](context);
 
-    expect(result.nextState).toBe(ApprovalState.ACCOUNT_COOLDOWN_CHECK);
+    expect(result.nextState).toBe(ApprovalState.ACCOUNT_AVAILABILITY_CHECK);
     expect(result.context.reason).toBe('Business hours not checked - proceeding');
   });
 
@@ -258,7 +258,7 @@ describe('TIMING_CHECK handler', () => {
   });
 });
 
-describe('ACCOUNT_COOLDOWN_CHECK handler (Epic 6)', () => {
+describe('ACCOUNT_AVAILABILITY_CHECK handler (Epic 6)', () => {
   const handlers = createStateHandlers();
 
   it('should transition to SCORING when hasReadyAccount is true', () => {
@@ -271,7 +271,7 @@ describe('ACCOUNT_COOLDOWN_CHECK handler (Epic 6)', () => {
       availableAccountCount: 2,
     };
 
-    const result = handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
+    const result = handlers[ApprovalState.ACCOUNT_AVAILABILITY_CHECK](context);
 
     expect(result.nextState).toBe(ApprovalState.SCORING);
     expect(result.context.reason).toContain('Available sandbox account exists');
@@ -286,7 +286,7 @@ describe('ACCOUNT_COOLDOWN_CHECK handler (Epic 6)', () => {
       // hasReadyAccount not set
     };
 
-    const result = handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
+    const result = handlers[ApprovalState.ACCOUNT_AVAILABILITY_CHECK](context);
 
     expect(result.nextState).toBe(ApprovalState.SCORING);
     expect(result.context.reason).toContain('Account availability not checked');
@@ -303,7 +303,7 @@ describe('ACCOUNT_COOLDOWN_CHECK handler (Epic 6)', () => {
       activeAccountCount: 3,
     };
 
-    const result = handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
+    const result = handlers[ApprovalState.ACCOUNT_AVAILABILITY_CHECK](context);
 
     expect(result.nextState).toBe(ApprovalState.DELAYED);
     expect(result.context.decision).toBe('delayed');
@@ -320,7 +320,7 @@ describe('ACCOUNT_COOLDOWN_CHECK handler (Epic 6)', () => {
       hasReadyAccount: false,
     };
 
-    const result = handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
+    const result = handlers[ApprovalState.ACCOUNT_AVAILABILITY_CHECK](context);
 
     expect(result.context.accountDelayReason).toBe('NO_READY_ACCOUNTS');
     expect(result.context.reason).toContain('No sandbox accounts currently available');
@@ -336,7 +336,7 @@ describe('ACCOUNT_COOLDOWN_CHECK handler (Epic 6)', () => {
     };
     const originalContext = JSON.parse(JSON.stringify(context));
 
-    handlers[ApprovalState.ACCOUNT_COOLDOWN_CHECK](context);
+    handlers[ApprovalState.ACCOUNT_AVAILABILITY_CHECK](context);
 
     expect(context).toEqual(originalContext);
   });

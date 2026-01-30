@@ -57,7 +57,7 @@ import {
   buildEscalatedMessage,
   buildDelayedMessage,
   buildExpiredMessage,
-  buildCooldownDelayMessage,
+  buildNoAccountsDelayMessage,
   buildReprocessingMessage,
   ruleResultsToBreakdown,
 } from './lib/lease-comments.js';
@@ -611,8 +611,6 @@ const resolveTemplateName = async (
 
 /**
  * Checks account availability by querying ISB Lambda.
- * ISB's Billing Separator handles the 72-hour cooldown via Quarantine OU,
- * so we only see accounts that are truly available.
  *
  * Returns a "proceed" result on failure (pessimistic: let scoring decide).
  */
@@ -644,7 +642,6 @@ const checkAccountReadinessNow = async (): Promise<{
     }
 
     // Count Available vs Active accounts
-    // ISB's Billing Separator handles cooldown - Available means truly available
     const availableAccounts = accountsResult.accounts.filter((a) => a.status === 'Available');
     const activeAccounts = accountsResult.accounts.filter((a) => a.status === 'Active');
 
@@ -768,7 +765,7 @@ const prepareContext = (
     isWithinBusinessHours: businessHoursResult.isWithinBusinessHours,
     isEndOfWindow: businessHoursResult.isEndOfWindow,
     nextProcessingTime: businessHoursResult.nextProcessingTime,
-    // Account availability data (ISB Billing Separator handles cooldown)
+    // Account availability data
     hasReadyAccount: accountReadinessCheck.hasReadyAccount,
     availableAccountCount: accountReadinessCheck.availableAccountCount,
     activeAccountCount: accountReadinessCheck.activeAccountCount,
@@ -1089,7 +1086,7 @@ const processDelayQueue = async (
     };
   }
 
-  // Check account readiness (Epic 6 - use actual account cooldown check)
+  // Check account availability
   const accountReadiness = await checkAccountReadinessNow();
   if (!accountReadiness.hasReadyAccount) {
     logger.info('No ready accounts available - skipping queue processing', {
@@ -1382,7 +1379,7 @@ export const handler = async (
     // Check business hours first
     const businessHoursResult = await checkBusinessHoursNow();
 
-    // Check account readiness (Epic 6 - account cooldown)
+    // Check account availability
     const accountReadinessCheck = await checkAccountReadinessNow();
 
     // Query user and org history before running state machine
@@ -1626,7 +1623,7 @@ export const handler = async (
             queueDepth = depthResult.queueDepth;
           }
 
-          // Add to queue position table (no estimated fulfillment time - ISB handles cooldown)
+          // Add to queue position table
           const addResult = await addToQueue(dynamoDBClient, queuePositionConfig, {
             leaseId,
           });
@@ -1752,8 +1749,8 @@ export const handler = async (
       let delayedMessage: string;
 
       if (isNoAccountsDelay) {
-        // No accounts available - use simple cooldown message
-        delayedMessage = buildCooldownDelayMessage(referenceNumber);
+        // No accounts available
+        delayedMessage = buildNoAccountsDelayMessage(referenceNumber);
       } else {
         // Business hours delay
         delayedMessage = buildDelayedMessage(referenceNumber);

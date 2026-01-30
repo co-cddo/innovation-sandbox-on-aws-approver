@@ -4,9 +4,6 @@
  * Manages queue position in DynamoDB for FIFO processing when
  * no sandbox accounts are available.
  *
- * ISB's Billing Separator handles the 72-hour cooldown via Quarantine OU,
- * so we only track queue position (not estimated fulfillment time).
- *
  * Uses:
  * - DynamoDB for persistence (survives Lambda cold starts)
  * - GSI on positionStatus+position for FIFO ordering

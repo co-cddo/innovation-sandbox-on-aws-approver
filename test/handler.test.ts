@@ -159,7 +159,7 @@ const mockReadyAccount = {
   status: 'Available' as const,
   meta: {
     createdTime: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(), // 48hr ago
-    lastEditTime: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), // 25hr ago (past cooldown)
+    lastEditTime: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), // 25hr ago
   },
 };
 const mockGetAccounts = vi.fn().mockResolvedValue({
@@ -2914,7 +2914,7 @@ describe('handler', () => {
       );
     });
 
-    it('should handle account cooldown delay and add to queue position table', async () => {
+    it('should handle no-accounts-available delay and add to queue position table', async () => {
       setSQSService(mockSQSService);
 
       const mockOrchestrator: StateMachineOrchestrator = {
@@ -3023,7 +3023,7 @@ describe('handler', () => {
       );
     });
 
-    it('should use cooldown delay message for account cooldown without queue estimate', async () => {
+    it('should use delay message when no accounts available', async () => {
       setSQSService(mockSQSService);
 
       const mockOrchestrator: StateMachineOrchestrator = {
@@ -3133,7 +3133,7 @@ describe('handler', () => {
       );
     });
 
-    it('should use cooldown delay message when queue estimate is not available (line 1778)', async () => {
+    it('should use delay message when queue tracking fails', async () => {
       setSQSService(mockSQSService);
 
       // addToQueue succeeds
@@ -3166,7 +3166,7 @@ describe('handler', () => {
       const event = createValidLeaseRequestedEvent();
       const result = await handler(event, mockContext);
 
-      // Should succeed with cooldown delay message path
+      // Should succeed with no-accounts delay message path
       expect(result.statusCode).toBe(200);
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Request sent to delay queue',

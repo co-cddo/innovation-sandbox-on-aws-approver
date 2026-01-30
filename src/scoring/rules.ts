@@ -9,7 +9,7 @@ import type { RuleId, ScoringRuleFn, LeaseHistoryRecord } from './types.js';
 import { isWithinDays } from '../services/dynamodb.js';
 
 /**
- * One hour in milliseconds for cooldown and rate limit calculations
+ * One hour in milliseconds for rate limit calculations
  */
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
