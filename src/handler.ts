@@ -938,8 +938,10 @@ const processDelayedMessage = async (
     // This will go through the full scoring and approval flow
     const result = await handler(event, context);
 
-    if (result.statusCode === 200) {
+    if (result.statusCode === 200 || result.statusCode === 202) {
       // Success - delete the message
+      // 200 = processed normally (approved/denied/escalated/already-processed)
+      // 202 = TOCTOU re-queued (a fresh replacement message was already created)
       /* c8 ignore start -- sqsService verified before processDelayedMessage is called */
       if (!sqsService) {
         logger.error('SQS service not available for message deletion');
@@ -960,11 +962,12 @@ const processDelayedMessage = async (
       logger.info('Delayed message processed and deleted', {
         leaseId: leaseId.uuid,
         userEmail: leaseId.userEmail,
+        resultStatusCode: result.statusCode,
       });
       return true;
     }
 
-    // Processing returned non-200 - leave message in queue
+    // Processing returned non-success - leave message in queue
     logger.warn('Delayed message processing returned error', {
       leaseId: leaseId.uuid,
       statusCode: result.statusCode,
@@ -1109,27 +1112,6 @@ const processDelayQueue = async (
     };
   }
 
-  // Story 6.3: Get oldest pending request from DynamoDB queue position table (FIFO)
-  let oldestLeaseId: { userEmail: string; uuid: string } | undefined;
-  try {
-    const oldestResult = await getOldestPending(dynamoDBClient, queuePositionConfig);
-    if (oldestResult.success && oldestResult.record) {
-      oldestLeaseId = keyToLeaseId(oldestResult.record.leaseId);
-      logger.info('Found oldest pending request for FIFO processing', {
-        leaseId: oldestLeaseId.uuid,
-        userEmail: oldestLeaseId.userEmail,
-        position: oldestResult.record.position,
-        queuedAt: oldestResult.record.queuedAt,
-        triggerType,
-      });
-    }
-  } catch (error) {
-    logger.warn('Failed to get oldest pending from queue position table - falling back to SQS order', {
-      error: error instanceof Error ? error.message : String(error),
-      triggerType,
-    });
-  }
-
   // Log queue depth before processing (AC4)
   let depthBefore = 0;
   const depthBeforeResult = await sqsService.getQueueDepth();
@@ -1141,76 +1123,117 @@ const processDelayQueue = async (
     });
   }
 
-  // Receive oldest message from queue
-  const receiveResult = await sqsService.receiveMessages(1, 300);
-  if (!receiveResult.success) {
-    logger.error('Failed to receive messages from queue', {
-      error: receiveResult.error,
-      triggerType,
-    });
-    return {
-      statusCode: 500,
-      body: `Failed to receive messages: ${receiveResult.error}`,
-    };
-  }
-
-  if (receiveResult.messages.length === 0) {
-    // No messages in SQS but might have stale entries in DynamoDB - clean up
-    if (oldestLeaseId) {
-      logger.warn('DynamoDB queue has entries but SQS is empty - cleaning up', {
-        leaseId: oldestLeaseId.uuid,
-      });
-      await removeFromQueue(dynamoDBClient, queuePositionConfig, oldestLeaseId);
-    }
-    logger.info('No messages in delay queue', {
-      triggerType,
-    });
-    return {
-      statusCode: 200,
-      body: 'No messages in queue',
-    };
-  }
-
-  // Process the oldest message (messages are already sorted by SentTimestamp)
-  const message = receiveResult.messages[0]!;
-
-  // Get bank holidays for expiry check
+  // Get bank holidays once for expiry checks across all messages
   const bankHolidays = await bankHolidayService.getBankHolidays();
 
-  // Check if the message has expired (> 5 business days in queue)
-  const queuedAt = new Date(message.body.receivedAt);
-  const isExpired = isQueueExpired(queuedAt, queueExpiryDays, bankHolidays);
+  // Process multiple messages per invocation to drain the queue faster.
+  // Stop when: no more messages, time running low, or max iterations reached.
+  const MIN_REMAINING_MS = 8000; // Reserve 8s for cleanup and response
+  let totalProcessed = 0;
+  let totalExpired = 0;
+  let totalFailed = 0;
 
-  let success: boolean;
-  let action: string;
-
-  if (isExpired) {
-    // Message has expired - expire it without processing
-    success = await processExpiredMessage(message);
-    action = 'expired';
-  } else {
-    // Message is still valid - process it
-    success = await processDelayedMessage(message, context);
-    action = 'processed';
-  }
-
-  // Story 6.3: Remove from DynamoDB queue position table if successful
-  if (success) {
-    const processedLeaseId = message.body.leaseId;
+  while (context.getRemainingTimeInMillis() > MIN_REMAINING_MS) {
+    // Story 6.3: Get oldest pending request from DynamoDB queue position table (FIFO)
+    let oldestLeaseId: { userEmail: string; uuid: string } | undefined;
     try {
-      await removeFromQueue(dynamoDBClient, queuePositionConfig, processedLeaseId);
-      logger.info('Removed processed request from queue position table', {
-        leaseId: processedLeaseId.uuid,
-        action,
-      });
+      const oldestResult = await getOldestPending(dynamoDBClient, queuePositionConfig);
+      if (oldestResult.success && oldestResult.record) {
+        oldestLeaseId = keyToLeaseId(oldestResult.record.leaseId);
+        if (totalProcessed === 0) {
+          logger.info('Found oldest pending request for FIFO processing', {
+            leaseId: oldestLeaseId.uuid,
+            userEmail: oldestLeaseId.userEmail,
+            position: oldestResult.record.position,
+            queuedAt: oldestResult.record.queuedAt,
+            triggerType,
+          });
+        }
+      }
     } catch (error) {
-      // Don't fail if cleanup fails - message is already processed
-      logger.warn('Failed to remove from queue position table', {
-        leaseId: processedLeaseId.uuid,
+      logger.warn('Failed to get oldest pending from queue position table - falling back to SQS order', {
         error: error instanceof Error ? error.message : String(error),
+        triggerType,
       });
     }
+
+    // Receive next message from queue
+    const receiveResult = await sqsService.receiveMessages(1, 300);
+    if (!receiveResult.success) {
+      logger.error('Failed to receive messages from queue', {
+        error: receiveResult.error,
+        triggerType,
+      });
+      // If no messages processed yet, propagate the error
+      if (totalProcessed + totalExpired === 0) {
+        return {
+          statusCode: 500,
+          body: `Failed to receive messages: ${receiveResult.error}`,
+        };
+      }
+      break;
+    }
+
+    if (receiveResult.messages.length === 0) {
+      // No messages in SQS but might have stale entries in DynamoDB - clean up
+      if (oldestLeaseId) {
+        logger.warn('DynamoDB queue has entries but SQS is empty - cleaning up', {
+          leaseId: oldestLeaseId.uuid,
+        });
+        await removeFromQueue(dynamoDBClient, queuePositionConfig, oldestLeaseId);
+      }
+      if (totalProcessed === 0) {
+        logger.info('No messages in delay queue', { triggerType });
+      }
+      break;
+    }
+
+    // Process the oldest message (messages are already sorted by SentTimestamp)
+    const message = receiveResult.messages[0]!;
+
+    // Check if the message has expired (> 5 business days in queue)
+    const queuedAt = new Date(message.body.receivedAt);
+    const isExpired = isQueueExpired(queuedAt, queueExpiryDays, bankHolidays);
+
+    let success: boolean;
+    let action: string;
+
+    if (isExpired) {
+      success = await processExpiredMessage(message);
+      action = 'expired';
+    } else {
+      success = await processDelayedMessage(message, context);
+      action = 'processed';
+    }
+
+    // Story 6.3: Remove from DynamoDB queue position table if successful
+    if (success) {
+      const processedLeaseId = message.body.leaseId;
+      try {
+        await removeFromQueue(dynamoDBClient, queuePositionConfig, processedLeaseId);
+        logger.info('Removed processed request from queue position table', {
+          leaseId: processedLeaseId.uuid,
+          action,
+        });
+      } catch (error) {
+        logger.warn('Failed to remove from queue position table', {
+          leaseId: processedLeaseId.uuid,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (!success) {
+      totalFailed++;
+      break; // Stop on processing failure to avoid cascading errors
+    } else if (action === 'expired') {
+      totalExpired++;
+    } else {
+      totalProcessed++;
+    }
   }
+
+  const totalHandled = totalProcessed + totalExpired;
 
   // Log queue depth after processing (AC4)
   const depthAfterResult = await sqsService.getQueueDepth();
@@ -1218,22 +1241,30 @@ const processDelayQueue = async (
     logger.info('Queue depth after processing', {
       approximateNumberOfMessages: depthAfterResult.approximateNumberOfMessages,
       depthBefore,
-      action,
-      success: success ? 1 : 0,
+      totalProcessed,
+      totalExpired,
+      totalFailed,
       triggerType,
     });
   }
 
-  if (action === 'expired') {
+  if (totalHandled === 0 && totalFailed === 0) {
     return {
       statusCode: 200,
-      body: success ? 'Expired 1 stale message from queue' : 'Failed to expire stale message',
+      body: 'No messages in queue',
+    };
+  }
+
+  if (totalFailed > 0 && totalHandled === 0) {
+    return {
+      statusCode: 200,
+      body: 'Message processing failed - will retry',
     };
   }
 
   return {
     statusCode: 200,
-    body: success ? 'Processed 1 message from queue' : 'Message processing failed - will retry',
+    body: `Processed ${totalHandled} message${totalHandled !== 1 ? 's' : ''} from queue (${totalProcessed} processed, ${totalExpired} expired${totalFailed > 0 ? `, ${totalFailed} failed` : ''})`,
   };
 };
 
@@ -1466,11 +1497,40 @@ export const handler = async (
       if (!approvalResult.success) {
         // Story 6.2 AC8: TOCTOU race condition detection
         // ISB may reject approval if account is no longer available (race condition)
+        // ISB also returns 409 when the lease is no longer in PendingApproval state
+        // (e.g., already approved/denied/expired) - this is a permanent failure, not transient
+        const errorLower = approvalResult.error?.toLowerCase() ?? '';
+
+        // Check for "already processed" FIRST (must be 409 + specific message)
+        // ISB messages: "Only leases in a pending state can be approved/denied."
+        //               "Lease already approved", "Lease already denied"
+        const isLeaseAlreadyProcessed =
+          approvalResult.statusCode === 409 &&
+          (errorLower.includes('pending state') ||
+           errorLower.includes('already approved') ||
+           errorLower.includes('already denied'));
+
+        if (isLeaseAlreadyProcessed) {
+          logger.info('Lease no longer in pending state - treating as already processed', {
+            leaseId: leaseId.uuid,
+            userEmail: leaseId.userEmail,
+            statusCode: approvalResult.statusCode,
+            error: approvalResult.error,
+          });
+
+          return {
+            statusCode: 200,
+            body: 'Lease already processed - no action needed',
+          };
+        }
+
+        // TOCTOU: account became unavailable between pre-check and approval attempt
+        // Only match specific "no account" messages - do NOT use bare statusCode === 409
+        // as a catch-all, since unrecognized 409s should escalate (fail-closed)
         const isAccountUnavailable =
-          approvalResult.error?.includes('no available account') ||
-          approvalResult.error?.includes('account not available') ||
-          approvalResult.error?.includes('no sandbox available') ||
-          approvalResult.statusCode === 409; // Conflict status
+          errorLower.includes('no available account') ||
+          errorLower.includes('account not available') ||
+          errorLower.includes('no sandbox available');
 
         if (isAccountUnavailable && sqsService) {
           logger.warn('TOCTOU race condition detected - re-queuing request', {
