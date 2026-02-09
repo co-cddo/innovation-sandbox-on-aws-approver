@@ -139,7 +139,13 @@ export type LeaseDeniedDetail = z.infer<typeof LeaseDeniedDetailSchema>;
 /**
  * Account status from ISB /api/accounts endpoint
  */
-export const AccountStatusSchema = z.enum(['Available', 'Active']);
+export const AccountStatusSchema = z.enum([
+  'Available',
+  'Active',
+  'Frozen',
+  'CleanUp',
+  'Quarantine',
+]);
 
 export type AccountStatus = z.infer<typeof AccountStatusSchema>;
 

@@ -192,6 +192,10 @@ const mockSQSService: SQSService = {
 };
 
 describe('handler', () => {
+  // Simulate decreasing remaining time for Lambda context.
+  // Each call reduces by 15s so existing single-message tests process exactly 1 message
+  // before hitting the 8s threshold (30000 → 15000 → 0).
+  let _mockRemainingMs = 30000;
   const mockContext: Context = {
     callbackWaitsForEmptyEventLoop: false,
     functionName: 'test-function',
@@ -201,7 +205,7 @@ describe('handler', () => {
     awsRequestId: 'test-request-id',
     logGroupName: '/aws/lambda/test',
     logStreamName: '2024/01/01/[$LATEST]abc123',
-    getRemainingTimeInMillis: () => 30000,
+    getRemainingTimeInMillis: () => (_mockRemainingMs -= 15000),
     done: vi.fn(),
     fail: vi.fn(),
     succeed: vi.fn(),
@@ -236,6 +240,7 @@ describe('handler', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    _mockRemainingMs = 30000; // Reset Lambda timeout simulation
     // Mock time to be within business hours (Tuesday 10am UK time)
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-07T10:00:00Z')); // Tuesday 10am UTC = 10am UK (winter)
@@ -462,6 +467,84 @@ describe('handler', () => {
       );
       // Should NOT escalate
       expect(mockEmitLeaseEscalated).not.toHaveBeenCalled();
+    });
+
+    it('should treat "lease not in pending state" 409 as already-processed (not TOCTOU)', async () => {
+      const event = createValidLeaseRequestedEvent();
+      // ISB rejects because lease is no longer pending (e.g., already approved/denied)
+      mockApproveLease.mockResolvedValueOnce({
+        success: false,
+        statusCode: 409,
+        error: 'Only leases in a pending state can be approved/denied.',
+      });
+
+      const result = await handler(event, mockContext);
+
+      // Should return 200 (success) so processDelayedMessage deletes the SQS message
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Lease already processed - no action needed');
+      // Should NOT re-queue
+      expect(mockSendDelayedRequest).not.toHaveBeenCalled();
+      // Should NOT escalate
+      expect(mockEmitLeaseEscalated).not.toHaveBeenCalled();
+      // Should log as info (not warn/error)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Lease no longer in pending state - treating as already processed',
+        expect.objectContaining({
+          leaseId: '123e4567-e89b-12d3-a456-426614174000',
+          statusCode: 409,
+          error: 'Only leases in a pending state can be approved/denied.',
+        })
+      );
+    });
+
+    it('should treat "lease already approved" 409 as already-processed (not TOCTOU)', async () => {
+      const event = createValidLeaseRequestedEvent();
+      mockApproveLease.mockResolvedValueOnce({
+        success: false,
+        statusCode: 409,
+        error: 'Lease already approved',
+      });
+
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Lease already processed - no action needed');
+      expect(mockSendDelayedRequest).not.toHaveBeenCalled();
+      expect(mockEmitLeaseEscalated).not.toHaveBeenCalled();
+    });
+
+    it('should treat "lease already denied" 409 as already-processed (not TOCTOU)', async () => {
+      const event = createValidLeaseRequestedEvent();
+      mockApproveLease.mockResolvedValueOnce({
+        success: false,
+        statusCode: 409,
+        error: 'Lease already denied',
+      });
+
+      const result = await handler(event, mockContext);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Lease already processed - no action needed');
+      expect(mockSendDelayedRequest).not.toHaveBeenCalled();
+      expect(mockEmitLeaseEscalated).not.toHaveBeenCalled();
+    });
+
+    it('should escalate unrecognized 409 errors instead of re-queuing (fail-closed)', async () => {
+      const event = createValidLeaseRequestedEvent();
+      // A 409 error that doesn't match any known pattern should escalate, not re-queue
+      mockApproveLease.mockResolvedValueOnce({
+        success: false,
+        statusCode: 409,
+        error: 'Unexpected conflict in lease provisioning',
+      });
+
+      // Should throw ProcessingError (escalation path)
+      await expect(handler(event, mockContext)).rejects.toThrow('Unexpected conflict in lease provisioning');
+      // Should NOT re-queue (not a known TOCTOU pattern)
+      expect(mockSendDelayedRequest).not.toHaveBeenCalled();
+      // Should escalate for manual investigation (fail-closed)
+      expect(mockEmitLeaseEscalated).toHaveBeenCalled();
     });
   });
 
@@ -828,7 +911,7 @@ describe('handler', () => {
       const result = await handler(event, mockContext);
 
       expect(result.statusCode).toBe(200);
-      expect(result.body).toBe('Processed 1 message from queue');
+      expect(result.body).toBe('Processed 1 message from queue (1 processed, 0 expired)');
       expect(mockDeleteMessage).toHaveBeenCalledWith('receipt-handle-123');
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Delayed message processed and deleted',
@@ -926,7 +1009,7 @@ describe('handler', () => {
 
       // Should still succeed even though removeFromQueue failed
       expect(result.statusCode).toBe(200);
-      expect(result.body).toBe('Processed 1 message from queue');
+      expect(result.body).toBe('Processed 1 message from queue (1 processed, 0 expired)');
       expect(mockLogger.warn).toHaveBeenCalledWith(
         'Failed to remove from queue position table',
         expect.objectContaining({
@@ -1026,6 +1109,198 @@ describe('handler', () => {
           leaseId: delayedLeaseUuid,
         })
       );
+    });
+
+    it('should delete original SQS message when TOCTOU re-queue returns 202', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const delayedLeaseUuid = '88888888-8888-8888-8888-888888888888';
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: delayedLeaseUuid,
+            userEmail: 'toctou-requeue@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 0,
+            decision: 'approved',
+            approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      // ISB rejects with 409 "no available account" -> TOCTOU re-queue (returns 202)
+      mockApproveLease.mockResolvedValueOnce({
+        success: false,
+        statusCode: 409,
+        error: 'no available account',
+      });
+
+      const recentDate = new Date();
+      recentDate.setHours(recentDate.getHours() - 2);
+      const recentDateISO = recentDate.toISOString();
+      const processAfterDate = new Date(recentDate);
+      processAfterDate.setHours(processAfterDate.getHours() + 1);
+      const processAfterISO = processAfterDate.toISOString();
+
+      const originalEvent = {
+        version: '0',
+        id: 'original-event-id-toctou',
+        'detail-type': 'LeaseRequested',
+        source: 'innovation-sandbox',
+        account: '123456789012',
+        time: recentDateISO,
+        region: 'us-east-1',
+        resources: [],
+        detail: {
+          leaseId: { userEmail: 'toctou-requeue@example.gov.uk', uuid: delayedLeaseUuid },
+          templateId: 'web-hosting',
+          budgetAmount: 50,
+          leaseDurationHours: 48,
+          requiresManualApproval: false,
+        },
+      };
+
+      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: true });
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({
+          success: true,
+          messages: [
+            {
+              messageId: 'msg-toctou-requeue',
+              receiptHandle: 'receipt-handle-toctou',
+              body: {
+                leaseId: { userEmail: 'toctou-requeue@example.gov.uk', uuid: delayedLeaseUuid },
+                originalEvent,
+                receivedAt: recentDateISO,
+                processAfter: processAfterISO,
+                reason: 'Outside business hours',
+              },
+              sentTimestamp: recentDate.getTime(),
+            },
+          ],
+        }),
+        deleteMessage: mockDeleteMessage,
+        getQueueDepth: vi.fn()
+          .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 })
+          .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      // TOCTOU returns 202 which is now treated as success (original should be deleted)
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Processed 1 message from queue (1 processed, 0 expired)');
+      // The original message should be deleted since TOCTOU already created a replacement
+      expect(mockDeleteMessage).toHaveBeenCalledWith('receipt-handle-toctou');
+    });
+
+    it('should delete original SQS message when lease is already processed (not pending)', async () => {
+      const mockDynamoDBService: DynamoDBService = {
+        getUserLeaseHistory: vi.fn().mockResolvedValue([]),
+        getOrgLeaseHistory: vi.fn().mockResolvedValue([]),
+        getAvailableAccountsCount: vi.fn().mockResolvedValue({ success: true, count: 5 }),
+        updateLeaseComments: vi.fn().mockResolvedValue({ success: true }),
+      };
+      setDynamoDBService(mockDynamoDBService);
+
+      const delayedLeaseUuid = '99999999-9999-9999-9999-999999999999';
+      const mockOrchestrator: StateMachineOrchestrator = {
+        run: vi.fn().mockReturnValue({
+          finalState: ApprovalState.APPROVED,
+          success: true,
+          context: {
+            ...createInitialContext(),
+            leaseId: delayedLeaseUuid,
+            userEmail: 'already-processed@example.gov.uk',
+            templateId: 'web-hosting',
+            score: 0,
+            decision: 'approved',
+            approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
+          },
+        }),
+      };
+      setOrchestrator(mockOrchestrator);
+
+      // ISB rejects because lease already approved (not in pending state)
+      mockApproveLease.mockResolvedValueOnce({
+        success: false,
+        statusCode: 409,
+        error: 'Only leases in a pending state can be approved/denied.',
+      });
+
+      const recentDate = new Date();
+      recentDate.setHours(recentDate.getHours() - 2);
+      const recentDateISO = recentDate.toISOString();
+      const processAfterDate = new Date(recentDate);
+      processAfterDate.setHours(processAfterDate.getHours() + 1);
+      const processAfterISO = processAfterDate.toISOString();
+
+      const originalEvent = {
+        version: '0',
+        id: 'original-event-id-already-processed',
+        'detail-type': 'LeaseRequested',
+        source: 'innovation-sandbox',
+        account: '123456789012',
+        time: recentDateISO,
+        region: 'us-east-1',
+        resources: [],
+        detail: {
+          leaseId: { userEmail: 'already-processed@example.gov.uk', uuid: delayedLeaseUuid },
+          templateId: 'web-hosting',
+          budgetAmount: 50,
+          leaseDurationHours: 48,
+          requiresManualApproval: false,
+        },
+      };
+
+      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: true });
+      const mockSQSService = createMockSQSService({
+        receiveMessages: vi.fn().mockResolvedValue({
+          success: true,
+          messages: [
+            {
+              messageId: 'msg-already-processed',
+              receiptHandle: 'receipt-handle-already',
+              body: {
+                leaseId: { userEmail: 'already-processed@example.gov.uk', uuid: delayedLeaseUuid },
+                originalEvent,
+                receivedAt: recentDateISO,
+                processAfter: processAfterISO,
+                reason: 'Outside business hours',
+              },
+              sentTimestamp: recentDate.getTime(),
+            },
+          ],
+        }),
+        deleteMessage: mockDeleteMessage,
+        getQueueDepth: vi.fn()
+          .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 })
+          .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 0 }),
+      });
+      setSQSService(mockSQSService);
+
+      const event = createScheduledEvent();
+      const result = await handler(event, mockContext);
+
+      // Returns 200 (already-processed returns 200 from handler, processDelayedMessage deletes it)
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toBe('Processed 1 message from queue (1 processed, 0 expired)');
+      // Original message should be deleted - no infinite retry
+      expect(mockDeleteMessage).toHaveBeenCalledWith('receipt-handle-already');
+      // Should NOT have re-queued
+      expect(mockSendDelayedRequest).not.toHaveBeenCalled();
     });
 
     it('should handle exception during delayed message processing (lines 952-957)', async () => {
@@ -1249,7 +1524,7 @@ describe('handler', () => {
       const result = await handler(event, mockContext);
 
       expect(result.statusCode).toBe(200);
-      expect(result.body).toBe('Expired 1 stale message from queue');
+      expect(result.body).toBe('Processed 1 message from queue (0 processed, 1 expired)');
       expect(mockDeleteMessage).toHaveBeenCalledWith('receipt-handle-expired');
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Expired message processed and deleted',
@@ -1416,7 +1691,7 @@ describe('handler', () => {
 
       // Should return failure for expired message
       expect(result.statusCode).toBe(200);
-      expect(result.body).toBe('Failed to expire stale message');
+      expect(result.body).toBe('Message processing failed - will retry');
       // Should log the delete failure
       expect(mockLogger.error).toHaveBeenCalledWith(
         'Failed to delete expired message',
@@ -1499,7 +1774,7 @@ describe('handler', () => {
 
       // Should not crash, but should return failure
       expect(result.statusCode).toBe(200);
-      expect(result.body).toBe('Failed to expire stale message');
+      expect(result.body).toBe('Message processing failed - will retry');
       // Should log the error
       expect(mockLogger.error).toHaveBeenCalledWith(
         'Error processing expired message',
