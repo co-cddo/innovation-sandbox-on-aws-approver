@@ -10,7 +10,7 @@
  * @see https://docs.aws.amazon.com/chatbot/latest/adminguide/custom-actions.html
  */
 
-import { LambdaClient } from '@aws-sdk/client-lambda';
+import { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { createIsbLambdaService, type IsbLambdaService } from '../services/isb-lambda.js';
 import { type CustomActionResponse, decodeLeaseCompositeKey } from '../lib/slack-action-types.js';
@@ -253,7 +253,7 @@ export const getUserFriendlyErrorMessage = (
  * State for the Slack action handler factory.
  */
 interface SlackActionHandlerState {
-  lambdaClient: LambdaClient;
+  secretsManagerClient: SecretsManagerClient;
   isbLambdaService: IsbLambdaService | null;
   logger: Logger;
   config: SlackActionConfig;
@@ -267,7 +267,7 @@ interface SlackActionHandlerState {
  */
 export const createSlackActionHandler = (config: SlackActionConfig) => {
   const state: SlackActionHandlerState = {
-    lambdaClient: new LambdaClient({
+    secretsManagerClient: new SecretsManagerClient({
       region: process.env.AWS_REGION,
     }),
     isbLambdaService: null,
@@ -287,12 +287,20 @@ export const createSlackActionHandler = (config: SlackActionConfig) => {
       return state.isbLambdaService;
     }
 
-    const functionName = process.env.ISB_LEASES_LAMBDA_NAME;
-    if (!functionName) {
-      throw new Error('ISB_LEASES_LAMBDA_NAME environment variable is required');
+    const apiBaseUrl = process.env.ISB_API_BASE_URL;
+    if (!apiBaseUrl) {
+      throw new Error('ISB_API_BASE_URL environment variable is required');
     }
 
-    state.isbLambdaService = createIsbLambdaService(state.lambdaClient, { functionName });
+    const jwtSecretPath = process.env.ISB_JWT_SECRET_PATH;
+    if (!jwtSecretPath) {
+      throw new Error('ISB_JWT_SECRET_PATH environment variable is required');
+    }
+
+    state.isbLambdaService = createIsbLambdaService(state.secretsManagerClient, {
+      apiBaseUrl,
+      jwtSecretPath,
+    });
     return state.isbLambdaService;
   };
 
@@ -326,9 +334,12 @@ export const createSlackActionHandler = (config: SlackActionConfig) => {
     let decodedLeaseId: { userEmail: string; uuid: string } | undefined;
     let operatorId: string | undefined;
 
-    state.logger.info(`${config.successVerb.charAt(0).toUpperCase() + config.successVerb.slice(1).replace('ed', '')} action received`, {
-      correlationId,
-    });
+    state.logger.info(
+      `${config.successVerb.charAt(0).toUpperCase() + config.successVerb.slice(1).replace('ed', '')} action received`,
+      {
+        correlationId,
+      }
+    );
 
     try {
       // 1. Validate event structure
@@ -432,7 +443,10 @@ export const createSlackActionHandler = (config: SlackActionConfig) => {
         outcome: 'error' as ActionLogOutcome,
         error: error instanceof Error ? error.message : String(error),
         // Include lease info when available (Story 7.4.1 AC1)
-        ...(decodedLeaseId && { leaseId: decodedLeaseId.uuid, userEmail: decodedLeaseId.userEmail }),
+        ...(decodedLeaseId && {
+          leaseId: decodedLeaseId.uuid,
+          userEmail: decodedLeaseId.userEmail,
+        }),
         ...(operatorId && { operator: operatorId }),
       });
 

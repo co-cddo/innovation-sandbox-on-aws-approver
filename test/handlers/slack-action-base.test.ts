@@ -662,9 +662,8 @@ describe('Action Logging (Story 7.4.1)', () => {
 
     it('ActionLogOutcome type is correctly derived from constant', async () => {
       // This test verifies the type exists and is exported
-      const { ACTION_LOG_OUTCOMES: outcomes } = await import(
-        '../../src/handlers/slack-action-base.js'
-      );
+      const { ACTION_LOG_OUTCOMES: outcomes } =
+        await import('../../src/handlers/slack-action-base.js');
 
       // TypeScript type verification at runtime - the constant exists and is typed correctly
       type OutcomeType = (typeof outcomes)[number];
@@ -686,7 +685,14 @@ describe('Action Logging (Story 7.4.1)', () => {
     it('log entries should include leaseId, action, operator, timestamp, outcome per AC1', () => {
       // This test documents the required fields for structured JSON logs
       // Actual implementation verified via code inspection in Task 1 audit
-      const requiredFields = ['correlationId', 'action', 'outcome', 'leaseId', 'userEmail', 'operator'];
+      const requiredFields = [
+        'correlationId',
+        'action',
+        'outcome',
+        'leaseId',
+        'userEmail',
+        'operator',
+      ];
 
       // All fields should be present in the log entry structure
       // This is a documentation test - actual verification is in the implementation

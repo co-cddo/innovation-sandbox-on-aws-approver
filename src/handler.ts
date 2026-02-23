@@ -1,5 +1,5 @@
 import { EventBridgeClient } from '@aws-sdk/client-eventbridge';
-import { LambdaClient } from '@aws-sdk/client-lambda';
+import { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
@@ -20,10 +20,7 @@ import {
   createDomainAllowlistService,
   type DomainAllowlistService,
 } from './services/domain-allowlist.js';
-import {
-  createBedrockService,
-  type BedrockService,
-} from './services/bedrock.js';
+import { createBedrockService, type BedrockService } from './services/bedrock.js';
 import {
   createSQSService,
   type SQSService,
@@ -41,10 +38,7 @@ import {
   isQueueExpired,
   type BusinessHoursResult,
 } from './lib/business-hours.js';
-import {
-  createBankHolidayService,
-  type BankHolidayService,
-} from './services/bank-holidays.js';
+import { createBankHolidayService, type BankHolidayService } from './services/bank-holidays.js';
 import {
   createPersistenceLayer,
   createIdempotencyConfig,
@@ -119,19 +113,22 @@ let eventBridgeService: EventBridgeService = createEventBridgeService(
   eventBridgeConfig
 );
 
-// Lambda client for direct ISB Lambda invocation
-const lambdaClient = new LambdaClient({
+// Secrets Manager client for JWT secret retrieval
+const secretsManagerClient = new SecretsManagerClient({
   region: process.env.AWS_REGION || 'us-west-2',
 });
 
-// ISB Lambda service configuration
+// ISB API service configuration
 const isbLambdaConfig = {
-  functionName: process.env.ISB_LEASES_LAMBDA_NAME || 'ISB-LeasesLambdaFunction-ndx',
-  accountsFunctionName: process.env.ISB_ACCOUNTS_LAMBDA_NAME || 'ISB-AccountsLambdaFunction-ndx',
+  apiBaseUrl: process.env.ISB_API_BASE_URL || '',
+  jwtSecretPath: process.env.ISB_JWT_SECRET_PATH || '',
 };
 
-// Create ISB Lambda service (can be overridden in tests via dependency injection)
-let isbLambdaService: IsbLambdaService = createIsbLambdaService(lambdaClient, isbLambdaConfig);
+// Create ISB API service (can be overridden in tests via dependency injection)
+let isbLambdaService: IsbLambdaService = createIsbLambdaService(
+  secretsManagerClient,
+  isbLambdaConfig
+);
 
 // DynamoDB client for user history queries (ISB Leases table)
 const dynamoDBClient = new DynamoDBClient({
@@ -297,7 +294,7 @@ export const setIsbLambdaService = (service: IsbLambdaService): void => {
  * Resets to the default ISB Lambda service (for test cleanup).
  */
 export const resetIsbLambdaService = (): void => {
-  isbLambdaService = createIsbLambdaService(lambdaClient, isbLambdaConfig);
+  isbLambdaService = createIsbLambdaService(secretsManagerClient, isbLambdaConfig);
 };
 
 /**
@@ -319,9 +316,7 @@ export const resetDynamoDBService = (): void => {
 /**
  * Allows overriding the domain allowlist service for testing purposes.
  */
-export const setDomainAllowlistService = (
-  service: DomainAllowlistService | undefined
-): void => {
+export const setDomainAllowlistService = (service: DomainAllowlistService | undefined): void => {
   domainAllowlistService = service;
 };
 
@@ -701,7 +696,7 @@ const checkBusinessHoursNow = async (): Promise<BusinessHoursResult> => {
     }
 
     return result;
-  /* c8 ignore start -- defensive: businessHoursChecker uses mock service in tests */
+    /* c8 ignore start -- defensive: businessHoursChecker uses mock service in tests */
   } catch (error) {
     // On error, default to within business hours to avoid blocking requests
     logger.error('Failed to check business hours - defaulting to within', {
@@ -745,8 +740,14 @@ const prepareContext = (
   aiAnalysis?: AIAnalysisResult
 ): StateContext => {
   const { detail } = event;
-  const { leaseId, templateId, budgetAmount, leaseDurationHours, requiresManualApproval, comments } =
-    detail;
+  const {
+    leaseId,
+    templateId,
+    budgetAmount,
+    leaseDurationHours,
+    requiresManualApproval,
+    comments,
+  } = detail;
 
   return {
     ...createInitialContext(),
@@ -857,9 +858,7 @@ const updateLeaseComments = async (
  *
  * @param params - SNS escalation notification parameters
  */
-const notifySNSEscalation = async (
-  params: SNSEscalationParams
-): Promise<void> => {
+const notifySNSEscalation = async (params: SNSEscalationParams): Promise<void> => {
   // If SNS service is already set (e.g., via dependency injection for testing),
   // skip configuration checks and use it directly
   /* c8 ignore start -- lazy initialization guards: tests inject snsNotificationService directly */
@@ -989,9 +988,7 @@ const processDelayedMessage = async (
  * Emits a LeaseDenied event and updates lease comments, then deletes the message.
  * Returns true if expiry was successful, false otherwise.
  */
-const processExpiredMessage = async (
-  message: ReceivedMessage
-): Promise<boolean> => {
+const processExpiredMessage = async (message: ReceivedMessage): Promise<boolean> => {
   const { body, receiptHandle } = message;
   const { leaseId, receivedAt } = body;
   const currentTime = new Date().toISOString();
@@ -1151,10 +1148,13 @@ const processDelayQueue = async (
         }
       }
     } catch (error) {
-      logger.warn('Failed to get oldest pending from queue position table - falling back to SQS order', {
-        error: error instanceof Error ? error.message : String(error),
-        triggerType,
-      });
+      logger.warn(
+        'Failed to get oldest pending from queue position table - falling back to SQS order',
+        {
+          error: error instanceof Error ? error.message : String(error),
+          triggerType,
+        }
+      );
     }
 
     // Receive next message from queue
@@ -1346,7 +1346,9 @@ export const handler = async (
   }
 
   // Debug: Log raw event detail fields to understand what ISB is sending
-  const rawDetail = (event as unknown as Record<string, unknown>).detail as Record<string, unknown> | undefined;
+  const rawDetail = (event as unknown as Record<string, unknown>).detail as
+    | Record<string, unknown>
+    | undefined;
   if (rawDetail) {
     logger.info('Raw event detail fields', {
       keys: Object.keys(rawDetail),
@@ -1507,8 +1509,8 @@ export const handler = async (
         const isLeaseAlreadyProcessed =
           approvalResult.statusCode === 409 &&
           (errorLower.includes('pending state') ||
-           errorLower.includes('already approved') ||
-           errorLower.includes('already denied'));
+            errorLower.includes('already approved') ||
+            errorLower.includes('already denied'));
 
         if (isLeaseAlreadyProcessed) {
           logger.info('Lease no longer in pending state - treating as already processed', {
@@ -1624,11 +1626,7 @@ export const handler = async (
       // Update lease comments (Story 5.1 AC4)
       const referenceNumber = generateReferenceNumber(leaseId.uuid);
       const scoreBreakdown = ruleResultsToBreakdown(result.context.scoreBreakdown ?? []);
-      const escalatedMessage = buildEscalatedMessage(
-        score,
-        scoreBreakdown,
-        referenceNumber
-      );
+      const escalatedMessage = buildEscalatedMessage(score, scoreBreakdown, referenceNumber);
       await updateLeaseComments(leaseId, escalatedMessage);
 
       // Send SNS notification for Amazon Q Developer (Story 7.1.1, enhanced in 7.1.3)

@@ -16,7 +16,8 @@ describe('Slack Deny Handler', () => {
 
   beforeAll(() => {
     // Set required environment variables for handler
-    process.env.ISB_LEASES_LAMBDA_NAME = 'ISB-LeasesLambdaFunction-test';
+    process.env.ISB_API_BASE_URL = 'https://isb-api.example.com';
+    process.env.ISB_JWT_SECRET_PATH = '/approver/isb-jwt-secret';
     process.env.APPROVER_EMAIL = 'test-approver@dsit.gov.uk';
   });
 
@@ -566,22 +567,22 @@ describe('Slack Deny Handler', () => {
       expect(result.message).toContain('Unexpected error');
     });
 
-    it('throws error when ISB_LEASES_LAMBDA_NAME is not set', async () => {
+    it('throws error when ISB_API_BASE_URL is not set', async () => {
       // Reset the service to force re-initialization
       resetIsbLambdaService();
 
-      // Temporarily remove ISB_LEASES_LAMBDA_NAME
-      const originalName = process.env.ISB_LEASES_LAMBDA_NAME;
-      delete process.env.ISB_LEASES_LAMBDA_NAME;
+      // Temporarily remove ISB_API_BASE_URL
+      const originalUrl = process.env.ISB_API_BASE_URL;
+      delete process.env.ISB_API_BASE_URL;
 
       const event = createValidEvent();
 
       const result = await handler(event);
 
       // Restore env var
-      process.env.ISB_LEASES_LAMBDA_NAME = originalName;
+      process.env.ISB_API_BASE_URL = originalUrl;
 
-      // The handler should fail because ISB_LEASES_LAMBDA_NAME is not set
+      // The handler should fail because ISB_API_BASE_URL is not set
       expect(result.status).toBe('error');
       expect(result.message).toContain('Unexpected error');
     });

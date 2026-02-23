@@ -22,7 +22,14 @@ export class ApproverLambda extends Construct {
   constructor(scope: Construct, id: string, props: ApproverLambdaProps) {
     super(scope, id);
 
-    const { config, idempotencyTableName, queuePositionTableName, delayQueueUrl, domainListBucketName, notificationTopicArn } = props;
+    const {
+      config,
+      idempotencyTableName,
+      queuePositionTableName,
+      delayQueueUrl,
+      domainListBucketName,
+      notificationTopicArn,
+    } = props;
 
     // Create explicit log group with GDPR-compliant retention (7 years)
     // Story 5.4: FR55 - GDPR compliance audit trail
@@ -56,8 +63,8 @@ export class ApproverLambda extends Construct {
         LOG_LEVEL: config.logLevel,
         RULE_WEIGHTS: config.ruleWeights,
         EVENT_BUS_NAME: config.isbEventBusName,
-        ISB_LEASES_LAMBDA_NAME: config.isbLeasesLambdaName,
-        ISB_ACCOUNTS_LAMBDA_NAME: config.isbAccountsLambdaName,
+        ISB_API_BASE_URL: config.isbApiBaseUrl,
+        ISB_JWT_SECRET_PATH: config.isbJwtSecretPath,
         // Story 7.1.1: SNS notification topic for approval notifications
         ...(notificationTopicArn && { NOTIFICATION_TOPIC_ARN: notificationTopicArn }),
       },
@@ -104,14 +111,13 @@ export class ApproverLambda extends Construct {
       })
     );
 
-    // Grant Lambda invoke permission for ISB Lambdas (leases + accounts)
+    // Grant Secrets Manager read for ISB JWT signing secret
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ['lambda:InvokeFunction'],
+        actions: ['secretsmanager:GetSecretValue'],
         resources: [
-          `arn:aws:lambda:us-west-2:${cdk.Stack.of(this).account}:function:${config.isbLeasesLambdaName}`,
-          `arn:aws:lambda:us-west-2:${cdk.Stack.of(this).account}:function:${config.isbAccountsLambdaName}`,
+          `arn:aws:secretsmanager:us-west-2:${cdk.Stack.of(this).account}:secret:${config.isbJwtSecretPath}*`,
         ],
       })
     );
@@ -120,7 +126,13 @@ export class ApproverLambda extends Construct {
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan', 'dynamodb:UpdateItem', 'dynamodb:PutItem'],
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:Query',
+          'dynamodb:Scan',
+          'dynamodb:UpdateItem',
+          'dynamodb:PutItem',
+        ],
         resources: [
           `arn:aws:dynamodb:us-west-2:${cdk.Stack.of(this).account}:table/${config.isbLeasesTableName}`,
           `arn:aws:dynamodb:us-west-2:${cdk.Stack.of(this).account}:table/${config.isbLeasesTableName}/index/*`,

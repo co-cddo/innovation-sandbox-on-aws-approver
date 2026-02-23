@@ -41,7 +41,13 @@ vi.mock('../src/lib/logger.ts', () => ({
 }));
 
 // Use vi.hoisted() for queue-position mocks (Vitest v4 compatible)
-const { mockAddToQueue, mockRemoveFromQueue, mockGetLastCapacityCrunchAlertTime, mockUpdateLastCapacityCrunchAlertTime, mockGetOldestPending } = vi.hoisted(() => ({
+const {
+  mockAddToQueue,
+  mockRemoveFromQueue,
+  mockGetLastCapacityCrunchAlertTime,
+  mockUpdateLastCapacityCrunchAlertTime,
+  mockGetOldestPending,
+} = vi.hoisted(() => ({
   mockAddToQueue: vi.fn(),
   mockRemoveFromQueue: vi.fn(),
   mockGetLastCapacityCrunchAlertTime: vi.fn(),
@@ -80,12 +86,12 @@ vi.mock('@aws-sdk/client-eventbridge', () => ({
   PutEventsCommand: class MockPutEventsCommand {},
 }));
 
-// Mock the Lambda client to prevent real AWS calls (Vitest v4 compatible)
-vi.mock('@aws-sdk/client-lambda', () => ({
-  LambdaClient: class MockLambdaClient {
-    send = vi.fn().mockResolvedValue({});
+// Mock the Secrets Manager client to prevent real AWS calls (Vitest v4 compatible)
+vi.mock('@aws-sdk/client-secrets-manager', () => ({
+  SecretsManagerClient: class MockSecretsManagerClient {
+    send = vi.fn().mockResolvedValue({ SecretString: 'test-secret' });
   },
-  InvokeCommand: class MockInvokeCommand {},
+  GetSecretValueCommand: class MockGetSecretValueCommand {},
 }));
 
 // Mock the DynamoDB client to prevent real AWS calls (Vitest v4 compatible)
@@ -180,10 +186,14 @@ const mockIsbLambdaService: IsbLambdaService = {
 };
 
 // Mock SQS service for testing (used for delay queue operations)
-const mockSendDelayedRequest = vi.fn().mockResolvedValue({ success: true, messageId: 'test-message-id' });
+const mockSendDelayedRequest = vi
+  .fn()
+  .mockResolvedValue({ success: true, messageId: 'test-message-id' });
 const mockReceiveMessages = vi.fn().mockResolvedValue({ success: true, messages: [] });
 const mockDeleteMessage = vi.fn().mockResolvedValue({ success: true });
-const mockGetQueueDepth = vi.fn().mockResolvedValue({ success: true, approximateNumberOfMessages: 0 });
+const mockGetQueueDepth = vi
+  .fn()
+  .mockResolvedValue({ success: true, approximateNumberOfMessages: 0 });
 const mockSQSService: SQSService = {
   sendDelayedRequest: mockSendDelayedRequest,
   receiveMessages: mockReceiveMessages,
@@ -412,7 +422,11 @@ describe('handler', () => {
 
     it('should throw ProcessingError when ISB Lambda approval fails (fail-closed)', async () => {
       const event = createValidLeaseRequestedEvent();
-      mockApproveLease.mockResolvedValueOnce({ success: false, statusCode: 500, error: 'ISB unavailable' });
+      mockApproveLease.mockResolvedValueOnce({
+        success: false,
+        statusCode: 500,
+        error: 'ISB unavailable',
+      });
 
       await expect(handler(event, mockContext)).rejects.toThrow('ISB unavailable');
 
@@ -540,7 +554,9 @@ describe('handler', () => {
       });
 
       // Should throw ProcessingError (escalation path)
-      await expect(handler(event, mockContext)).rejects.toThrow('Unexpected conflict in lease provisioning');
+      await expect(handler(event, mockContext)).rejects.toThrow(
+        'Unexpected conflict in lease provisioning'
+      );
       // Should NOT re-queue (not a known TOCTOU pattern)
       expect(mockSendDelayedRequest).not.toHaveBeenCalled();
       // Should escalate for manual investigation (fail-closed)
@@ -901,7 +917,8 @@ describe('handler', () => {
           ],
         }),
         deleteMessage: mockDeleteMessage,
-        getQueueDepth: vi.fn()
+        getQueueDepth: vi
+          .fn()
           .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 })
           .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 0 }),
       });
@@ -998,7 +1015,8 @@ describe('handler', () => {
           ],
         }),
         deleteMessage: mockDeleteMessage,
-        getQueueDepth: vi.fn()
+        getQueueDepth: vi
+          .fn()
           .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 })
           .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 0 }),
       });
@@ -1073,7 +1091,9 @@ describe('handler', () => {
       };
 
       // deleteMessage returns failure
-      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: false, error: 'SQS delete failed' });
+      const mockDeleteMessage = vi
+        .fn()
+        .mockResolvedValue({ success: false, error: 'SQS delete failed' });
       const mockSQSService = createMockSQSService({
         receiveMessages: vi.fn().mockResolvedValue({
           success: true,
@@ -1082,7 +1102,10 @@ describe('handler', () => {
               messageId: 'msg-delete-fail-delayed',
               receiptHandle: 'receipt-handle-delete-fail',
               body: {
-                leaseId: { userEmail: 'delete-fail-delayed@example.gov.uk', uuid: delayedLeaseUuid },
+                leaseId: {
+                  userEmail: 'delete-fail-delayed@example.gov.uk',
+                  uuid: delayedLeaseUuid,
+                },
                 originalEvent,
                 receivedAt: recentDateISO,
                 processAfter: processAfterISO,
@@ -1190,7 +1213,8 @@ describe('handler', () => {
           ],
         }),
         deleteMessage: mockDeleteMessage,
-        getQueueDepth: vi.fn()
+        getQueueDepth: vi
+          .fn()
           .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 })
           .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 }),
       });
@@ -1285,7 +1309,8 @@ describe('handler', () => {
           ],
         }),
         deleteMessage: mockDeleteMessage,
-        getQueueDepth: vi.fn()
+        getQueueDepth: vi
+          .fn()
           .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 })
           .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 0 }),
       });
@@ -1514,7 +1539,8 @@ describe('handler', () => {
           ],
         }),
         deleteMessage: mockDeleteMessage,
-        getQueueDepth: vi.fn()
+        getQueueDepth: vi
+          .fn()
           .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 })
           .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 0 }),
       });
@@ -1597,7 +1623,8 @@ describe('handler', () => {
           ],
         }),
         deleteMessage: mockDeleteMessage,
-        getQueueDepth: vi.fn()
+        getQueueDepth: vi
+          .fn()
           .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 1 })
           .mockResolvedValueOnce({ success: true, approximateNumberOfMessages: 0 }),
       });
@@ -1662,7 +1689,9 @@ describe('handler', () => {
       };
 
       // deleteMessage returns failure
-      const mockDeleteMessage = vi.fn().mockResolvedValue({ success: false, error: 'SQS delete failed' });
+      const mockDeleteMessage = vi
+        .fn()
+        .mockResolvedValue({ success: false, error: 'SQS delete failed' });
       const mockSQSService = createMockSQSService({
         receiveMessages: vi.fn().mockResolvedValue({
           success: true,
@@ -3534,5 +3563,4 @@ describe('handler', () => {
     // Note: Capacity crunch alert throttle test removed in Story 7.5.4
     // Alert throttling now handled by SNS/Amazon Q Developer integration
   });
-
 });

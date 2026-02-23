@@ -1,16 +1,17 @@
 /**
- * ISB Lambda Client Service
- * Directly invokes ISB's LeasesLambdaFunction to approve/deny leases
- * Bypasses API Gateway authentication by constructing the request payload
+ * ISB API Client Service
+ * Makes HTTP calls to ISB's API Gateway with HS256 JWT authentication
+ * to approve/deny leases, fetch accounts, and get lease details.
  */
 
-import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { createHmac } from 'node:crypto';
 import type { LeaseId, Account, GetAccountsResult } from '../lib/types.js';
 import { AccountsPageResponseSchema } from '../lib/types.js';
 import { leaseIdToCompositeKey } from '../lib/lease-id-codec.js';
 
 /**
- * Parameters for approving a lease via ISB Lambda
+ * Parameters for approving a lease via ISB API
  */
 export interface ApproveLeaseLambdaParams {
   readonly leaseId: LeaseId;
@@ -18,7 +19,7 @@ export interface ApproveLeaseLambdaParams {
 }
 
 /**
- * Parameters for denying a lease via ISB Lambda
+ * Parameters for denying a lease via ISB API
  */
 export interface DenyLeaseLambdaParams {
   readonly leaseId: LeaseId;
@@ -26,7 +27,7 @@ export interface DenyLeaseLambdaParams {
 }
 
 /**
- * Result from ISB Lambda invocation
+ * Result from ISB API invocation
  */
 export interface IsbLambdaResult {
   readonly success: boolean;
@@ -36,23 +37,23 @@ export interface IsbLambdaResult {
 }
 
 /**
- * ISB Lambda service configuration
+ * ISB API service configuration
  */
 export interface IsbLambdaServiceConfig {
-  readonly functionName: string;
-  /** Optional: separate Lambda for accounts endpoint (ISB-AccountsLambdaFunction) */
-  readonly accountsFunctionName?: string;
+  readonly apiBaseUrl: string;
+  readonly jwtSecretPath: string;
+  readonly timeoutMs?: number;
 }
 
 /**
- * Parameters for getting accounts via ISB Lambda
+ * Parameters for getting accounts via ISB API
  */
 export interface GetAccountsLambdaParams {
   readonly approverEmail: string;
 }
 
 /**
- * Parameters for getting a single lease via ISB Lambda
+ * Parameters for getting a single lease via ISB API
  */
 export interface GetLeaseLambdaParams {
   readonly leaseId: LeaseId;
@@ -69,7 +70,7 @@ export interface GetLeaseResult {
 }
 
 /**
- * ISB Lambda service interface for type-safe dependency injection
+ * ISB API service interface for type-safe dependency injection
  */
 export interface IsbLambdaService {
   approveLease(params: ApproveLeaseLambdaParams): Promise<IsbLambdaResult>;
@@ -78,144 +79,162 @@ export interface IsbLambdaService {
   getLease(params: GetLeaseLambdaParams): Promise<GetLeaseResult>;
 }
 
-/**
- * Creates a JWT token with the approver user info
- * Note: This JWT is only decoded (not verified) by ISB when invoked via Lambda
- */
-const createApproverJwt = (approverEmail: string): string => {
-  // JWT header
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-    .toString('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-
-  // JWT payload with user info - Admin role required for approval
-  const payload = Buffer.from(
-    JSON.stringify({
-      user: {
-        email: approverEmail,
-        roles: ['Admin'],
-      },
-    })
-  )
-    .toString('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-
-  // Signature not verified for direct Lambda invocation
-  return `${header}.${payload}.directinvoke`;
-};
+// =============================================================================
+// JWT Signing (zero new dependencies — uses Node.js built-in crypto)
+// =============================================================================
 
 /**
- * Creates the API Gateway event payload for Lambda invocation
+ * Sign a JWT with HS256 algorithm using Node.js built-in crypto.
+ *
+ * @param payload - JWT payload object
+ * @param secret - HMAC-SHA256 signing secret
+ * @param expiresInSeconds - Token TTL (default 3600s / 1 hour)
+ * @returns Signed JWT string
  */
-const createApiGatewayEvent = (
-  leaseIdB64: string,
-  action: 'Approve' | 'Deny',
-  approverJwt: string
-): Record<string, unknown> => ({
-  httpMethod: 'POST',
-  path: `/leases/${leaseIdB64}/review`,
-  pathParameters: {
-    leaseId: leaseIdB64,
-  },
-  headers: {
-    Authorization: `Bearer ${approverJwt}`,
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({ action }),
-  requestContext: {
-    httpMethod: 'POST',
-    path: `/leases/${leaseIdB64}/review`,
-    extendedRequestId: `approver-${Date.now()}`,
-  },
-  resource: '/leases/{leaseId}/review',
-  isBase64Encoded: false,
-});
+export function signJwt(payload: object, secret: string, expiresInSeconds = 3600): string {
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const now = Math.floor(Date.now() / 1000);
+  const fullPayload = { ...payload, iat: now, exp: now + expiresInSeconds };
+  const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url');
+  const encodedPayload = Buffer.from(JSON.stringify(fullPayload)).toString('base64url');
+  const signature = createHmac('sha256', secret)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest('base64url');
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
+}
+
+// =============================================================================
+// Token Manager — cache secret and token across invocations
+// =============================================================================
+
+let cachedSecret: string | null = null;
+let cachedToken: string | null = null;
+let tokenExpiry = 0;
 
 /**
- * Creates the API Gateway event payload for accounts endpoint
+ * Reset cached token and secret state (for testing).
  */
-const createAccountsApiGatewayEvent = (
-  approverJwt: string,
-  pageIdentifier?: string
-): Record<string, unknown> => ({
-  httpMethod: 'GET',
-  path: '/accounts',
-  queryStringParameters: pageIdentifier ? { pageIdentifier } : null,
-  headers: {
-    Authorization: `Bearer ${approverJwt}`,
-    'Content-Type': 'application/json',
-  },
-  requestContext: {
-    httpMethod: 'GET',
-    path: '/accounts',
-    extendedRequestId: `approver-accounts-${Date.now()}`,
-  },
-  resource: '/accounts',
-  isBase64Encoded: false,
-});
+export function resetTokenCache(): void {
+  cachedSecret = null;
+  cachedToken = null;
+  tokenExpiry = 0;
+}
 
 /**
- * Creates the API Gateway event payload for GET /leases/{leaseId} endpoint
+ * Fetch JWT signing secret from Secrets Manager.
  */
-const createGetLeaseApiGatewayEvent = (
-  leaseIdB64: string,
-  approverJwt: string
-): Record<string, unknown> => ({
-  httpMethod: 'GET',
-  path: `/leases/${leaseIdB64}`,
-  pathParameters: {
-    leaseId: leaseIdB64,
-  },
-  headers: {
-    Authorization: `Bearer ${approverJwt}`,
-    'Content-Type': 'application/json',
-  },
-  requestContext: {
-    httpMethod: 'GET',
-    path: `/leases/${leaseIdB64}`,
-    extendedRequestId: `approver-getlease-${Date.now()}`,
-  },
-  resource: '/leases/{leaseId}',
-  isBase64Encoded: false,
-});
+async function fetchJwtSecret(
+  secretsClient: SecretsManagerClient,
+  secretPath: string
+): Promise<string> {
+  const command = new GetSecretValueCommand({ SecretId: secretPath });
+  const response = await secretsClient.send(command);
+  if (!response.SecretString) {
+    throw new Error('JWT secret is empty');
+  }
+  return response.SecretString;
+}
 
 /**
- * Maximum pages to traverse (safety limit to prevent infinite loops)
+ * Get a valid signed JWT token, re-signing if expired or expiring within 60s.
  */
-const MAX_PAGINATION_PAGES = 100;
-
-/**
- * Parses the Lambda response
- */
-const parseResponse = (payload: Uint8Array | undefined): IsbLambdaResult => {
-  if (!payload) {
-    return {
-      success: false,
-      statusCode: 500,
-      error: 'Empty response from ISB Lambda',
-    };
+async function getISBToken(
+  secretsClient: SecretsManagerClient,
+  jwtSecretPath: string
+): Promise<string> {
+  if (!cachedSecret) {
+    cachedSecret = await fetchJwtSecret(secretsClient, jwtSecretPath);
   }
 
+  const now = Math.floor(Date.now() / 1000);
+  if (!cachedToken || now >= tokenExpiry - 60) {
+    const approverEmail = process.env.APPROVER_EMAIL ?? 'ndx+try-automated-approver@dsit.gov.uk';
+    cachedToken = signJwt({ user: { email: approverEmail, roles: ['Admin'] } }, cachedSecret, 3600);
+    tokenExpiry = now + 3600;
+  }
+
+  return cachedToken;
+}
+
+/**
+ * Invalidate cached secret and token, forcing re-fetch on next call.
+ * Called when the API returns 401/403, indicating possible secret rotation.
+ */
+function invalidateSecretCache(): void {
+  cachedSecret = null;
+  cachedToken = null;
+  tokenExpiry = 0;
+}
+
+// =============================================================================
+// HTTP Fetch Helper
+// =============================================================================
+
+/**
+ * Make an authenticated HTTP request to ISB API Gateway.
+ */
+async function fetchFromISB(
+  url: string,
+  secretsClient: SecretsManagerClient,
+  jwtSecretPath: string,
+  options: {
+    method?: 'GET' | 'POST';
+    body?: string;
+    timeoutMs?: number;
+  } = {}
+): Promise<Response> {
+  const { method = 'GET', body, timeoutMs = 5000 } = options;
+  const token = await getISBToken(secretsClient, jwtSecretPath);
+
+  const fetchOptions: RequestInit = {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    signal: AbortSignal.timeout(timeoutMs),
+  };
+
+  if (body) {
+    fetchOptions.body = body;
+  }
+
+  const response = await fetch(url, fetchOptions);
+
+  // Invalidate cached secret on auth failures (handles secret rotation)
+  if (response.status === 401 || response.status === 403) {
+    invalidateSecretCache();
+  }
+
+  return response;
+}
+
+// =============================================================================
+// Response Parsing
+// =============================================================================
+
+/**
+ * Parses an HTTP response into an IsbLambdaResult.
+ */
+const parseHttpResponse = async (response: Response): Promise<IsbLambdaResult> => {
+  const statusCode = response.status;
+
   try {
-    const response = JSON.parse(Buffer.from(payload).toString());
-    const statusCode = response.statusCode ?? 500;
-    const body = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
+    const body = (await response.json()) as Record<string, unknown>;
 
     if (statusCode >= 200 && statusCode < 300) {
       return {
         success: true,
         statusCode,
-        message: body?.status ?? 'success',
+        message: (body?.status as string) ?? 'success',
       };
     }
 
     // Extract error message from ISB's JSend response format
+    const data = body?.data as Record<string, unknown> | undefined;
+    const errors = data?.errors as Array<{ message?: string }> | undefined;
     const errorMessage =
-      body?.data?.errors?.[0]?.message ?? body?.message ?? 'Unknown error from ISB';
+      errors?.[0]?.message ?? (body?.message as string) ?? 'Unknown error from ISB';
 
     return {
       success: false,
@@ -225,88 +244,61 @@ const parseResponse = (payload: Uint8Array | undefined): IsbLambdaResult => {
   } catch (error) {
     return {
       success: false,
-      statusCode: 500,
-      /* c8 ignore next -- defensive: JSON.parse throws Error objects */
-      error: `Failed to parse ISB Lambda response: ${error instanceof Error ? error.message : String(error)}`,
+      statusCode,
+      /* c8 ignore next -- defensive: json() throws Error objects */
+      error: `Failed to parse ISB API response: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 };
 
 /**
- * Creates an ISB Lambda service with the given client and configuration.
+ * Maximum pages to traverse (safety limit to prevent infinite loops)
+ */
+const MAX_PAGINATION_PAGES = 100;
+
+// =============================================================================
+// Service Factory
+// =============================================================================
+
+/**
+ * Creates an ISB API service with the given Secrets Manager client and configuration.
  * Uses factory function pattern for dependency injection and testability.
  *
- * @param client - Lambda client instance
- * @param config - Configuration including function name and approver email
- * @returns ISB Lambda service instance
- *
- * @example
- * ```typescript
- * const client = new LambdaClient({ region: 'us-west-2' });
- * const service = createIsbLambdaService(client, {
- *   functionName: 'ISB-LeasesLambdaFunction-ndx',
- *   approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
- * });
- * await service.approveLease({
- *   leaseId: { userEmail: 'user@gov.uk', uuid: 'abc-123' },
- *   approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
- * });
- * ```
+ * @param secretsClient - Secrets Manager client instance for JWT secret retrieval
+ * @param config - Configuration including API base URL and JWT secret path
+ * @returns ISB API service instance
  */
 export const createIsbLambdaService = (
-  client: LambdaClient,
+  secretsClient: SecretsManagerClient,
   config: IsbLambdaServiceConfig
 ): IsbLambdaService => ({
   approveLease: async (params: ApproveLeaseLambdaParams): Promise<IsbLambdaResult> => {
     const leaseIdB64 = leaseIdToCompositeKey(params.leaseId);
-    const approverJwt = createApproverJwt(params.approverEmail);
-    const payload = createApiGatewayEvent(leaseIdB64, 'Approve', approverJwt);
+    const url = `${config.apiBaseUrl}/leases/${encodeURIComponent(leaseIdB64)}/review`;
 
-    const command = new InvokeCommand({
-      FunctionName: config.functionName,
-      Payload: Buffer.from(JSON.stringify(payload)),
+    const response = await fetchFromISB(url, secretsClient, config.jwtSecretPath, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'Approve' }),
+      timeoutMs: config.timeoutMs,
     });
 
-    const response = await client.send(command);
-
-    // Check for Lambda invocation errors
-    if (response.FunctionError) {
-      return {
-        success: false,
-        statusCode: 500,
-        error: `Lambda function error: ${response.FunctionError}`,
-      };
-    }
-
-    return parseResponse(response.Payload);
+    return parseHttpResponse(response);
   },
 
   denyLease: async (params: DenyLeaseLambdaParams): Promise<IsbLambdaResult> => {
     const leaseIdB64 = leaseIdToCompositeKey(params.leaseId);
-    const approverJwt = createApproverJwt(params.approverEmail);
-    const payload = createApiGatewayEvent(leaseIdB64, 'Deny', approverJwt);
+    const url = `${config.apiBaseUrl}/leases/${encodeURIComponent(leaseIdB64)}/review`;
 
-    const command = new InvokeCommand({
-      FunctionName: config.functionName,
-      Payload: Buffer.from(JSON.stringify(payload)),
+    const response = await fetchFromISB(url, secretsClient, config.jwtSecretPath, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'Deny' }),
+      timeoutMs: config.timeoutMs,
     });
 
-    const response = await client.send(command);
-
-    // Check for Lambda invocation errors
-    if (response.FunctionError) {
-      return {
-        success: false,
-        statusCode: 500,
-        error: `Lambda function error: ${response.FunctionError}`,
-      };
-    }
-
-    return parseResponse(response.Payload);
+    return parseHttpResponse(response);
   },
 
   getAccounts: async (params: GetAccountsLambdaParams): Promise<GetAccountsResult> => {
-    const approverJwt = createApproverJwt(params.approverEmail);
     const allAccounts: Account[] = [];
     let pageIdentifier: string | undefined = undefined;
     let pagesTraversed = 0;
@@ -326,49 +318,37 @@ export const createIsbLambdaService = (
         };
       }
 
-      const payload = createAccountsApiGatewayEvent(approverJwt, pageIdentifier);
+      const queryParams = pageIdentifier
+        ? `?pageIdentifier=${encodeURIComponent(pageIdentifier)}`
+        : '';
+      const url = `${config.apiBaseUrl}/accounts${queryParams}`;
 
-      // Use accounts-specific Lambda if configured, otherwise fallback to main function
-      const accountsFunctionName = config.accountsFunctionName ?? config.functionName;
-
-      const command = new InvokeCommand({
-        FunctionName: accountsFunctionName,
-        Payload: Buffer.from(JSON.stringify(payload)),
-      });
-
-      const response = await client.send(command);
-
-      // Check for Lambda invocation errors
-      if (response.FunctionError) {
-        return {
-          success: false,
-          accounts: allAccounts,
-          totalFetched: allAccounts.length,
-          pagesTraversed,
-          error: `Lambda function error: ${response.FunctionError}`,
-        };
-      }
-
-      // Parse response
-      if (!response.Payload) {
-        return {
-          success: false,
-          accounts: allAccounts,
-          totalFetched: allAccounts.length,
-          pagesTraversed,
-          error: 'Empty response from ISB Lambda',
-        };
-      }
-
+      let response: Response;
       try {
-        const rawResponse = JSON.parse(Buffer.from(response.Payload).toString());
-        const statusCode = rawResponse.statusCode ?? 500;
+        response = await fetchFromISB(url, secretsClient, config.jwtSecretPath, {
+          method: 'GET',
+          timeoutMs: config.timeoutMs,
+        });
+      } catch (error) {
+        return {
+          success: false,
+          accounts: allAccounts,
+          totalFetched: allAccounts.length,
+          pagesTraversed,
+          /* c8 ignore next -- defensive: fetch throws Error objects */
+          error: `ISB API request failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
 
-        if (statusCode < 200 || statusCode >= 300) {
-          const body =
-            typeof rawResponse.body === 'string' ? JSON.parse(rawResponse.body) : rawResponse.body;
+      const statusCode = response.status;
+
+      if (statusCode < 200 || statusCode >= 300) {
+        try {
+          const errorBody = (await response.json()) as Record<string, unknown>;
+          const data = errorBody?.data as Record<string, unknown> | undefined;
+          const errors = data?.errors as Array<{ message?: string }> | undefined;
           const errorMessage =
-            body?.data?.errors?.[0]?.message ?? body?.message ?? 'Unknown error from ISB';
+            errors?.[0]?.message ?? (errorBody?.message as string) ?? 'Unknown error from ISB';
           return {
             success: false,
             accounts: allAccounts,
@@ -376,11 +356,20 @@ export const createIsbLambdaService = (
             pagesTraversed,
             error: errorMessage,
           };
+        } catch {
+          return {
+            success: false,
+            accounts: allAccounts,
+            totalFetched: allAccounts.length,
+            pagesTraversed,
+            error: `ISB API returned status ${statusCode}`,
+          };
         }
+      }
 
-        // Parse body
-        const body =
-          typeof rawResponse.body === 'string' ? JSON.parse(rawResponse.body) : rawResponse.body;
+      try {
+        // Parse response body - ISB returns JSend format directly (no Lambda envelope)
+        const body = (await response.json()) as Record<string, unknown>;
 
         // Validate response schema
         const parseResult = AccountsPageResponseSchema.safeParse(body);
@@ -405,8 +394,8 @@ export const createIsbLambdaService = (
           accounts: allAccounts,
           totalFetched: allAccounts.length,
           pagesTraversed,
-          /* c8 ignore next -- defensive: JSON.parse throws Error objects */
-          error: `Failed to parse ISB Lambda response: ${error instanceof Error ? error.message : String(error)}`,
+          /* c8 ignore next -- defensive: json() throws Error objects */
+          error: `Failed to parse ISB API response: ${error instanceof Error ? error.message : String(error)}`,
         };
       }
     } while (pageIdentifier);
@@ -421,52 +410,41 @@ export const createIsbLambdaService = (
 
   getLease: async (params: GetLeaseLambdaParams): Promise<GetLeaseResult> => {
     const leaseIdB64 = leaseIdToCompositeKey(params.leaseId);
-    const approverJwt = createApproverJwt(params.approverEmail);
-    const payload = createGetLeaseApiGatewayEvent(leaseIdB64, approverJwt);
-
-    const command = new InvokeCommand({
-      FunctionName: config.functionName,
-      Payload: Buffer.from(JSON.stringify(payload)),
-    });
+    const url = `${config.apiBaseUrl}/leases/${encodeURIComponent(leaseIdB64)}`;
 
     try {
-      const response = await client.send(command);
+      const response = await fetchFromISB(url, secretsClient, config.jwtSecretPath, {
+        method: 'GET',
+        timeoutMs: config.timeoutMs,
+      });
 
-      // Check for Lambda invocation errors
-      if (response.FunctionError) {
-        return {
-          success: false,
-          error: `Lambda function error: ${response.FunctionError}`,
-        };
-      }
-
-      if (!response.Payload) {
-        return {
-          success: false,
-          error: 'Empty response from ISB Lambda',
-        };
-      }
-
-      const rawResponse = JSON.parse(Buffer.from(response.Payload).toString());
-      const statusCode = rawResponse.statusCode ?? 500;
+      const statusCode = response.status;
 
       if (statusCode < 200 || statusCode >= 300) {
-        const body =
-          typeof rawResponse.body === 'string' ? JSON.parse(rawResponse.body) : rawResponse.body;
-        const errorMessage =
-          body?.data?.errors?.[0]?.message ?? body?.message ?? 'Unknown error from ISB';
-        return {
-          success: false,
-          error: errorMessage,
-        };
+        try {
+          const errorBody = (await response.json()) as Record<string, unknown>;
+          const data = errorBody?.data as Record<string, unknown> | undefined;
+          const errors = data?.errors as Array<{ message?: string }> | undefined;
+          const errorMessage =
+            errors?.[0]?.message ?? (errorBody?.message as string) ?? 'Unknown error from ISB';
+          return {
+            success: false,
+            error: errorMessage,
+          };
+        } catch {
+          return {
+            success: false,
+            error: `ISB API returned status ${statusCode}`,
+          };
+        }
       }
 
       // Parse body - ISB returns JSend format: { status: "success", data: { ... } }
-      const body =
-        typeof rawResponse.body === 'string' ? JSON.parse(rawResponse.body) : rawResponse.body;
+      const body = (await response.json()) as Record<string, unknown>;
+      const bodyData = body?.data as Record<string, unknown> | undefined;
 
       // Extract template name from lease details
-      const templateName = body?.data?.originalLeaseTemplateName;
+      const templateName = bodyData?.originalLeaseTemplateName as string | undefined;
 
       return {
         success: true,
@@ -475,7 +453,7 @@ export const createIsbLambdaService = (
     } catch (error) {
       return {
         success: false,
-        /* c8 ignore next -- defensive: JSON.parse throws Error objects */
+        /* c8 ignore next -- defensive: fetch throws Error objects */
         error: `Failed to get lease details: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
