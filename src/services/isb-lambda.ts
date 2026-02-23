@@ -298,7 +298,7 @@ export const createIsbLambdaService = (
     return parseHttpResponse(response);
   },
 
-  getAccounts: async (params: GetAccountsLambdaParams): Promise<GetAccountsResult> => {
+  getAccounts: async (_params: GetAccountsLambdaParams): Promise<GetAccountsResult> => {
     const allAccounts: Account[] = [];
     let pageIdentifier: string | undefined = undefined;
     let pagesTraversed = 0;

@@ -31,6 +31,11 @@ export default [
         // Node.js 20 globals
         fetch: 'readonly',
         AbortSignal: 'readonly',
+        Response: 'readonly',
+        ResponseType: 'readonly',
+        Request: 'readonly',
+        RequestInit: 'readonly',
+        Headers: 'readonly',
       },
     },
     plugins: {
