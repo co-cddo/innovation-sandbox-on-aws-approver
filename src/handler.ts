@@ -1,5 +1,5 @@
 import { EventBridgeClient } from '@aws-sdk/client-eventbridge';
-import { LambdaClient } from '@aws-sdk/client-lambda';
+import { createISBClient, type ISBClient } from '@co-cddo/isb-client';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
@@ -119,19 +119,16 @@ let eventBridgeService: EventBridgeService = createEventBridgeService(
   eventBridgeConfig
 );
 
-// Lambda client for direct ISB Lambda invocation
-const lambdaClient = new LambdaClient({
-  region: process.env.AWS_REGION || 'us-west-2',
+// ISB API client for lease operations (approve/deny, accounts, lease lookup)
+const isbClient: ISBClient = createISBClient({
+  serviceIdentity: {
+    email: process.env.APPROVER_EMAIL || 'ndx+try-automated-approver@dsit.gov.uk',
+    roles: ['Admin'],
+  },
 });
 
-// ISB Lambda service configuration
-const isbLambdaConfig = {
-  functionName: process.env.ISB_LEASES_LAMBDA_NAME || 'ISB-LeasesLambdaFunction-ndx',
-  accountsFunctionName: process.env.ISB_ACCOUNTS_LAMBDA_NAME || 'ISB-AccountsLambdaFunction-ndx',
-};
-
-// Create ISB Lambda service (can be overridden in tests via dependency injection)
-let isbLambdaService: IsbLambdaService = createIsbLambdaService(lambdaClient, isbLambdaConfig);
+// Create ISB service (can be overridden in tests via dependency injection)
+let isbLambdaService: IsbLambdaService = createIsbLambdaService(isbClient);
 
 // DynamoDB client for user history queries (ISB Leases table)
 const dynamoDBClient = new DynamoDBClient({
@@ -297,7 +294,7 @@ export const setIsbLambdaService = (service: IsbLambdaService): void => {
  * Resets to the default ISB Lambda service (for test cleanup).
  */
 export const resetIsbLambdaService = (): void => {
-  isbLambdaService = createIsbLambdaService(lambdaClient, isbLambdaConfig);
+  isbLambdaService = createIsbLambdaService(isbClient);
 };
 
 /**

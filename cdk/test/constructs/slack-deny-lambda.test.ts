@@ -13,7 +13,8 @@ describe('SlackDenyLambda Construct', () => {
     });
 
     new SlackDenyLambda(stack, 'TestSlackDeny', {
-      isbLeasesLambdaName: 'ISB-LeasesLambdaFunction-test',
+      isbApiBaseUrl: 'https://isb-api.test.gov.uk',
+      isbJwtSecretPath: '/test/JwtSecret',
       approverEmail: 'test-approver@dsit.gov.uk',
       snsTopicArn: 'arn:aws:sns:us-west-2:123456789012:test-topic',
       logLevel: 'DEBUG',
@@ -63,11 +64,12 @@ describe('SlackDenyLambda Construct', () => {
   });
 
   describe('Environment Variables (AC5)', () => {
-    it('includes ISB_LEASES_LAMBDA_NAME', () => {
+    it('includes ISB_API_BASE_URL and ISB_JWT_SECRET_PATH', () => {
       template.hasResourceProperties('AWS::Lambda::Function', {
         Environment: {
           Variables: Match.objectLike({
-            ISB_LEASES_LAMBDA_NAME: 'ISB-LeasesLambdaFunction-test',
+            ISB_API_BASE_URL: 'https://isb-api.test.gov.uk',
+            ISB_JWT_SECRET_PATH: '/test/JwtSecret',
           }),
         },
       });
@@ -115,14 +117,13 @@ describe('SlackDenyLambda Construct', () => {
   });
 
   describe('IAM Permissions (AC5)', () => {
-    it('grants lambda:InvokeFunction permission for ISB Lambda', () => {
+    it('grants secretsmanager:GetSecretValue permission for ISB JWT secret', () => {
       template.hasResourceProperties('AWS::IAM::Policy', {
         PolicyDocument: {
           Statement: Match.arrayWith([
             Match.objectLike({
-              Action: 'lambda:InvokeFunction',
+              Action: 'secretsmanager:GetSecretValue',
               Effect: 'Allow',
-              Resource: 'arn:aws:lambda:us-west-2:123456789012:function:ISB-LeasesLambdaFunction-test',
             }),
           ]),
         },
@@ -191,7 +192,8 @@ describe('SlackDenyLambda with default log level', () => {
 
     // Test with default log level (not provided)
     new SlackDenyLambda(stack, 'TestSlackDeny', {
-      isbLeasesLambdaName: 'ISB-LeasesLambdaFunction-test',
+      isbApiBaseUrl: 'https://isb-api.test.gov.uk',
+      isbJwtSecretPath: '/test/JwtSecret',
       approverEmail: 'test-approver@dsit.gov.uk',
       snsTopicArn: 'arn:aws:sns:us-west-2:123456789012:test-topic',
     });

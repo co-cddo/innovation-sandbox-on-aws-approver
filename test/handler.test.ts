@@ -80,12 +80,21 @@ vi.mock('@aws-sdk/client-eventbridge', () => ({
   PutEventsCommand: class MockPutEventsCommand {},
 }));
 
-// Mock the Lambda client to prevent real AWS calls (Vitest v4 compatible)
-vi.mock('@aws-sdk/client-lambda', () => ({
-  LambdaClient: class MockLambdaClient {
-    send = vi.fn().mockResolvedValue({});
-  },
-  InvokeCommand: class MockInvokeCommand {},
+// Mock the ISB client to prevent real API calls
+vi.mock('@co-cddo/isb-client', () => ({
+  createISBClient: vi.fn(() => ({
+    reviewLease: vi.fn(),
+    fetchAllAccounts: vi.fn(),
+    fetchLeaseByKey: vi.fn(),
+    fetchLease: vi.fn(),
+    fetchAccount: vi.fn(),
+    fetchTemplate: vi.fn(),
+    registerAccount: vi.fn(),
+    resetTokenCache: vi.fn(),
+  })),
+  constructLeaseId: vi.fn((email: string, uuid: string) =>
+    Buffer.from(JSON.stringify({ userEmail: email, uuid })).toString('base64')
+  ),
 }));
 
 // Mock the DynamoDB client to prevent real AWS calls (Vitest v4 compatible)

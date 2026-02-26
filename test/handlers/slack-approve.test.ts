@@ -16,7 +16,8 @@ describe('Slack Approve Handler', () => {
 
   beforeAll(() => {
     // Set required environment variables for handler
-    process.env.ISB_LEASES_LAMBDA_NAME = 'ISB-LeasesLambdaFunction-test';
+    process.env.ISB_API_BASE_URL = 'https://isb-api.test.gov.uk';
+    process.env.ISB_JWT_SECRET_PATH = '/test/JwtSecret';
     process.env.APPROVER_EMAIL = 'test-approver@dsit.gov.uk';
   });
 

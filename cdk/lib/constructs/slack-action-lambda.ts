@@ -32,8 +32,10 @@ export type SlackActionType = 'approve' | 'deny';
 export interface SlackActionLambdaProps {
   /** Action type: 'approve' or 'deny' */
   actionType: SlackActionType;
-  /** ISB Leases Lambda function name for approval/denial invocation */
-  isbLeasesLambdaName: string;
+  /** ISB API Gateway base URL */
+  isbApiBaseUrl: string;
+  /** ISB JWT secret path in Secrets Manager */
+  isbJwtSecretPath: string;
   /** Approver email for automated approvals/denials */
   approverEmail: string;
   /** SNS topic ARN for thread replies (for future use in Story 7.3.x) */
@@ -67,7 +69,8 @@ export class SlackActionLambda extends Construct {
 
     const {
       actionType,
-      isbLeasesLambdaName,
+      isbApiBaseUrl,
+      isbJwtSecretPath,
       approverEmail,
       snsTopicArn,
       logLevel = 'INFO',
@@ -98,7 +101,8 @@ export class SlackActionLambda extends Construct {
       architecture: lambda.Architecture.ARM_64,
       logGroup: this.logGroup,
       environment: {
-        ISB_LEASES_LAMBDA_NAME: isbLeasesLambdaName,
+        ISB_API_BASE_URL: isbApiBaseUrl,
+        ISB_JWT_SECRET_PATH: isbJwtSecretPath,
         APPROVER_EMAIL: approverEmail,
         SNS_TOPIC_ARN: snsTopicArn,
         LOG_LEVEL: logLevel,
@@ -118,14 +122,14 @@ export class SlackActionLambda extends Construct {
       tracing: lambda.Tracing.ACTIVE,
     });
 
-    // Grant permission to invoke ISB Leases Lambda (AC5)
+    // Grant Secrets Manager read for ISB JWT secret (used by @co-cddo/isb-client)
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
-        sid: 'InvokeISBLeasesLambda',
+        sid: 'GetIsbJwtSecret',
         effect: iam.Effect.ALLOW,
-        actions: ['lambda:InvokeFunction'],
+        actions: ['secretsmanager:GetSecretValue'],
         resources: [
-          `arn:aws:lambda:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:function:${isbLeasesLambdaName}`,
+          `arn:aws:secretsmanager:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:secret:${isbJwtSecretPath}*`,
         ],
       })
     );

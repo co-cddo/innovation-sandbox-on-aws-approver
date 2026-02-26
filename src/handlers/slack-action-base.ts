@@ -10,7 +10,7 @@
  * @see https://docs.aws.amazon.com/chatbot/latest/adminguide/custom-actions.html
  */
 
-import { LambdaClient } from '@aws-sdk/client-lambda';
+import { createISBClient, type ISBClient } from '@co-cddo/isb-client';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { createIsbLambdaService, type IsbLambdaService } from '../services/isb-lambda.js';
 import { type CustomActionResponse, decodeLeaseCompositeKey } from '../lib/slack-action-types.js';
@@ -253,7 +253,7 @@ export const getUserFriendlyErrorMessage = (
  * State for the Slack action handler factory.
  */
 interface SlackActionHandlerState {
-  lambdaClient: LambdaClient;
+  isbClient: ISBClient;
   isbLambdaService: IsbLambdaService | null;
   logger: Logger;
   config: SlackActionConfig;
@@ -267,8 +267,11 @@ interface SlackActionHandlerState {
  */
 export const createSlackActionHandler = (config: SlackActionConfig) => {
   const state: SlackActionHandlerState = {
-    lambdaClient: new LambdaClient({
-      region: process.env.AWS_REGION,
+    isbClient: createISBClient({
+      serviceIdentity: {
+        email: process.env.APPROVER_EMAIL || 'ndx+try-automated-approver@dsit.gov.uk',
+        roles: ['Admin'],
+      },
     }),
     isbLambdaService: null,
     logger: new Logger({
@@ -287,12 +290,7 @@ export const createSlackActionHandler = (config: SlackActionConfig) => {
       return state.isbLambdaService;
     }
 
-    const functionName = process.env.ISB_LEASES_LAMBDA_NAME;
-    if (!functionName) {
-      throw new Error('ISB_LEASES_LAMBDA_NAME environment variable is required');
-    }
-
-    state.isbLambdaService = createIsbLambdaService(state.lambdaClient, { functionName });
+    state.isbLambdaService = createIsbLambdaService(state.isbClient);
     return state.isbLambdaService;
   };
 
