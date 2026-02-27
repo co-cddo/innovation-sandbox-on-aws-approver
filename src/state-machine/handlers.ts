@@ -133,9 +133,7 @@ export const createStateHandlers = (
   [ApprovalState.TIMING_CHECK]: (context: StateContext): StateHandlerResult => {
     const { isWithinBusinessHours, nextProcessingTime } = context;
 
-    // TEMPORARY BYPASS: Skip business hours check for testing (revert after testing)
-    // eslint-disable-next-line no-constant-condition
-    if (true) {
+    if (isWithinBusinessHours === undefined || isWithinBusinessHours) {
       // Within business hours - proceed to account availability check
       return {
         nextState: ApprovalState.ACCOUNT_AVAILABILITY_CHECK,
