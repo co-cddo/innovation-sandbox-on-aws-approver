@@ -56,8 +56,8 @@ export class ApproverLambda extends Construct {
         LOG_LEVEL: config.logLevel,
         RULE_WEIGHTS: config.ruleWeights,
         EVENT_BUS_NAME: config.isbEventBusName,
-        ISB_LEASES_LAMBDA_NAME: config.isbLeasesLambdaName,
-        ISB_ACCOUNTS_LAMBDA_NAME: config.isbAccountsLambdaName,
+        ISB_API_BASE_URL: config.isbApiBaseUrl,
+        ISB_JWT_SECRET_PATH: config.isbJwtSecretPath,
         // Story 7.1.1: SNS notification topic for approval notifications
         ...(notificationTopicArn && { NOTIFICATION_TOPIC_ARN: notificationTopicArn }),
       },
@@ -104,14 +104,24 @@ export class ApproverLambda extends Construct {
       })
     );
 
-    // Grant Lambda invoke permission for ISB Lambdas (leases + accounts)
+    // Grant Secrets Manager read for ISB JWT secret (used by @co-cddo/isb-client)
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ['lambda:InvokeFunction'],
+        actions: ['secretsmanager:GetSecretValue'],
         resources: [
-          `arn:aws:lambda:us-west-2:${cdk.Stack.of(this).account}:function:${config.isbLeasesLambdaName}`,
-          `arn:aws:lambda:us-west-2:${cdk.Stack.of(this).account}:function:${config.isbAccountsLambdaName}`,
+          `arn:aws:secretsmanager:us-west-2:${cdk.Stack.of(this).account}:secret:${config.isbJwtSecretPath}*`,
+        ],
+      })
+    );
+
+    // Grant KMS decrypt for ISB Secrets Manager (JWT secret encrypted with customer-managed key)
+    this.function.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['kms:Decrypt'],
+        resources: [
+          `arn:aws:kms:us-west-2:${cdk.Stack.of(this).account}:key/${config.isbSecretsKmsKeyId}`,
         ],
       })
     );

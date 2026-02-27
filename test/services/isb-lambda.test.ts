@@ -1,65 +1,51 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import {
   createIsbLambdaService,
-  type IsbLambdaServiceConfig,
   type ApproveLeaseLambdaParams,
   type DenyLeaseLambdaParams,
   type GetAccountsLambdaParams,
+  type GetLeaseLambdaParams,
 } from '../../src/services/isb-lambda.js';
+interface MockISBClient {
+  reviewLease: ReturnType<typeof vi.fn>;
+  fetchAllAccounts: ReturnType<typeof vi.fn>;
+  fetchLeaseByKey: ReturnType<typeof vi.fn>;
+  fetchLease: ReturnType<typeof vi.fn>;
+  fetchAccount: ReturnType<typeof vi.fn>;
+  fetchTemplate: ReturnType<typeof vi.fn>;
+  registerAccount: ReturnType<typeof vi.fn>;
+  resetTokenCache: ReturnType<typeof vi.fn>;
+}
 
-// Mock the Lambda client
-vi.mock('@aws-sdk/client-lambda', async () => {
-  const actual = await vi.importActual('@aws-sdk/client-lambda');
+function createMockISBClient(): MockISBClient {
   return {
-    ...actual,
-    LambdaClient: vi.fn().mockImplementation(() => ({
-      send: vi.fn().mockResolvedValue({}),
-    })),
+    reviewLease: vi.fn(),
+    fetchAllAccounts: vi.fn(),
+    fetchLeaseByKey: vi.fn(),
+    fetchLease: vi.fn(),
+    fetchAccount: vi.fn(),
+    fetchTemplate: vi.fn(),
+    registerAccount: vi.fn(),
+    resetTokenCache: vi.fn(),
   };
-});
+}
 
 describe('ISB Lambda Service', () => {
-  let mockClient: LambdaClient;
-  let mockSend: ReturnType<typeof vi.fn>;
-  const config: IsbLambdaServiceConfig = {
-    functionName: 'ISB-LeasesLambdaFunction-test',
-  };
+  let mockClient: ReturnType<typeof createMockISBClient>;
 
   beforeEach(() => {
-    mockSend = vi.fn().mockResolvedValue({
-      Payload: Buffer.from(
-        JSON.stringify({
-          statusCode: 200,
-          body: JSON.stringify({ status: 'success' }),
-        })
-      ),
-    });
-    mockClient = {
-      send: mockSend,
-    } as unknown as LambdaClient;
+    mockClient = createMockISBClient();
   });
 
   describe('createIsbLambdaService', () => {
-    it('creates a service with approveLease method', () => {
-      const service = createIsbLambdaService(mockClient, config);
+    it('creates a service with all methods', () => {
+      const service = createIsbLambdaService(mockClient as never);
 
       expect(service).toBeDefined();
       expect(typeof service.approveLease).toBe('function');
-    });
-
-    it('creates a service with denyLease method', () => {
-      const service = createIsbLambdaService(mockClient, config);
-
-      expect(service).toBeDefined();
       expect(typeof service.denyLease).toBe('function');
-    });
-
-    it('creates a service with getAccounts method', () => {
-      const service = createIsbLambdaService(mockClient, config);
-
-      expect(service).toBeDefined();
       expect(typeof service.getAccounts).toBe('function');
+      expect(typeof service.getLease).toBe('function');
     });
   });
 
@@ -72,65 +58,47 @@ describe('ISB Lambda Service', () => {
       approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
     };
 
-    it('sends an InvokeCommand with correct function name', async () => {
-      const service = createIsbLambdaService(mockClient, config);
+    it('calls reviewLease with Approve action', async () => {
+      mockClient.reviewLease.mockResolvedValue({
+        success: true,
+        data: { leaseId: 'test', status: 'Approved' },
+        statusCode: 200,
+      });
 
+      const service = createIsbLambdaService(mockClient as never);
       await service.approveLease(approveParams);
 
-      expect(mockSend).toHaveBeenCalledTimes(1);
-      const callArgs = mockSend.mock.calls[0] as unknown[];
-      const sentCommand = callArgs[0];
-      expect(sentCommand).toBeInstanceOf(InvokeCommand);
+      expect(mockClient.reviewLease).toHaveBeenCalledWith(
+        expect.any(String), // base64 encoded leaseId
+        { action: 'Approve' },
+        expect.stringContaining('approve-')
+      );
     });
 
-    it('includes correct API Gateway event payload structure', async () => {
-      const service = createIsbLambdaService(mockClient, config);
+    it('encodes leaseId as base64 JSON', async () => {
+      mockClient.reviewLease.mockResolvedValue({
+        success: true,
+        data: { leaseId: 'test', status: 'Approved' },
+        statusCode: 200,
+      });
 
+      const service = createIsbLambdaService(mockClient as never);
       await service.approveLease(approveParams);
 
-      const callArgs = mockSend.mock.calls[0] as unknown[];
-      const sentCommand = callArgs[0] as InvokeCommand;
-      const payload = JSON.parse(Buffer.from(sentCommand.input.Payload as Buffer).toString());
-
-      expect(payload.httpMethod).toBe('POST');
-      expect(payload.path).toContain('/leases/');
-      expect(payload.path).toContain('/review');
-      expect(payload.body).toBe(JSON.stringify({ action: 'Approve' }));
+      const encodedLeaseId = mockClient.reviewLease.mock.calls[0]![0] as string;
+      const decoded = JSON.parse(Buffer.from(encodedLeaseId, 'base64').toString());
+      expect(decoded.userEmail).toBe(approveParams.leaseId.userEmail);
+      expect(decoded.uuid).toBe(approveParams.leaseId.uuid);
     });
 
-    it('includes Authorization header with JWT', async () => {
-      const service = createIsbLambdaService(mockClient, config);
+    it('returns success result on successful review', async () => {
+      mockClient.reviewLease.mockResolvedValue({
+        success: true,
+        data: { leaseId: 'test', status: 'Approved' },
+        statusCode: 200,
+      });
 
-      await service.approveLease(approveParams);
-
-      const callArgs = mockSend.mock.calls[0] as unknown[];
-      const sentCommand = callArgs[0] as InvokeCommand;
-      const payload = JSON.parse(Buffer.from(sentCommand.input.Payload as Buffer).toString());
-
-      expect(payload.headers.Authorization).toMatch(/^Bearer .+\..+\..+$/);
-      expect(payload.headers['Content-Type']).toBe('application/json');
-    });
-
-    it('encodes leaseId as base64 in path parameter', async () => {
-      const service = createIsbLambdaService(mockClient, config);
-
-      await service.approveLease(approveParams);
-
-      const callArgs = mockSend.mock.calls[0] as unknown[];
-      const sentCommand = callArgs[0] as InvokeCommand;
-      const payload = JSON.parse(Buffer.from(sentCommand.input.Payload as Buffer).toString());
-
-      // Decode the leaseId from the path
-      const leaseIdB64 = payload.pathParameters.leaseId;
-      const decodedLeaseId = JSON.parse(Buffer.from(leaseIdB64, 'base64').toString());
-
-      expect(decodedLeaseId.userEmail).toBe(approveParams.leaseId.userEmail);
-      expect(decodedLeaseId.uuid).toBe(approveParams.leaseId.uuid);
-    });
-
-    it('returns success result on 200 response', async () => {
-      const service = createIsbLambdaService(mockClient, config);
-
+      const service = createIsbLambdaService(mockClient as never);
       const result = await service.approveLease(approveParams);
 
       expect(result.success).toBe(true);
@@ -138,17 +106,14 @@ describe('ISB Lambda Service', () => {
       expect(result.message).toBe('success');
     });
 
-    it('returns failure on non-2xx response', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 400,
-            body: JSON.stringify({ message: 'Lease not found' }),
-          })
-        ),
+    it('returns failure on review error', async () => {
+      mockClient.reviewLease.mockResolvedValue({
+        success: false,
+        error: 'Lease not found',
+        statusCode: 400,
       });
 
-      const service = createIsbLambdaService(mockClient, config);
+      const service = createIsbLambdaService(mockClient as never);
       const result = await service.approveLease(approveParams);
 
       expect(result.success).toBe(false);
@@ -156,163 +121,40 @@ describe('ISB Lambda Service', () => {
       expect(result.error).toBe('Lease not found');
     });
 
-    it('handles Lambda function error', async () => {
-      mockSend.mockResolvedValue({
-        FunctionError: 'Unhandled',
-        Payload: Buffer.from('{}'),
-      });
+    it('handles ISB client exceptions', async () => {
+      mockClient.reviewLease.mockRejectedValue(new Error('Network timeout'));
 
-      const service = createIsbLambdaService(mockClient, config);
+      const service = createIsbLambdaService(mockClient as never);
       const result = await service.approveLease(approveParams);
 
       expect(result.success).toBe(false);
       expect(result.statusCode).toBe(500);
-      expect(result.error).toContain('Lambda function error');
+      expect(result.error).toContain('Network timeout');
     });
 
-    it('handles empty payload response', async () => {
-      mockSend.mockResolvedValue({
-        Payload: undefined,
-      });
+    it('handles non-Error exceptions', async () => {
+      mockClient.reviewLease.mockRejectedValue('unknown error');
 
-      const service = createIsbLambdaService(mockClient, config);
+      const service = createIsbLambdaService(mockClient as never);
       const result = await service.approveLease(approveParams);
 
       expect(result.success).toBe(false);
-      expect(result.statusCode).toBe(500);
-      expect(result.error).toBe('Empty response from ISB Lambda');
+      expect(result.error).toContain('unknown error');
     });
 
-    it('handles malformed JSON response', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from('not valid json'),
+    it('returns 409 conflict status from ISB', async () => {
+      mockClient.reviewLease.mockResolvedValue({
+        success: false,
+        error: 'Lease already approved',
+        statusCode: 409,
       });
 
-      const service = createIsbLambdaService(mockClient, config);
+      const service = createIsbLambdaService(mockClient as never);
       const result = await service.approveLease(approveParams);
 
       expect(result.success).toBe(false);
-      expect(result.statusCode).toBe(500);
-      expect(result.error).toContain('Failed to parse ISB Lambda response');
-    });
-
-    it('extracts error from ISB JSend response format', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 409,
-            body: JSON.stringify({
-              data: {
-                errors: [{ message: 'Lease already approved' }],
-              },
-            }),
-          })
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.approveLease(approveParams);
-
-      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(409);
       expect(result.error).toBe('Lease already approved');
-    });
-
-    it('uses "success" default message when body.status is undefined (line 179)', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 200,
-            body: JSON.stringify({}), // No status field
-          })
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.approveLease(approveParams);
-
-      expect(result.success).toBe(true);
-      expect(result.message).toBe('success'); // Falls back to 'success'
-    });
-
-    it('falls back to body.message when JSend errors array is missing (line 185)', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 400,
-            body: JSON.stringify({
-              message: 'Validation failed',
-              data: {}, // No errors array
-            }),
-          })
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.approveLease(approveParams);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Validation failed');
-    });
-
-    it('uses "Unknown error from ISB" when no error message available (line 185)', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 500,
-            body: JSON.stringify({}), // No message, no errors array
-          })
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.approveLease(approveParams);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Unknown error from ISB');
-    });
-
-    it('defaults to statusCode 500 when statusCode is missing (line 172)', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            // No statusCode field - should default to 500
-            body: JSON.stringify({ message: 'Server error' }),
-          })
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.approveLease(approveParams);
-
-      expect(result.success).toBe(false);
-      expect(result.statusCode).toBe(500);
-      expect(result.error).toBe('Server error');
-    });
-
-    it('handles body as object instead of string (line 173)', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 200,
-            body: { status: 'approved' }, // Object, not JSON string
-          })
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.approveLease(approveParams);
-
-      expect(result.success).toBe(true);
-      expect(result.message).toBe('approved');
-    });
-
-    it('propagates client errors', async () => {
-      const error = new Error('Lambda unavailable');
-      mockSend.mockRejectedValue(error);
-
-      const service = createIsbLambdaService(mockClient, config);
-
-      await expect(service.approveLease(approveParams)).rejects.toThrow('Lambda unavailable');
     });
   });
 
@@ -325,77 +167,45 @@ describe('ISB Lambda Service', () => {
       approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
     };
 
-    it('sends Deny action in request body', async () => {
-      const service = createIsbLambdaService(mockClient, config);
+    it('calls reviewLease with Deny action', async () => {
+      mockClient.reviewLease.mockResolvedValue({
+        success: true,
+        data: { leaseId: 'test', status: 'Denied' },
+        statusCode: 200,
+      });
 
+      const service = createIsbLambdaService(mockClient as never);
       await service.denyLease(denyParams);
 
-      const callArgs = mockSend.mock.calls[0] as unknown[];
-      const sentCommand = callArgs[0] as InvokeCommand;
-      const payload = JSON.parse(Buffer.from(sentCommand.input.Payload as Buffer).toString());
-
-      expect(payload.body).toBe(JSON.stringify({ action: 'Deny' }));
+      expect(mockClient.reviewLease).toHaveBeenCalledWith(
+        expect.any(String),
+        { action: 'Deny' },
+        expect.stringContaining('deny-')
+      );
     });
 
     it('returns success result on 200 response', async () => {
-      const service = createIsbLambdaService(mockClient, config);
+      mockClient.reviewLease.mockResolvedValue({
+        success: true,
+        data: { leaseId: 'test', status: 'Denied' },
+        statusCode: 200,
+      });
 
+      const service = createIsbLambdaService(mockClient as never);
       const result = await service.denyLease(denyParams);
 
       expect(result.success).toBe(true);
       expect(result.statusCode).toBe(200);
     });
 
-    it('handles Lambda function error', async () => {
-      mockSend.mockResolvedValue({
-        FunctionError: 'Unhandled',
-        Payload: Buffer.from('{}'),
-      });
+    it('handles ISB client exceptions', async () => {
+      mockClient.reviewLease.mockRejectedValue(new Error('Lambda unavailable'));
 
-      const service = createIsbLambdaService(mockClient, config);
+      const service = createIsbLambdaService(mockClient as never);
       const result = await service.denyLease(denyParams);
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Lambda function error');
-    });
-
-    it('propagates client errors', async () => {
-      const error = new Error('Lambda unavailable');
-      mockSend.mockRejectedValue(error);
-
-      const service = createIsbLambdaService(mockClient, config);
-
-      await expect(service.denyLease(denyParams)).rejects.toThrow('Lambda unavailable');
-    });
-  });
-
-  describe('JWT token generation', () => {
-    it('includes approver email in JWT payload', async () => {
-      const service = createIsbLambdaService(mockClient, config);
-
-      await service.approveLease({
-        leaseId: {
-          userEmail: 'user@example.gov.uk',
-          uuid: '123e4567-e89b-12d3-a456-426614174000',
-        },
-        approverEmail: 'custom-approver@gov.uk',
-      });
-
-      const callArgs = mockSend.mock.calls[0] as unknown[];
-      const sentCommand = callArgs[0] as InvokeCommand;
-      const payload = JSON.parse(Buffer.from(sentCommand.input.Payload as Buffer).toString());
-
-      // Extract and decode JWT payload
-      const jwtToken = payload.headers.Authorization.replace('Bearer ', '');
-      const [, jwtPayloadB64] = jwtToken.split('.');
-      // Add padding if needed for base64url decoding
-      const paddedPayload = jwtPayloadB64 + '=='.slice((2 - jwtPayloadB64.length * 3) & 3);
-      const jwtPayload = JSON.parse(
-        Buffer.from(paddedPayload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString()
-      );
-
-      expect(jwtPayload.user.email).toBe('custom-approver@gov.uk');
-      expect(jwtPayload.user.roles).toContain('Admin');
+      expect(result.error).toContain('Lambda unavailable');
     });
   });
 
@@ -404,591 +214,178 @@ describe('ISB Lambda Service', () => {
       approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
     };
 
-    // Helper to create a mock accounts response (JSend format)
-    const createAccountsResponse = (
-      accounts: Array<{
-        awsAccountId: string;
-        name: string;
-        status: 'Available' | 'Active';
-        createdTime: string;
-        lastEditTime: string;
-      }>,
-      nextPageIdentifier?: string | null
-    ) => ({
-      statusCode: 200,
-      body: JSON.stringify({
-        status: 'success',
-        data: {
-          result: accounts.map((a) => ({
-            awsAccountId: a.awsAccountId,
-            name: a.name,
-            status: a.status,
-            meta: {
-              createdTime: a.createdTime,
-              lastEditTime: a.lastEditTime,
-            },
-          })),
-          nextPageIdentifier: nextPageIdentifier ?? null,
-        },
-      }),
-    });
+    it('calls fetchAllAccounts on ISB client', async () => {
+      mockClient.fetchAllAccounts.mockResolvedValue([]);
 
-    it('sends GET request to /accounts', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify(
-            createAccountsResponse([
-              {
-                awsAccountId: '123456789012',
-                name: 'pool-001',
-                status: 'Available',
-                createdTime: '2025-01-01T00:00:00Z',
-                lastEditTime: '2025-12-28T14:30:00Z',
-              },
-            ])
-          )
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
+      const service = createIsbLambdaService(mockClient as never);
       await service.getAccounts(getAccountsParams);
 
-      const callArgs = mockSend.mock.calls[0] as unknown[];
-      const sentCommand = callArgs[0] as InvokeCommand;
-      const payload = JSON.parse(Buffer.from(sentCommand.input.Payload as Buffer).toString());
-
-      expect(payload.httpMethod).toBe('GET');
-      expect(payload.path).toBe('/accounts');
-      expect(payload.resource).toBe('/accounts');
+      expect(mockClient.fetchAllAccounts).toHaveBeenCalledWith(
+        expect.stringContaining('accounts-'),
+      );
     });
 
-    it('returns accounts on successful single page response', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify(
-            createAccountsResponse([
-              {
-                awsAccountId: '123456789012',
-                name: 'pool-001',
-                status: 'Available',
-                createdTime: '2025-01-01T00:00:00Z',
-                lastEditTime: '2025-12-28T14:30:00Z',
-              },
-              {
-                awsAccountId: '123456789013',
-                name: 'pool-002',
-                status: 'Active',
-                createdTime: '2025-01-02T00:00:00Z',
-                lastEditTime: '2025-12-29T10:00:00Z',
-              },
-            ])
-          )
-        ),
-      });
+    it('returns accounts on successful response', async () => {
+      mockClient.fetchAllAccounts.mockResolvedValue([
+        { awsAccountId: '123456789012', name: 'pool-001', status: 'Available' },
+        { awsAccountId: '123456789013', name: 'pool-002', status: 'Active' },
+      ]);
 
-      const service = createIsbLambdaService(mockClient, config);
+      const service = createIsbLambdaService(mockClient as never);
       const result = await service.getAccounts(getAccountsParams);
 
       expect(result.success).toBe(true);
       expect(result.accounts).toHaveLength(2);
       expect(result.totalFetched).toBe(2);
-      expect(result.pagesTraversed).toBe(1);
       expect(result.accounts[0]?.awsAccountId).toBe('123456789012');
       expect(result.accounts[0]?.status).toBe('Available');
       expect(result.accounts[1]?.status).toBe('Active');
     });
 
-    it('handles multi-page pagination (2 pages)', async () => {
-      // First page with nextPageIdentifier
-      mockSend.mockResolvedValueOnce({
-        Payload: Buffer.from(
-          JSON.stringify(
-            createAccountsResponse(
-              [
-                {
-                  awsAccountId: '123456789012',
-                  name: 'pool-001',
-                  status: 'Available',
-                  createdTime: '2025-01-01T00:00:00Z',
-                  lastEditTime: '2025-12-28T14:30:00Z',
-                },
-              ],
-              'page2token'
-            )
-          )
-        ),
-      });
+    it('returns empty accounts array when none found', async () => {
+      mockClient.fetchAllAccounts.mockResolvedValue([]);
 
-      // Second page without nextPageIdentifier
-      mockSend.mockResolvedValueOnce({
-        Payload: Buffer.from(
-          JSON.stringify(
-            createAccountsResponse([
-              {
-                awsAccountId: '123456789013',
-                name: 'pool-002',
-                status: 'Active',
-                createdTime: '2025-01-02T00:00:00Z',
-                lastEditTime: '2025-12-29T10:00:00Z',
-              },
-            ])
-          )
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
-
-      expect(result.success).toBe(true);
-      expect(result.accounts).toHaveLength(2);
-      expect(result.totalFetched).toBe(2);
-      expect(result.pagesTraversed).toBe(2);
-      expect(mockSend).toHaveBeenCalledTimes(2);
-
-      // Verify second call includes pageIdentifier
-      const secondCallArgs = mockSend.mock.calls[1] as unknown[];
-      const secondCommand = secondCallArgs[0] as InvokeCommand;
-      const secondPayload = JSON.parse(
-        Buffer.from(secondCommand.input.Payload as Buffer).toString()
-      );
-      expect(secondPayload.queryStringParameters?.pageIdentifier).toBe('page2token');
-    });
-
-    it('handles multi-page pagination (3 pages)', async () => {
-      // First page
-      mockSend.mockResolvedValueOnce({
-        Payload: Buffer.from(
-          JSON.stringify(
-            createAccountsResponse(
-              [
-                {
-                  awsAccountId: '111111111111',
-                  name: 'pool-001',
-                  status: 'Available',
-                  createdTime: '2025-01-01T00:00:00Z',
-                  lastEditTime: '2025-12-28T14:30:00Z',
-                },
-              ],
-              'page2'
-            )
-          )
-        ),
-      });
-
-      // Second page
-      mockSend.mockResolvedValueOnce({
-        Payload: Buffer.from(
-          JSON.stringify(
-            createAccountsResponse(
-              [
-                {
-                  awsAccountId: '222222222222',
-                  name: 'pool-002',
-                  status: 'Active',
-                  createdTime: '2025-01-02T00:00:00Z',
-                  lastEditTime: '2025-12-29T10:00:00Z',
-                },
-              ],
-              'page3'
-            )
-          )
-        ),
-      });
-
-      // Third page (final)
-      mockSend.mockResolvedValueOnce({
-        Payload: Buffer.from(
-          JSON.stringify(
-            createAccountsResponse([
-              {
-                awsAccountId: '333333333333',
-                name: 'pool-003',
-                status: 'Available',
-                createdTime: '2025-01-03T00:00:00Z',
-                lastEditTime: '2025-12-29T12:00:00Z',
-              },
-            ])
-          )
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
-
-      expect(result.success).toBe(true);
-      expect(result.accounts).toHaveLength(3);
-      expect(result.totalFetched).toBe(3);
-      expect(result.pagesTraversed).toBe(3);
-      expect(mockSend).toHaveBeenCalledTimes(3);
-    });
-
-    it('returns empty accounts array on empty response', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(JSON.stringify(createAccountsResponse([]))),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
+      const service = createIsbLambdaService(mockClient as never);
       const result = await service.getAccounts(getAccountsParams);
 
       expect(result.success).toBe(true);
       expect(result.accounts).toHaveLength(0);
       expect(result.totalFetched).toBe(0);
-      expect(result.pagesTraversed).toBe(1);
     });
 
-    it('returns failure on Lambda function error', async () => {
-      mockSend.mockResolvedValue({
-        FunctionError: 'Unhandled',
-        Payload: Buffer.from('{}'),
-      });
+    it('filters out accounts without Available/Active status', async () => {
+      mockClient.fetchAllAccounts.mockResolvedValue([
+        { awsAccountId: '123456789012', name: 'pool-001', status: 'Available' },
+        { awsAccountId: '123456789013', name: 'pool-002', status: 'Suspended' },
+        { awsAccountId: '123456789014', name: 'pool-003', status: 'Active' },
+      ]);
 
-      const service = createIsbLambdaService(mockClient, config);
+      const service = createIsbLambdaService(mockClient as never);
+      const result = await service.getAccounts(getAccountsParams);
+
+      expect(result.success).toBe(true);
+      expect(result.accounts).toHaveLength(2);
+      expect(result.accounts[0]?.awsAccountId).toBe('123456789012');
+      expect(result.accounts[1]?.awsAccountId).toBe('123456789014');
+    });
+
+    it('uses awsAccountId as name fallback', async () => {
+      mockClient.fetchAllAccounts.mockResolvedValue([
+        { awsAccountId: '123456789012', status: 'Available' },
+      ]);
+
+      const service = createIsbLambdaService(mockClient as never);
+      const result = await service.getAccounts(getAccountsParams);
+
+      expect(result.accounts[0]?.name).toBe('123456789012');
+    });
+
+    it('returns failure on ISB client exception', async () => {
+      mockClient.fetchAllAccounts.mockRejectedValue(new Error('Network error'));
+
+      const service = createIsbLambdaService(mockClient as never);
       const result = await service.getAccounts(getAccountsParams);
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Lambda function error');
+      expect(result.error).toContain('Network error');
+      expect(result.accounts).toHaveLength(0);
     });
 
-    it('returns failure on empty payload', async () => {
-      mockSend.mockResolvedValue({
-        Payload: undefined,
-      });
+    it('provides meta fields for Account type compatibility', async () => {
+      mockClient.fetchAllAccounts.mockResolvedValue([
+        { awsAccountId: '123456789012', name: 'pool-001', status: 'Available' },
+      ]);
 
-      const service = createIsbLambdaService(mockClient, config);
+      const service = createIsbLambdaService(mockClient as never);
       const result = await service.getAccounts(getAccountsParams);
 
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Empty response from ISB Lambda');
+      expect(result.accounts[0]?.meta).toBeDefined();
+      expect(result.accounts[0]?.meta.createdTime).toBeDefined();
+      expect(result.accounts[0]?.meta.lastEditTime).toBeDefined();
     });
+  });
 
-    it('returns failure on non-2xx status code', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 403,
-            body: JSON.stringify({ message: 'Forbidden' }),
-          })
-        ),
+  describe('getLease', () => {
+    const getLeaseParams: GetLeaseLambdaParams = {
+      leaseId: {
+        userEmail: 'user@example.gov.uk',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+      },
+      approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
+    };
+
+    it('calls fetchLeaseByKey with correct parameters', async () => {
+      mockClient.fetchLeaseByKey.mockResolvedValue({
+        userEmail: 'user@example.gov.uk',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        originalLeaseTemplateName: 'basic-vpc',
       });
 
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
+      const service = createIsbLambdaService(mockClient as never);
+      await service.getLease(getLeaseParams);
 
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Forbidden');
-    });
-
-    it('returns failure on malformed JSON response', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from('not valid json'),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Failed to parse ISB Lambda response');
-    });
-
-    it('returns failure on invalid account schema', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 200,
-            body: JSON.stringify({
-              accounts: [
-                {
-                  // Missing required fields
-                  awsAccountId: '123456789012',
-                  name: 'pool-001',
-                  // status is missing
-                },
-              ],
-            }),
-          })
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Invalid accounts response schema');
-    });
-
-    it('propagates client errors', async () => {
-      const error = new Error('Lambda unavailable');
-      mockSend.mockRejectedValue(error);
-
-      const service = createIsbLambdaService(mockClient, config);
-
-      await expect(service.getAccounts(getAccountsParams)).rejects.toThrow('Lambda unavailable');
-    });
-
-    it('includes Authorization header with JWT', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(JSON.stringify(createAccountsResponse([]))),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      await service.getAccounts(getAccountsParams);
-
-      const callArgs = mockSend.mock.calls[0] as unknown[];
-      const sentCommand = callArgs[0] as InvokeCommand;
-      const payload = JSON.parse(Buffer.from(sentCommand.input.Payload as Buffer).toString());
-
-      expect(payload.headers.Authorization).toMatch(/^Bearer .+\..+\..+$/);
-    });
-
-    it('returns error when pagination exceeds MAX_PAGINATION_PAGES limit (infinite loop prevention)', async () => {
-      // Setup mockSend to always return a page with nextPageIdentifier
-      // This simulates an infinite loop scenario
-      const infinitePageResponse = createAccountsResponse(
-        [
-          {
-            awsAccountId: '123456789012',
-            name: 'pool-001',
-            status: 'Available',
-            createdTime: '2025-01-01T00:00:00Z',
-            lastEditTime: '2025-12-28T14:30:00Z',
-          },
-        ],
-        'always-has-next'
+      expect(mockClient.fetchLeaseByKey).toHaveBeenCalledWith(
+        'user@example.gov.uk',
+        '123e4567-e89b-12d3-a456-426614174000',
+        expect.stringContaining('getlease-')
       );
-
-      // Mock 101 calls to trigger the safety limit (MAX_PAGINATION_PAGES = 100)
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(JSON.stringify(infinitePageResponse)),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Pagination exceeded 100 pages');
-      expect(result.pagesTraversed).toBe(101);
-      // Should have accumulated accounts from 100 pages before hitting the limit
-      expect(result.accounts.length).toBe(100);
     });
 
-    it('continues fetching until nextPageIdentifier is null (pagination termination)', async () => {
-      // Page 1 with nextPageIdentifier as string
-      mockSend.mockResolvedValueOnce({
-        Payload: Buffer.from(
-          JSON.stringify(
-            createAccountsResponse(
-              [
-                {
-                  awsAccountId: '111111111111',
-                  name: 'pool-001',
-                  status: 'Available',
-                  createdTime: '2025-01-01T00:00:00Z',
-                  lastEditTime: '2025-12-28T14:30:00Z',
-                },
-              ],
-              'next'
-            )
-          )
-        ),
+    it('returns template name on successful lookup', async () => {
+      mockClient.fetchLeaseByKey.mockResolvedValue({
+        userEmail: 'user@example.gov.uk',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        originalLeaseTemplateName: 'basic-vpc',
       });
 
-      // Page 2 with nextPageIdentifier as null (explicit)
-      mockSend.mockResolvedValueOnce({
-        Payload: Buffer.from(
-          JSON.stringify(
-            createAccountsResponse(
-              [
-                {
-                  awsAccountId: '222222222222',
-                  name: 'pool-002',
-                  status: 'Active',
-                  createdTime: '2025-01-02T00:00:00Z',
-                  lastEditTime: '2025-12-29T10:00:00Z',
-                },
-              ],
-              null
-            )
-          )
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
+      const service = createIsbLambdaService(mockClient as never);
+      const result = await service.getLease(getLeaseParams);
 
       expect(result.success).toBe(true);
-      expect(result.pagesTraversed).toBe(2);
-      expect(mockSend).toHaveBeenCalledTimes(2);
+      expect(result.templateName).toBe('basic-vpc');
     });
 
-    it('sends null queryStringParameters on first call (no pageIdentifier)', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(JSON.stringify(createAccountsResponse([]))),
+    it('returns undefined templateName when not present in lease', async () => {
+      mockClient.fetchLeaseByKey.mockResolvedValue({
+        userEmail: 'user@example.gov.uk',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
       });
 
-      const service = createIsbLambdaService(mockClient, config);
-      await service.getAccounts(getAccountsParams);
-
-      const callArgs = mockSend.mock.calls[0] as unknown[];
-      const sentCommand = callArgs[0] as InvokeCommand;
-      const payload = JSON.parse(Buffer.from(sentCommand.input.Payload as Buffer).toString());
-
-      expect(payload.queryStringParameters).toBeNull();
-    });
-
-    it('handles non-2xx response where body is already an object', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 500,
-            body: { message: 'Internal server error' }, // Already an object, not a string
-          })
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Internal server error');
-    });
-
-    it('handles response with missing statusCode (defaults to 500)', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            // statusCode is missing, should default to 500
-            body: JSON.stringify({ message: 'Unexpected response' }),
-          })
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Unexpected response');
-    });
-
-    it('uses accountsFunctionName when configured', async () => {
-      const configWithAccountsLambda: IsbLambdaServiceConfig = {
-        functionName: 'ISB-LeasesLambdaFunction-test',
-        accountsFunctionName: 'ISB-AccountsLambdaFunction-test',
-      };
-
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(JSON.stringify(createAccountsResponse([]))),
-      });
-
-      const service = createIsbLambdaService(mockClient, configWithAccountsLambda);
-      await service.getAccounts(getAccountsParams);
-
-      const callArgs = mockSend.mock.calls[0] as unknown[];
-      const sentCommand = callArgs[0] as InvokeCommand;
-      expect(sentCommand.input.FunctionName).toBe('ISB-AccountsLambdaFunction-test');
-    });
-
-    it('handles non-2xx response with JSend error format', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 400,
-            body: JSON.stringify({
-              data: {
-                errors: [{ message: 'Bad request parameter' }],
-              },
-            }),
-          })
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Bad request parameter');
-    });
-
-    it('handles 2xx response with body as object (not string)', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 200,
-            body: {
-              status: 'success',
-              data: {
-                result: [
-                  {
-                    awsAccountId: '123456789012',
-                    name: 'pool-001',
-                    status: 'Available',
-                    meta: {
-                      createdTime: '2025-01-01T00:00:00Z',
-                      lastEditTime: '2025-12-28T14:30:00Z',
-                    },
-                  },
-                ],
-                nextPageIdentifier: null,
-              },
-            },
-          })
-        ),
-      });
-
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
+      const service = createIsbLambdaService(mockClient as never);
+      const result = await service.getLease(getLeaseParams);
 
       expect(result.success).toBe(true);
-      expect(result.accounts).toHaveLength(1);
+      expect(result.templateName).toBeUndefined();
     });
 
-    it('falls back to body.message when JSend errors array is empty (line 337)', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 400,
-            body: JSON.stringify({
-              message: 'Request failed',
-              data: { errors: [] }, // Empty errors array
-            }),
-          })
-        ),
-      });
+    it('returns failure when lease not found (null result)', async () => {
+      mockClient.fetchLeaseByKey.mockResolvedValue(null);
 
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
+      const service = createIsbLambdaService(mockClient as never);
+      const result = await service.getLease(getLeaseParams);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Request failed');
+      expect(result.error).toBe('Lease not found');
     });
 
-    it('uses "Unknown error from ISB" when no message in getAccounts (line 337)', async () => {
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from(
-          JSON.stringify({
-            statusCode: 500,
-            body: JSON.stringify({ data: {} }), // No errors, no message
-          })
-        ),
-      });
+    it('handles ISB client exceptions', async () => {
+      mockClient.fetchLeaseByKey.mockRejectedValue(new Error('API timeout'));
 
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
+      const service = createIsbLambdaService(mockClient as never);
+      const result = await service.getLease(getLeaseParams);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Unknown error from ISB');
+      expect(result.error).toContain('API timeout');
     });
 
-    it('handles non-Error exception in getAccounts parse (line 374)', async () => {
-      // First call throws a non-Error exception during processing
-      mockSend.mockResolvedValue({
-        Payload: Buffer.from('not valid json'),
-      });
+    it('handles non-Error exceptions', async () => {
+      mockClient.fetchLeaseByKey.mockRejectedValue('unexpected');
 
-      const service = createIsbLambdaService(mockClient, config);
-      const result = await service.getAccounts(getAccountsParams);
+      const service = createIsbLambdaService(mockClient as never);
+      const result = await service.getLease(getLeaseParams);
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Failed to parse ISB Lambda response');
+      expect(result.error).toContain('unexpected');
     });
   });
 });

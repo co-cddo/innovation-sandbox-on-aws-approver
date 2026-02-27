@@ -130,10 +130,8 @@ export class ApproverStack extends cdk.Stack {
             effect: iam.Effect.ALLOW,
             actions: ['lambda:InvokeFunction'],
             resources: [
-              // Future action Lambdas (Stories 7.2.1/7.2.2)
+              // Action Lambdas (Stories 7.2.1/7.2.2)
               `arn:aws:lambda:${this.region}:${this.account}:function:ApproverSlack*`,
-              // ISB Leases Lambda (existing)
-              `arn:aws:lambda:${this.region}:${this.account}:function:${config.isbLeasesLambdaName}`,
             ],
           }),
         ],
@@ -196,7 +194,9 @@ export class ApproverStack extends cdk.Stack {
     // Handles "Approve" button clicks from Slack via Amazon Q Developer
     // ==========================================
     const slackApproveLambda = new SlackApproveLambda(this, 'SlackApproveLambda', {
-      isbLeasesLambdaName: config.isbLeasesLambdaName,
+      isbApiBaseUrl: config.isbApiBaseUrl,
+      isbJwtSecretPath: config.isbJwtSecretPath,
+      isbSecretsKmsKeyId: config.isbSecretsKmsKeyId,
       approverEmail: config.approverEmail,
       snsTopicArn: notificationTopic.topicArn,
       logLevel: config.logLevel,
@@ -207,7 +207,9 @@ export class ApproverStack extends cdk.Stack {
     // Handles "Deny" button clicks from Slack via Amazon Q Developer
     // ==========================================
     const slackDenyLambda = new SlackDenyLambda(this, 'SlackDenyLambda', {
-      isbLeasesLambdaName: config.isbLeasesLambdaName,
+      isbApiBaseUrl: config.isbApiBaseUrl,
+      isbJwtSecretPath: config.isbJwtSecretPath,
+      isbSecretsKmsKeyId: config.isbSecretsKmsKeyId,
       approverEmail: config.approverEmail,
       snsTopicArn: notificationTopic.topicArn,
       logLevel: config.logLevel,

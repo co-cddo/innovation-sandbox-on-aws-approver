@@ -335,23 +335,7 @@ describe('ApproverStack', () => {
         PolicyDocument: {
           Statement: Match.arrayWith([
             Match.objectLike({
-              Resource: Match.arrayWith([
-                Match.stringLikeRegexp('.*function:ApproverSlack.*'),
-              ]),
-            }),
-          ]),
-        },
-      });
-    });
-
-    it('includes ISB Leases Lambda in resources', () => {
-      template.hasResourceProperties('AWS::IAM::ManagedPolicy', {
-        PolicyDocument: {
-          Statement: Match.arrayWith([
-            Match.objectLike({
-              Resource: Match.arrayWith([
-                Match.stringLikeRegexp('.*function:ISB-LeasesLambdaFunction-ndx.*'),
-              ]),
+              Resource: Match.stringLikeRegexp('.*function:ApproverSlack.*'),
             }),
           ]),
         },
@@ -398,12 +382,23 @@ describe('ApproverStack', () => {
       });
     });
 
-    it('includes ISB_LEASES_LAMBDA_NAME environment variable', () => {
+    it('includes ISB_API_BASE_URL environment variable', () => {
       template.hasResourceProperties('AWS::Lambda::Function', {
         FunctionName: 'ApproverSlackApprove',
         Environment: {
           Variables: Match.objectLike({
-            ISB_LEASES_LAMBDA_NAME: 'ISB-LeasesLambdaFunction-ndx',
+            ISB_API_BASE_URL: 'https://1ewlxhaey6.execute-api.us-west-2.amazonaws.com/prod',
+          }),
+        },
+      });
+    });
+
+    it('includes ISB_JWT_SECRET_PATH environment variable', () => {
+      template.hasResourceProperties('AWS::Lambda::Function', {
+        FunctionName: 'ApproverSlackApprove',
+        Environment: {
+          Variables: Match.objectLike({
+            ISB_JWT_SECRET_PATH: '/InnovationSandbox/ndx/Auth/JwtSecret',
           }),
         },
       });
@@ -420,15 +415,14 @@ describe('ApproverStack', () => {
       });
     });
 
-    it('grants Slack Approve Lambda permission to invoke ISB Leases Lambda', () => {
+    it('grants Slack Approve Lambda permission to read ISB JWT secret', () => {
       template.hasResourceProperties('AWS::IAM::Policy', {
         PolicyDocument: {
           Statement: Match.arrayWith([
             Match.objectLike({
-              Sid: 'InvokeISBLeasesLambda',
-              Action: 'lambda:InvokeFunction',
+              Sid: 'GetIsbJwtSecret',
+              Action: 'secretsmanager:GetSecretValue',
               Effect: 'Allow',
-              Resource: Match.stringLikeRegexp('.*function:ISB-LeasesLambdaFunction-ndx.*'),
             }),
           ]),
         },
@@ -467,12 +461,23 @@ describe('ApproverStack', () => {
       });
     });
 
-    it('includes ISB_LEASES_LAMBDA_NAME environment variable', () => {
+    it('includes ISB_API_BASE_URL environment variable', () => {
       template.hasResourceProperties('AWS::Lambda::Function', {
         FunctionName: 'ApproverSlackDeny',
         Environment: {
           Variables: Match.objectLike({
-            ISB_LEASES_LAMBDA_NAME: 'ISB-LeasesLambdaFunction-ndx',
+            ISB_API_BASE_URL: 'https://1ewlxhaey6.execute-api.us-west-2.amazonaws.com/prod',
+          }),
+        },
+      });
+    });
+
+    it('includes ISB_JWT_SECRET_PATH environment variable', () => {
+      template.hasResourceProperties('AWS::Lambda::Function', {
+        FunctionName: 'ApproverSlackDeny',
+        Environment: {
+          Variables: Match.objectLike({
+            ISB_JWT_SECRET_PATH: '/InnovationSandbox/ndx/Auth/JwtSecret',
           }),
         },
       });
@@ -489,14 +494,14 @@ describe('ApproverStack', () => {
       });
     });
 
-    it('creates IAM role with lambda:InvokeFunction permission for ISB Lambda', () => {
+    it('grants Slack Deny Lambda permission to read ISB JWT secret', () => {
       template.hasResourceProperties('AWS::IAM::Policy', {
         PolicyDocument: {
           Statement: Match.arrayWith([
             Match.objectLike({
-              Action: 'lambda:InvokeFunction',
+              Sid: 'GetIsbJwtSecret',
+              Action: 'secretsmanager:GetSecretValue',
               Effect: 'Allow',
-              Resource: Match.stringLikeRegexp('.*function:ISB-LeasesLambdaFunction-ndx.*'),
             }),
           ]),
         },
