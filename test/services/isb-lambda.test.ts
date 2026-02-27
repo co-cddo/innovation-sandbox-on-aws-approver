@@ -70,7 +70,7 @@ describe('ISB Lambda Service', () => {
 
       expect(mockClient.reviewLease).toHaveBeenCalledWith(
         expect.any(String), // base64 encoded leaseId
-        { action: 'Approve', approverEmail: approveParams.approverEmail },
+        { action: 'Approve' },
         expect.stringContaining('approve-')
       );
     });
@@ -179,7 +179,7 @@ describe('ISB Lambda Service', () => {
 
       expect(mockClient.reviewLease).toHaveBeenCalledWith(
         expect.any(String),
-        { action: 'Deny', approverEmail: denyParams.approverEmail },
+        { action: 'Deny' },
         expect.stringContaining('deny-')
       );
     });

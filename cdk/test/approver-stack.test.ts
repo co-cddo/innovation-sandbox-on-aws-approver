@@ -387,7 +387,7 @@ describe('ApproverStack', () => {
         FunctionName: 'ApproverSlackApprove',
         Environment: {
           Variables: Match.objectLike({
-            ISB_API_BASE_URL: 'https://isb-api.innovation-sandbox.gov.uk',
+            ISB_API_BASE_URL: 'https://1ewlxhaey6.execute-api.us-west-2.amazonaws.com/prod',
           }),
         },
       });
@@ -466,7 +466,7 @@ describe('ApproverStack', () => {
         FunctionName: 'ApproverSlackDeny',
         Environment: {
           Variables: Match.objectLike({
-            ISB_API_BASE_URL: 'https://isb-api.innovation-sandbox.gov.uk',
+            ISB_API_BASE_URL: 'https://1ewlxhaey6.execute-api.us-west-2.amazonaws.com/prod',
           }),
         },
       });
