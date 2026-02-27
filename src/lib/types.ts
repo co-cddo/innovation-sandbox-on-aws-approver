@@ -27,9 +27,10 @@ export const LeaseRequestedDetailSchema = z
   .object({
     // ISB sends leaseId as composite object with userEmail and uuid
     leaseId: LeaseIdSchema,
-    // ISB uses leaseTemplateId or originalLeaseTemplateUuid, we also accept templateId
+    // ISB uses leaseTemplateId or originalLeaseTemplateUuid or leaseTemplateUuid, we also accept templateId
     leaseTemplateId: z.string().optional(),
     originalLeaseTemplateUuid: z.string().optional(),
+    leaseTemplateUuid: z.string().optional(),
     templateId: z.string().optional(),
     // Budget: ISB uses maxSpend
     budgetAmount: z.number().optional(),
@@ -46,9 +47,9 @@ export const LeaseRequestedDetailSchema = z
   })
   .transform((data) => ({
     ...data,
-    // Normalize template: prefer leaseTemplateId > originalLeaseTemplateUuid > templateId
+    // Normalize template: prefer leaseTemplateId > originalLeaseTemplateUuid > leaseTemplateUuid > templateId
     templateId:
-      data.leaseTemplateId ?? data.originalLeaseTemplateUuid ?? data.templateId ?? 'unknown',
+      data.leaseTemplateId ?? data.originalLeaseTemplateUuid ?? data.leaseTemplateUuid ?? data.templateId ?? 'unknown',
     // Normalize budget: prefer maxSpend over budgetAmount (default 0 - no penalty if missing)
     budgetAmount: data.maxSpend ?? data.budgetAmount ?? 0,
     // Normalize duration: prefer leaseDurationInHours > expiresInHours > leaseDurationHours (default 0 - no penalty if missing)

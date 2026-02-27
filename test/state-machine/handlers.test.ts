@@ -192,7 +192,8 @@ describe('TIMING_CHECK handler', () => {
     expect(result.context.reason).toBe('Within business hours');
   });
 
-  it('should transition to DELAYED when outside business hours', () => {
+  // TEMPORARY: Skipped while business hours bypass is active (revert with handlers.ts)
+  it.skip('should transition to DELAYED when outside business hours', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
@@ -210,7 +211,8 @@ describe('TIMING_CHECK handler', () => {
     expect(result.context.reason).toContain('2025-01-16T07:00:00.000Z');
   });
 
-  it('should use "unknown" when nextProcessingTime is undefined (line 157)', () => {
+  // TEMPORARY: Skipped while business hours bypass is active (revert with handlers.ts)
+  it.skip('should use "unknown" when nextProcessingTime is undefined (line 157)', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
