@@ -106,6 +106,33 @@ describe('LeaseRequestedDetailSchema', () => {
       expect(result.data.templateId).toBe('my-template');
     }
   });
+
+  it('normalizes leaseTemplateUuid to templateId', () => {
+    const detailWithLeaseTemplateUuid = {
+      leaseId: validDetail.leaseId,
+      leaseTemplateUuid: '8c2e6162-9d8e-42c9-82c3-d2a64d892ea8',
+    };
+
+    const result = LeaseRequestedDetailSchema.safeParse(detailWithLeaseTemplateUuid);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.templateId).toBe('8c2e6162-9d8e-42c9-82c3-d2a64d892ea8');
+    }
+  });
+
+  it('prefers leaseTemplateId over leaseTemplateUuid', () => {
+    const detailWithBoth = {
+      leaseId: validDetail.leaseId,
+      leaseTemplateId: 'preferred-template',
+      leaseTemplateUuid: '8c2e6162-9d8e-42c9-82c3-d2a64d892ea8',
+    };
+
+    const result = LeaseRequestedDetailSchema.safeParse(detailWithBoth);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.templateId).toBe('preferred-template');
+    }
+  });
 });
 
 describe('LeaseRequestedEventSchema', () => {
