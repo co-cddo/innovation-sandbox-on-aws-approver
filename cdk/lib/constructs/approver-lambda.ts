@@ -115,6 +115,17 @@ export class ApproverLambda extends Construct {
       })
     );
 
+    // Grant KMS decrypt for ISB Secrets Manager (JWT secret encrypted with customer-managed key)
+    this.function.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['kms:Decrypt'],
+        resources: [
+          `arn:aws:kms:us-west-2:${cdk.Stack.of(this).account}:key/${config.isbSecretsKmsKeyId}`,
+        ],
+      })
+    );
+
     // Grant ISB Leases table read/write (Scan needed for org history queries)
     this.function.addToRolePolicy(
       new iam.PolicyStatement({

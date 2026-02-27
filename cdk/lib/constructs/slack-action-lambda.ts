@@ -36,6 +36,8 @@ export interface SlackActionLambdaProps {
   isbApiBaseUrl: string;
   /** ISB JWT secret path in Secrets Manager */
   isbJwtSecretPath: string;
+  /** KMS key ID for ISB Secrets Manager encryption */
+  isbSecretsKmsKeyId: string;
   /** Approver email for automated approvals/denials */
   approverEmail: string;
   /** SNS topic ARN for thread replies (for future use in Story 7.3.x) */
@@ -71,6 +73,7 @@ export class SlackActionLambda extends Construct {
       actionType,
       isbApiBaseUrl,
       isbJwtSecretPath,
+      isbSecretsKmsKeyId,
       approverEmail,
       snsTopicArn,
       logLevel = 'INFO',
@@ -130,6 +133,18 @@ export class SlackActionLambda extends Construct {
         actions: ['secretsmanager:GetSecretValue'],
         resources: [
           `arn:aws:secretsmanager:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:secret:${isbJwtSecretPath}*`,
+        ],
+      })
+    );
+
+    // Grant KMS decrypt for ISB Secrets Manager (JWT secret encrypted with customer-managed key)
+    this.function.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'DecryptIsbJwtSecret',
+        effect: iam.Effect.ALLOW,
+        actions: ['kms:Decrypt'],
+        resources: [
+          `arn:aws:kms:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:key/${isbSecretsKmsKeyId}`,
         ],
       })
     );

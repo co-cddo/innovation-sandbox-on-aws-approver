@@ -25,6 +25,8 @@ export interface ApproverConfig {
   isbEventBusName: string;
   /** KMS key ID for ISB DynamoDB table encryption */
   isbKmsKeyId: string;
+  /** KMS key ID for ISB Secrets Manager encryption */
+  isbSecretsKmsKeyId: string;
   /** Bedrock model ID for AI analysis */
   bedrockModelId: string;
   /** Log level */
@@ -43,10 +45,11 @@ export const DEFAULT_CONFIG: ApproverConfig = {
   isbConsoleUrl: 'https://ndx.digital.cabinet-office.gov.uk', // ISB Console URL
   isbLeasesTableName: 'ndx-try-isb-data-LeaseTable473C6DF2-1RC3238PVASE1',
   isbAccountsTableName: 'ndx-try-isb-data-SandboxAccountTableEFB9C069-198TPLJI6Z9KV',
-  isbApiBaseUrl: 'https://isb-api.innovation-sandbox.gov.uk',
+  isbApiBaseUrl: 'https://1ewlxhaey6.execute-api.us-west-2.amazonaws.com/prod',
   isbJwtSecretPath: '/InnovationSandbox/ndx/Auth/JwtSecret',
   isbEventBusName: 'InnovationSandboxComputeISBEventBus6697FE33',
   isbKmsKeyId: '4682f54a-cf9a-4a2f-941c-aba8795ac878',
+  isbSecretsKmsKeyId: 'eb91a9da-586e-430d-b642-e27415116b8d',
   bedrockModelId: 'us.amazon.nova-micro-v1:0', // Inference profile for on-demand throughput
   logLevel: 'INFO',
   ruleWeights: JSON.stringify({

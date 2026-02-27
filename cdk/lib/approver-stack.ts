@@ -196,6 +196,7 @@ export class ApproverStack extends cdk.Stack {
     const slackApproveLambda = new SlackApproveLambda(this, 'SlackApproveLambda', {
       isbApiBaseUrl: config.isbApiBaseUrl,
       isbJwtSecretPath: config.isbJwtSecretPath,
+      isbSecretsKmsKeyId: config.isbSecretsKmsKeyId,
       approverEmail: config.approverEmail,
       snsTopicArn: notificationTopic.topicArn,
       logLevel: config.logLevel,
@@ -208,6 +209,7 @@ export class ApproverStack extends cdk.Stack {
     const slackDenyLambda = new SlackDenyLambda(this, 'SlackDenyLambda', {
       isbApiBaseUrl: config.isbApiBaseUrl,
       isbJwtSecretPath: config.isbJwtSecretPath,
+      isbSecretsKmsKeyId: config.isbSecretsKmsKeyId,
       approverEmail: config.approverEmail,
       snsTopicArn: notificationTopic.topicArn,
       logLevel: config.logLevel,

@@ -17,6 +17,7 @@ describe('SlackActionLambda Base Construct', () => {
         actionType: 'approve',
         isbApiBaseUrl: 'https://isb-api.test.gov.uk',
         isbJwtSecretPath: '/test/JwtSecret',
+        isbSecretsKmsKeyId: 'test-kms-key-id',
         approverEmail: 'test-approver@dsit.gov.uk',
         snsTopicArn: 'arn:aws:sns:us-west-2:123456789012:test-topic',
         logLevel: 'DEBUG',
@@ -94,6 +95,7 @@ describe('SlackActionLambda Base Construct', () => {
         actionType: 'deny',
         isbApiBaseUrl: 'https://isb-api.test.gov.uk',
         isbJwtSecretPath: '/test/JwtSecret',
+        isbSecretsKmsKeyId: 'test-kms-key-id',
         approverEmail: 'test-approver@dsit.gov.uk',
         snsTopicArn: 'arn:aws:sns:us-west-2:123456789012:test-topic',
         logLevel: 'DEBUG',
@@ -139,6 +141,7 @@ describe('SlackActionLambda Base Construct', () => {
         actionType: 'approve',
         isbApiBaseUrl: 'https://isb-api.test.gov.uk',
         isbJwtSecretPath: '/test/JwtSecret',
+        isbSecretsKmsKeyId: 'test-kms-key-id',
         approverEmail: 'test-approver@dsit.gov.uk',
         snsTopicArn: 'arn:aws:sns:us-west-2:123456789012:test-topic',
         logLevel: 'DEBUG',
@@ -212,6 +215,7 @@ describe('SlackActionLambda Base Construct', () => {
         actionType: 'approve',
         isbApiBaseUrl: 'https://isb-api.test.gov.uk',
         isbJwtSecretPath: '/test/JwtSecret',
+        isbSecretsKmsKeyId: 'test-kms-key-id',
         approverEmail: 'test-approver@dsit.gov.uk',
         snsTopicArn: 'arn:aws:sns:us-west-2:123456789012:test-topic',
       });
@@ -246,6 +250,7 @@ describe('SlackActionLambda Base Construct', () => {
         actionType: 'approve',
         isbApiBaseUrl: 'https://isb-api.test.gov.uk',
         isbJwtSecretPath: '/test/JwtSecret',
+        isbSecretsKmsKeyId: 'test-kms-key-id',
         approverEmail: 'test-approver@dsit.gov.uk',
         snsTopicArn: 'arn:aws:sns:us-west-2:123456789012:test-topic',
       });
@@ -273,6 +278,7 @@ describe('SlackActionLambda Base Construct', () => {
         actionType: 'approve',
         isbApiBaseUrl: 'https://isb-api.test.gov.uk',
         isbJwtSecretPath: '/test/JwtSecret',
+        isbSecretsKmsKeyId: 'test-kms-key-id',
         approverEmail: 'test-approver@dsit.gov.uk',
         snsTopicArn: 'arn:aws:sns:us-west-2:123456789012:test-topic',
       });
@@ -317,6 +323,7 @@ describe('SlackActionLambda Base Construct', () => {
         actionType: 'approve',
         isbApiBaseUrl: 'https://isb-api.test.gov.uk',
         isbJwtSecretPath: '/test/JwtSecret',
+        isbSecretsKmsKeyId: 'test-kms-key-id',
         approverEmail: 'test-approver@dsit.gov.uk',
         snsTopicArn: 'arn:aws:sns:us-west-2:123456789012:test-topic',
       });

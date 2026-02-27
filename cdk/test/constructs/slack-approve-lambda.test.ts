@@ -15,6 +15,7 @@ describe('SlackApproveLambda Construct', () => {
     new SlackApproveLambda(stack, 'TestSlackApprove', {
       isbApiBaseUrl: 'https://isb-api.test.gov.uk',
       isbJwtSecretPath: '/test/JwtSecret',
+      isbSecretsKmsKeyId: 'test-kms-key-id',
       approverEmail: 'test-approver@dsit.gov.uk',
       snsTopicArn: 'arn:aws:sns:us-west-2:123456789012:test-topic',
       logLevel: 'DEBUG',
@@ -194,6 +195,7 @@ describe('SlackApproveLambda with default log level', () => {
     new SlackApproveLambda(stack, 'TestSlackApprove', {
       isbApiBaseUrl: 'https://isb-api.test.gov.uk',
       isbJwtSecretPath: '/test/JwtSecret',
+      isbSecretsKmsKeyId: 'test-kms-key-id',
       approverEmail: 'test-approver@dsit.gov.uk',
       snsTopicArn: 'arn:aws:sns:us-west-2:123456789012:test-topic',
     });

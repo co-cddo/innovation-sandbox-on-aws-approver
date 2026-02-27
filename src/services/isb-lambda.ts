@@ -97,7 +97,7 @@ export const createIsbLambdaService = (
     try {
       const result = await client.reviewLease(
         encodedLeaseId,
-        { action: 'Approve', approverEmail: params.approverEmail },
+        { action: 'Approve' },
         correlationId
       );
 
@@ -122,7 +122,7 @@ export const createIsbLambdaService = (
     try {
       const result = await client.reviewLease(
         encodedLeaseId,
-        { action: 'Deny', approverEmail: params.approverEmail },
+        { action: 'Deny' },
         correlationId
       );
 
