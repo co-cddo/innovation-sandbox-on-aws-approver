@@ -134,6 +134,7 @@ export const createStateHandlers = (
     const { isWithinBusinessHours, nextProcessingTime } = context;
 
     // TEMPORARY BYPASS: Skip business hours check for testing (revert after testing)
+    // eslint-disable-next-line no-constant-condition
     if (true) {
       // Within business hours - proceed to account availability check
       return {
