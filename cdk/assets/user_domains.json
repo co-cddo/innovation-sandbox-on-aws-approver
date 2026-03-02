@@ -914,6 +914,14 @@
             "source": "localgov.co.uk"
         },
         {
+            "domain_pattern": "derrystrabane.com",
+            "identifiers": {},
+            "notes": "Local authority: Derry City and Strabane",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "manual"
+        },
+        {
             "domain_pattern": "developmentbank.wales",
             "identifiers": {},
             "notes": null,
@@ -1232,6 +1240,14 @@
             "organisation_id": null,
             "organisation_type_id": "local_authority",
             "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "fermanaghomagh.com",
+            "identifiers": {},
+            "notes": "Local authority: Fermanagh and Omagh",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "manual"
         },
         {
             "domain_pattern": "flintshire.gov.uk",
@@ -2074,6 +2090,14 @@
             "source": "localgov.co.uk"
         },
         {
+            "domain_pattern": "midulstercouncil.org",
+            "identifiers": {},
+            "notes": "Local authority: Mid Ulster",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "manual"
+        },
+        {
             "domain_pattern": "midsussex.gov.uk",
             "identifiers": {},
             "notes": "Local authority: Mid Sussex",
@@ -2280,6 +2304,14 @@
             "organisation_id": null,
             "organisation_type_id": "local_authority",
             "source": "localgov.co.uk"
+        },
+        {
+            "domain_pattern": "newrymournedown.org",
+            "identifiers": {},
+            "notes": "Local authority: Newry, Mourne and Down",
+            "organisation_id": null,
+            "organisation_type_id": "local_authority",
+            "source": "manual"
         },
         {
             "domain_pattern": "newport.gov.uk",
