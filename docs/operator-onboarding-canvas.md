@@ -61,7 +61,7 @@ The score is calculated from 19 rules. Here's what adds or subtracts points:
 
 | Factor | Points | What It Means |
 |--------|--------|---------------|
-| **Allow-listed user** | -100 | Pre-approved user (you won't see these) |
+| **Pre-approved user** | -100 | Member of Identity Center pre-approved group (you won't see these) |
 | **Verified gov domain** | -5 | Email from verified council domain list |
 | **Org clean record** | -2 | Organization has 5+ sessions with no issues |
 | **Early termination history** | -2 each | User ended previous sessions early (responsible) |

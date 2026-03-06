@@ -51,6 +51,9 @@ describe('ApproverStack', () => {
             BUSINESS_HOURS_TZ: 'Europe/London',
             BEDROCK_MODEL_ID: 'us.amazon.nova-micro-v1:0',
             LOG_LEVEL: 'INFO',
+            IDENTITY_STORE_ID: 'd-9267e1e371',
+            IDENTITY_CENTER_ROLE_ARN: 'arn:aws:iam::955063685555:role/ApproverIdentityCenterReadRole',
+            IDENTITY_CENTER_GROUP_ID: '689153b0-60e1-7069-55f3-5e7779a3cc6d',
           }),
         },
       });
@@ -188,6 +191,20 @@ describe('ApproverStack', () => {
               Action: 'secretsmanager:GetSecretValue',
               Effect: 'Allow',
               Resource: Match.stringLikeRegexp('.*secret:/approver/.*'),
+            }),
+          ]),
+        },
+      });
+    });
+
+    it('grants STS AssumeRole for Identity Center cross-account access', () => {
+      template.hasResourceProperties('AWS::IAM::Policy', {
+        PolicyDocument: {
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Action: 'sts:AssumeRole',
+              Effect: 'Allow',
+              Resource: 'arn:aws:iam::955063685555:role/ApproverIdentityCenterReadRole',
             }),
           ]),
         },

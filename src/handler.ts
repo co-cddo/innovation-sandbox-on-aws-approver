@@ -20,10 +20,7 @@ import {
   createDomainAllowlistService,
   type DomainAllowlistService,
 } from './services/domain-allowlist.js';
-import {
-  createBedrockService,
-  type BedrockService,
-} from './services/bedrock.js';
+import { createBedrockService, type BedrockService } from './services/bedrock.js';
 import {
   createSQSService,
   type SQSService,
@@ -41,10 +38,12 @@ import {
   isQueueExpired,
   type BusinessHoursResult,
 } from './lib/business-hours.js';
+import { STSClient } from '@aws-sdk/client-sts';
 import {
-  createBankHolidayService,
-  type BankHolidayService,
-} from './services/bank-holidays.js';
+  createIdentityStoreService,
+  type IdentityStoreService,
+} from './services/identity-store.js';
+import { createBankHolidayService, type BankHolidayService } from './services/bank-holidays.js';
 import {
   createPersistenceLayer,
   createIdempotencyConfig,
@@ -53,7 +52,7 @@ import {
 import { generateReferenceNumber } from './lib/reference-number.js';
 import {
   buildAutoApprovedMessage,
-  buildAllowListApprovedMessage,
+  buildPreapprovedMessage,
   buildEscalatedMessage,
   buildDelayedMessage,
   buildExpiredMessage,
@@ -225,6 +224,23 @@ let bankHolidayService: BankHolidayService = createBankHolidayService();
 // Business hours checker (uses bank holiday service)
 let businessHoursChecker = createBusinessHoursChecker(bankHolidayService);
 
+// Identity Store service for pre-approved group membership checks (cross-account)
+const identityStoreRoleArn = process.env.IDENTITY_CENTER_ROLE_ARN || '';
+const identityStoreConfig = {
+  identityStoreId: process.env.IDENTITY_STORE_ID || '',
+  roleArn: identityStoreRoleArn,
+  groupId: process.env.IDENTITY_CENTER_GROUP_ID || '',
+  region: 'us-west-2',
+};
+
+let identityStoreService: IdentityStoreService | undefined =
+  identityStoreConfig.identityStoreId && identityStoreConfig.roleArn && identityStoreConfig.groupId
+    ? createIdentityStoreService(
+        new STSClient({ region: process.env.AWS_REGION || 'us-west-2' }),
+        identityStoreConfig
+      )
+    : undefined;
+
 // State machine configuration
 const stateMachineConfig: StateMachineConfig = {
   autoApproveThreshold: parseInt(process.env.AUTO_APPROVE_THRESHOLD || '20', 10),
@@ -316,9 +332,7 @@ export const resetDynamoDBService = (): void => {
 /**
  * Allows overriding the domain allowlist service for testing purposes.
  */
-export const setDomainAllowlistService = (
-  service: DomainAllowlistService | undefined
-): void => {
+export const setDomainAllowlistService = (service: DomainAllowlistService | undefined): void => {
   domainAllowlistService = service;
 };
 
@@ -415,6 +429,28 @@ export const setSNSNotificationService = (service: SNSNotificationService | unde
  */
 export const resetSNSNotificationService = (): void => {
   snsNotificationService = undefined;
+};
+
+/**
+ * Allows overriding the Identity Store service for testing purposes.
+ */
+export const setIdentityStoreService = (service: IdentityStoreService | undefined): void => {
+  identityStoreService = service;
+};
+
+/**
+ * Resets the Identity Store service (for test cleanup).
+ */
+export const resetIdentityStoreService = (): void => {
+  identityStoreService =
+    identityStoreConfig.identityStoreId &&
+    identityStoreConfig.roleArn &&
+    identityStoreConfig.groupId
+      ? createIdentityStoreService(
+          new STSClient({ region: process.env.AWS_REGION || 'us-west-2' }),
+          identityStoreConfig
+        )
+      : undefined;
 };
 
 /**
@@ -564,6 +600,25 @@ const checkDomainVerification = async (domain: string): Promise<boolean> => {
 };
 
 /**
+ * Checks if a user is in the pre-approved Identity Center group.
+ * Fail-closed: returns false if service is not configured or any error occurs.
+ */
+const checkPreapprovedGroup = async (email: string): Promise<boolean> => {
+  if (!identityStoreService) {
+    return false;
+  }
+  try {
+    return await identityStoreService.isPreapproved(email);
+  } catch (error) {
+    logger.warn('Pre-approved group check failed (fail-closed)', {
+      email,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+};
+
+/**
  * Resolves a template UUID to its human-readable name by querying the ISB Leases API.
  * Returns the UUID as fallback if lookup fails or template not found.
  * Fails silently to avoid blocking the approval flow.
@@ -698,7 +753,7 @@ const checkBusinessHoursNow = async (): Promise<BusinessHoursResult> => {
     }
 
     return result;
-  /* c8 ignore start -- defensive: businessHoursChecker uses mock service in tests */
+    /* c8 ignore start -- defensive: businessHoursChecker uses mock service in tests */
   } catch (error) {
     // On error, default to within business hours to avoid blocking requests
     logger.error('Failed to check business hours - defaulting to within', {
@@ -739,11 +794,18 @@ const prepareContext = (
   isVerifiedDomain: boolean,
   businessHoursResult: BusinessHoursResult,
   accountReadinessCheck: AccountReadinessCheck,
-  aiAnalysis?: AIAnalysisResult
+  aiAnalysis?: AIAnalysisResult,
+  isPreapproved?: boolean
 ): StateContext => {
   const { detail } = event;
-  const { leaseId, templateId, budgetAmount, leaseDurationHours, requiresManualApproval, comments } =
-    detail;
+  const {
+    leaseId,
+    templateId,
+    budgetAmount,
+    leaseDurationHours,
+    requiresManualApproval,
+    comments,
+  } = detail;
 
   return {
     ...createInitialContext(),
@@ -762,6 +824,8 @@ const prepareContext = (
     isWithinBusinessHours: businessHoursResult.isWithinBusinessHours,
     isEndOfWindow: businessHoursResult.isEndOfWindow,
     nextProcessingTime: businessHoursResult.nextProcessingTime,
+    // Pre-approved group membership
+    isPreapproved: isPreapproved ?? false,
     // Account availability data
     hasReadyAccount: accountReadinessCheck.hasReadyAccount,
     availableAccountCount: accountReadinessCheck.availableAccountCount,
@@ -854,9 +918,7 @@ const updateLeaseComments = async (
  *
  * @param params - SNS escalation notification parameters
  */
-const notifySNSEscalation = async (
-  params: SNSEscalationParams
-): Promise<void> => {
+const notifySNSEscalation = async (params: SNSEscalationParams): Promise<void> => {
   // If SNS service is already set (e.g., via dependency injection for testing),
   // skip configuration checks and use it directly
   /* c8 ignore start -- lazy initialization guards: tests inject snsNotificationService directly */
@@ -986,9 +1048,7 @@ const processDelayedMessage = async (
  * Emits a LeaseDenied event and updates lease comments, then deletes the message.
  * Returns true if expiry was successful, false otherwise.
  */
-const processExpiredMessage = async (
-  message: ReceivedMessage
-): Promise<boolean> => {
+const processExpiredMessage = async (message: ReceivedMessage): Promise<boolean> => {
   const { body, receiptHandle } = message;
   const { leaseId, receivedAt } = body;
   const currentTime = new Date().toISOString();
@@ -1148,10 +1208,13 @@ const processDelayQueue = async (
         }
       }
     } catch (error) {
-      logger.warn('Failed to get oldest pending from queue position table - falling back to SQS order', {
-        error: error instanceof Error ? error.message : String(error),
-        triggerType,
-      });
+      logger.warn(
+        'Failed to get oldest pending from queue position table - falling back to SQS order',
+        {
+          error: error instanceof Error ? error.message : String(error),
+          triggerType,
+        }
+      );
     }
 
     // Receive next message from queue
@@ -1343,7 +1406,9 @@ export const handler = async (
   }
 
   // Debug: Log raw event detail fields to understand what ISB is sending
-  const rawDetail = (event as unknown as Record<string, unknown>).detail as Record<string, unknown> | undefined;
+  const rawDetail = (event as unknown as Record<string, unknown>).detail as
+    | Record<string, unknown>
+    | undefined;
   if (rawDetail) {
     logger.info('Raw event detail fields', {
       keys: Object.keys(rawDetail),
@@ -1420,6 +1485,9 @@ export const handler = async (
     // Analyze email with AI (uses circuit breaker and fallback)
     const aiAnalysis = await analyzeEmailWithAI(leaseId.userEmail);
 
+    // Check pre-approved group membership (fail-closed)
+    const isPreapproved = await checkPreapprovedGroup(leaseId.userEmail);
+
     // Prepare context and run state machine
     const initialContext = prepareContext(
       validatedEvent,
@@ -1428,7 +1496,8 @@ export const handler = async (
       isVerifiedDomain,
       businessHoursResult,
       accountReadinessCheck,
-      aiAnalysis
+      aiAnalysis,
+      isPreapproved
     );
     const result = orchestrator.run(ApprovalState.RECEIVED, initialContext);
 
@@ -1467,20 +1536,17 @@ export const handler = async (
     }
 
     // Handle based on decision
-    const { decision, approvedBy, reason, score, allowListOverride } = result.context;
+    const { decision, approvedBy, reason, score, preapprovedOverride } = result.context;
 
     if (decision === 'approved') {
-      // Log allow-list override if applicable
-      if (allowListOverride) {
-        // Note: For allow-list override, score is 0 as scoring was bypassed
-        // The calculated score for reference would require running the scoring engine
-        // which is intentionally skipped for performance. Logging score=0 with override flag.
-        logger.info('ALLOW-LIST-OVERRIDE applied', {
+      // Log pre-approved override if applicable
+      if (preapprovedOverride) {
+        logger.info('PRE-APPROVED-OVERRIDE applied', {
           action: 'approved',
-          allowListOverride: true,
+          preapprovedOverride: true,
           userEmail: leaseId.userEmail,
-          score: score, // Will be 0 for allow-list override
-          reason: 'Scoring bypassed for allow-listed user',
+          score: score,
+          reason: 'Pre-approved Identity Center group member',
         });
       }
 
@@ -1504,8 +1570,8 @@ export const handler = async (
         const isLeaseAlreadyProcessed =
           approvalResult.statusCode === 409 &&
           (errorLower.includes('pending state') ||
-           errorLower.includes('already approved') ||
-           errorLower.includes('already denied'));
+            errorLower.includes('already approved') ||
+            errorLower.includes('already denied'));
 
         if (isLeaseAlreadyProcessed) {
           logger.info('Lease no longer in pending state - treating as already processed', {
@@ -1590,13 +1656,13 @@ export const handler = async (
         score,
         scoreBreakdown: result.context.scoreBreakdown,
         reason: reason ?? 'Auto-approved',
-        allowListOverride,
+        preapprovedOverride,
       });
 
       // Update lease comments (Story 5.1 AC2, AC3)
       const referenceNumber = generateReferenceNumber(leaseId.uuid);
-      const commentsMessage = allowListOverride
-        ? buildAllowListApprovedMessage(score, referenceNumber)
+      const commentsMessage = preapprovedOverride
+        ? buildPreapprovedMessage(score, referenceNumber)
         : buildAutoApprovedMessage(score, referenceNumber);
       await updateLeaseComments(leaseId, commentsMessage);
 
@@ -1621,11 +1687,7 @@ export const handler = async (
       // Update lease comments (Story 5.1 AC4)
       const referenceNumber = generateReferenceNumber(leaseId.uuid);
       const scoreBreakdown = ruleResultsToBreakdown(result.context.scoreBreakdown ?? []);
-      const escalatedMessage = buildEscalatedMessage(
-        score,
-        scoreBreakdown,
-        referenceNumber
-      );
+      const escalatedMessage = buildEscalatedMessage(score, scoreBreakdown, referenceNumber);
       await updateLeaseComments(leaseId, escalatedMessage);
 
       // Send SNS notification for Amazon Q Developer (Story 7.1.1, enhanced in 7.1.3)

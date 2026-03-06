@@ -96,6 +96,7 @@ The ISB Approver listens for `LeaseRequested` events from the Innovation Sandbox
 | SQS | Delay queue for out-of-hours processing |
 | S3 | Domain allowlist caching |
 | Bedrock | Amazon Nova Micro for email/domain analysis |
+| IAM Identity Center | Pre-approved group membership checks (cross-account) |
 | Secrets Manager | Slack webhook URL |
 | CloudWatch | Structured logging, metrics, alarms |
 
@@ -171,7 +172,7 @@ The scoring engine evaluates 19 rules, each contributing positive (penalty) or n
 
 | Rule | Weight | Trigger |
 |------|--------|---------|
-| `allow_list_override` | -100 | User on allow-list (testers/operators) |
+| `allow_list_override` | -100 | User in pre-approved Identity Center group (`ndx-IsbPreapprovedGroup`) |
 | `verified_gov_domain` | -5 | Domain in ukps-domains allowlist |
 | `familiar_template` | -1 | Previously used template successfully |
 | `manual_early_termination` | -2 each | Early termination (responsible behavior) |
@@ -205,6 +206,7 @@ innovation-sandbox-on-aws-approver/
 │   │   ├── bedrock.ts          # AI email analysis
 │   │   ├── dynamodb.ts         # User/org history queries
 │   │   ├── eventbridge.ts      # Event emission
+│   │   ├── identity-store.ts   # Identity Center group checks (cross-account)
 │   │   ├── isb-lambda.ts       # Direct ISB Lambda calls
 │   │   ├── slack.ts            # Escalation notifications
 │   │   ├── sqs.ts              # Delay queue management
@@ -280,6 +282,9 @@ cd cdk && npx cdk deploy ApproverStack --profile YOUR_PROFILE
 | `BEDROCK_MODEL_ID` | Bedrock model for AI analysis | `us.amazon.nova-micro-v1:0` |
 | `DELAY_QUEUE_URL` | SQS queue for delayed requests | - |
 | `DOMAIN_ALLOWLIST_BUCKET` | S3 bucket for domain list | - |
+| `IDENTITY_STORE_ID` | Identity Store ID for pre-approved group | `d-9267e1e371` |
+| `IDENTITY_CENTER_ROLE_ARN` | Cross-account role ARN for Identity Center | - |
+| `IDENTITY_CENTER_GROUP_ID` | Group ID for pre-approved users | - |
 
 ### Rule Weight Customization
 
@@ -305,6 +310,9 @@ Detailed project documentation is available in the `_bmad-output/` directory:
 | [Epics & Stories](./_bmad-output/epics.md) | 6 epics, 24 stories breakdown |
 | [ISB Integration](./_bmad-output/isb-integration-reference.md) | Integration with Innovation Sandbox |
 | [Implementation Artifacts](./_bmad-output/implementation-artifacts/) | Story-level implementation details |
+| [ADR-001: Identity Center Pre-approval](./docs/adr/001-identity-center-group-preapproval.md) | Decision to replace hardcoded allow-list |
+| [Pre-approved Group Runbook](./docs/runbooks/preapproved-group-management.md) | Managing the pre-approved Identity Center group |
+| [Approver Access Management](./docs/approver-access-management.md) | Slack operator and pre-approval access |
 
 ### Epics Overview
 

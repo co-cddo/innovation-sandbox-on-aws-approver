@@ -166,8 +166,10 @@ export interface StateContext {
   approvedBy?: string;
   /** Reason for the decision */
   reason?: string;
-  /** Whether the allow-list bypass was used */
-  allowListOverride?: boolean;
+  /** Whether the user is a member of the pre-approved Identity Center group */
+  isPreapproved?: boolean;
+  /** Whether the pre-approved group bypass was used */
+  preapprovedOverride?: boolean;
 
   // Error tracking
   /** Error details if ERROR state reached */
@@ -230,6 +232,7 @@ export const createInitialContext = (): StateContext => ({
   userLeaseHistory: [],
   orgLeaseHistory: [],
   isVerifiedGovDomain: false,
+  isPreapproved: false,
   score: 0,
   scoreBreakdown: [],
   stateHistory: [],

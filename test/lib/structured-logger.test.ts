@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   createStructuredLogger,
   SYSTEM_ATTRIBUTION,
-  ALLOWLIST_ATTRIBUTION,
+  PREAPPROVED_ATTRIBUTION,
   createManualAttribution,
   type DecisionLogParams,
 } from '../../src/lib/structured-logger.js';
@@ -252,14 +252,14 @@ describe('Structured Logger (Story 5.3)', () => {
       });
     });
 
-    it('should log allow-list attribution correctly', () => {
+    it('should log pre-approved attribution correctly', () => {
       const logger = createStructuredLogger(leaseId, eventId);
 
       logger.logDecision({
         action: 'approved',
         score: 5,
         scoreBreakdown: { first_time_user: 5 },
-        attribution: ALLOWLIST_ATTRIBUTION,
+        attribution: PREAPPROVED_ATTRIBUTION,
         processingTimeMs: 200,
       });
 
@@ -267,7 +267,7 @@ describe('Structured Logger (Story 5.3)', () => {
         action: 'approved',
         score: 5,
         scoreBreakdown: { first_time_user: 5 },
-        attribution: ALLOWLIST_ATTRIBUTION,
+        attribution: PREAPPROVED_ATTRIBUTION,
         processingTimeMs: 200,
         templateId: undefined,
       });
@@ -406,10 +406,10 @@ describe('Structured Logger (Story 5.3)', () => {
       });
     });
 
-    it('should have correct allow-list attribution', () => {
-      expect(ALLOWLIST_ATTRIBUTION).toEqual({
+    it('should have correct pre-approved attribution', () => {
+      expect(PREAPPROVED_ATTRIBUTION).toEqual({
         approvedBy: 'approver-service@system',
-        approvalMethod: 'allow-list',
+        approvalMethod: 'pre-approved',
       });
     });
 

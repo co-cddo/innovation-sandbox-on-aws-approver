@@ -54,18 +54,18 @@ export const buildAutoApprovedMessage = (
 };
 
 /**
- * Builds the message for an allow-list approved lease request.
+ * Builds the message for a pre-approved lease request.
  *
  * @param score - The calculated risk score (for reference only)
  * @param referenceNumber - Reference in ISB-YYYY-NNNN format
  * @returns Formatted message string
  */
-export const buildAllowListApprovedMessage = (
+export const buildPreapprovedMessage = (
   score: number,
   referenceNumber: string
 ): string => {
   return [
-    'Your request has been automatically approved (ALLOW-LIST-OVERRIDE).',
+    'Your request has been automatically approved (PRE-APPROVED).',
     `Score: ${score} (for reference only)`,
     `Reference: ${referenceNumber}`,
   ].join('\n');

@@ -22,7 +22,6 @@ import {
   type ScoringEngine,
 } from '../scoring/index.js';
 import type { StateMachineLogger } from './orchestrator.js';
-import { isAllowListed } from '../lib/allow-list.js';
 
 /**
  * Default configuration - can be overridden via environment or DI
@@ -196,11 +195,11 @@ export const createStateHandlers = (
   /**
    * SCORING state handler.
    * Calculates the risk score using the 19-rule scoring engine.
-   * Allow-list check is now integrated into scoring as a -100 bonus rule.
+   * Pre-approval check is now integrated into scoring as a -100 bonus rule.
    */
   [ApprovalState.SCORING]: (context: StateContext): StateHandlerResult => {
-    // Check if user is on the allow-list (for scoring rule and context flag)
-    const userIsAllowListed = isAllowListed(context.userEmail);
+    // Check if user is pre-approved via Identity Center group membership
+    const userIsPreapproved = context.isPreapproved ?? false;
 
     // Create scoring context from state context
     const scoringContext = createScoringContext({
@@ -219,8 +218,8 @@ export const createStateHandlers = (
       aiAnalysis: context.aiAnalysis,
       // Business hours data (Story 4.1) - pass pre-calculated value
       isEndOfWindow: context.isEndOfWindow,
-      // Allow-list status for scoring rule
-      isAllowListed: userIsAllowListed,
+      // Pre-approval status for scoring rule
+      isPreapproved: userIsPreapproved,
     });
 
     // Run the scoring engine
@@ -240,7 +239,7 @@ export const createStateHandlers = (
         ...context,
         score: result.totalScore,
         scoreBreakdown,
-        allowListOverride: userIsAllowListed,
+        preapprovedOverride: userIsPreapproved,
       },
     };
   },
