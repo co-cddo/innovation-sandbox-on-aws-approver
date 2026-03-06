@@ -35,6 +35,12 @@ export interface ApproverConfig {
   ruleWeights: string;
   /** Email address for automated Slack approvals (Issue 7 - config consolidation) */
   approverEmail: string;
+  /** Identity Store ID for pre-approved group checks */
+  identityStoreId: string;
+  /** Cross-account role ARN for Identity Center read access */
+  identityCenterRoleArn: string;
+  /** Identity Center group ID for pre-approved users */
+  identityCenterGroupId: string;
 }
 
 export const DEFAULT_CONFIG: ApproverConfig = {
@@ -71,6 +77,9 @@ export const DEFAULT_CONFIG: ApproverConfig = {
     groupMailboxDetected: 20,
   }),
   approverEmail: 'ndx+try-automated-approver@dsit.gov.uk',
+  identityStoreId: 'd-9267e1e371',
+  identityCenterRoleArn: 'arn:aws:iam::955063685555:role/ApproverIdentityCenterReadRole',
+  identityCenterGroupId: '689153b0-60e1-7069-55f3-5e7779a3cc6d',
 };
 
 export interface StackEnvironment {

@@ -58,11 +58,24 @@ export class ApproverLambda extends Construct {
         EVENT_BUS_NAME: config.isbEventBusName,
         ISB_API_BASE_URL: config.isbApiBaseUrl,
         ISB_JWT_SECRET_PATH: config.isbJwtSecretPath,
+        // Identity Center pre-approved group checks (cross-account)
+        IDENTITY_STORE_ID: config.identityStoreId,
+        IDENTITY_CENTER_ROLE_ARN: config.identityCenterRoleArn,
+        IDENTITY_CENTER_GROUP_ID: config.identityCenterGroupId,
         // Story 7.1.1: SNS notification topic for approval notifications
         ...(notificationTopicArn && { NOTIFICATION_TOPIC_ARN: notificationTopicArn }),
       },
       tracing: lambda.Tracing.ACTIVE,
     });
+
+    // Grant STS AssumeRole for cross-account Identity Center access
+    this.function.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['sts:AssumeRole'],
+        resources: [config.identityCenterRoleArn],
+      })
+    );
 
     // Grant Bedrock invoke permissions for Nova Micro (via cross-region inference profile)
     // The us.amazon.nova-micro-v1:0 profile routes to any US region dynamically

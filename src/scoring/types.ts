@@ -62,8 +62,8 @@ export type RuleWeights = Record<RuleId, number>;
  * These values come from the PRD and can be overridden via RULE_WEIGHTS env var.
  */
 export const DEFAULT_RULE_WEIGHTS: RuleWeights = {
-  // Allow-list override (massive bonus ensures approval)
-  allow_list_override: -100, // -100 for allow-listed users (guarantees score < threshold)
+  // Pre-approved group override (massive bonus ensures approval)
+  allow_list_override: -100, // -100 for pre-approved users (guarantees score < threshold)
 
   // Penalty rules (positive = more scrutiny)
   expired_leases: 2, // +2 each expired lease in last 30 days
@@ -161,9 +161,9 @@ export interface ScoringContext {
   /** Whether request is in end-of-window period (5-7pm London) - pre-calculated by state machine */
   isEndOfWindow?: boolean;
 
-  // From allow-list check (populated in SCORING handler)
-  /** Whether the user email is on the allow-list */
-  isAllowListed?: boolean;
+  // From pre-approved group check (populated in SCORING handler)
+  /** Whether the user is in the pre-approved Identity Center group */
+  isPreapproved?: boolean;
 }
 
 /**
@@ -181,7 +181,7 @@ export interface ScoringContextInput {
   isVerifiedGovDomain?: boolean;
   aiAnalysis?: AIAnalysisResult;
   isEndOfWindow?: boolean;
-  isAllowListed?: boolean;
+  isPreapproved?: boolean;
 }
 
 /**
@@ -200,7 +200,7 @@ export const createScoringContext = (input: ScoringContextInput): ScoringContext
   isVerifiedGovDomain: input.isVerifiedGovDomain ?? false,
   aiAnalysis: input.aiAnalysis,
   isEndOfWindow: input.isEndOfWindow,
-  isAllowListed: input.isAllowListed ?? false,
+  isPreapproved: input.isPreapproved ?? false,
 });
 
 /**

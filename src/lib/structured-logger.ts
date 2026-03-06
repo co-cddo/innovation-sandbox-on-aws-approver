@@ -23,7 +23,7 @@ export type LoggableAction =
 // Attribution info for audit logs
 export interface Attribution {
   approvedBy: string;
-  approvalMethod: 'automatic' | 'manual' | 'allow-list';
+  approvalMethod: 'automatic' | 'manual' | 'pre-approved';
 }
 
 // State transition info
@@ -217,11 +217,11 @@ export const SYSTEM_ATTRIBUTION: Attribution = {
 };
 
 /**
- * Allow-list attribution for allow-list overrides
+ * Pre-approved attribution for pre-approved group overrides
  */
-export const ALLOWLIST_ATTRIBUTION: Attribution = {
+export const PREAPPROVED_ATTRIBUTION: Attribution = {
   approvedBy: 'approver-service@system',
-  approvalMethod: 'allow-list',
+  approvalMethod: 'pre-approved',
 };
 
 /**

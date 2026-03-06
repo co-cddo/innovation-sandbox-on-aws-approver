@@ -402,28 +402,29 @@ describe('SCORING handler', () => {
     expect(firstTimeRule!.points).toBe(5);
   });
 
-  it('should set allowListOverride to true for allow-listed users', () => {
+  it('should set preapprovedOverride to true for pre-approved users', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
-      userEmail: 'chris.nesbitt-smith@dsit.gov.uk', // On allow-list
+      userEmail: 'preapproved-user@dsit.gov.uk',
       templateId: 'web-hosting',
       budgetAmount: 0,
       leaseDurationHours: 0,
       isVerifiedGovDomain: true,
+      isPreapproved: true,
     };
 
     const result = handlers[ApprovalState.SCORING](context);
 
-    expect(result.context.allowListOverride).toBe(true);
-    // Allow-list override gives -100 bonus
-    const allowListRule = result.context.scoreBreakdown.find((r) => r.rule === 'allow_list_override');
-    expect(allowListRule).toBeDefined();
-    expect(allowListRule!.triggered).toBe(true);
-    expect(allowListRule!.points).toBe(-100);
+    expect(result.context.preapprovedOverride).toBe(true);
+    // Pre-approved override gives -100 bonus
+    const preapprovedRule = result.context.scoreBreakdown.find((r) => r.rule === 'allow_list_override');
+    expect(preapprovedRule).toBeDefined();
+    expect(preapprovedRule!.triggered).toBe(true);
+    expect(preapprovedRule!.points).toBe(-100);
   });
 
-  it('should set allowListOverride to false for non-allow-listed users', () => {
+  it('should set preapprovedOverride to false for non-pre-approved users', () => {
     const context: StateContext = {
       ...createInitialContext(),
       leaseId: 'abc-123',
@@ -431,16 +432,17 @@ describe('SCORING handler', () => {
       templateId: 'web-hosting',
       budgetAmount: 0,
       leaseDurationHours: 0,
+      isPreapproved: false,
     };
 
     const result = handlers[ApprovalState.SCORING](context);
 
-    expect(result.context.allowListOverride).toBe(false);
-    // Allow-list override rule should not be triggered
-    const allowListRule = result.context.scoreBreakdown.find((r) => r.rule === 'allow_list_override');
-    expect(allowListRule).toBeDefined();
-    expect(allowListRule!.triggered).toBe(false);
-    expect(allowListRule!.points).toBe(0);
+    expect(result.context.preapprovedOverride).toBe(false);
+    // Pre-approved override rule should not be triggered
+    const preapprovedRule = result.context.scoreBreakdown.find((r) => r.rule === 'allow_list_override');
+    expect(preapprovedRule).toBeDefined();
+    expect(preapprovedRule!.triggered).toBe(false);
+    expect(preapprovedRule!.points).toBe(0);
   });
 
   it('should be a pure function (no mutation)', () => {

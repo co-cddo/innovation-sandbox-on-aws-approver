@@ -26,17 +26,17 @@ const SUCCESSFUL_STATUSES: LeaseHistoryRecord['status'][] = [
 
 /**
  * Rule 0: allow_list_override
- * -100 (massive bonus) if user is on the allow-list.
+ * -100 (massive bonus) if user is in the pre-approved Identity Center group.
  * This effectively guarantees approval since threshold is 20.
  */
-export const allowListOverrideRule: ScoringRuleFn = (context, weight) => {
-  const isAllowed = context.isAllowListed ?? false;
+export const preapprovedOverrideRule: ScoringRuleFn = (context, weight) => {
+  const isPreapproved = context.isPreapproved ?? false;
 
   return {
     ruleId: 'allow_list_override',
-    points: isAllowed ? weight : 0,
-    triggered: isAllowed,
-    reason: isAllowed ? 'User on allow-list' : undefined,
+    points: isPreapproved ? weight : 0,
+    triggered: isPreapproved,
+    reason: isPreapproved ? 'User in pre-approved group' : undefined,
   };
 };
 
@@ -499,7 +499,7 @@ export interface RuleDefinition {
 }
 
 export const ALL_RULES: RuleDefinition[] = [
-  { ruleId: 'allow_list_override', fn: allowListOverrideRule },
+  { ruleId: 'allow_list_override', fn: preapprovedOverrideRule },
   { ruleId: 'expired_leases', fn: expiredLeasesRule },
   { ruleId: 'budget_exceeded', fn: budgetExceededRule },
   { ruleId: 'first_time_user', fn: firstTimeUserRule },

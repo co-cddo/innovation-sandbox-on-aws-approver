@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildAutoApprovedMessage,
-  buildAllowListApprovedMessage,
+  buildPreapprovedMessage,
   buildEscalatedMessage,
   buildDelayedMessage,
   buildQueuedMessage,
@@ -45,18 +45,18 @@ describe('Lease Comments Message Builders (Story 5.1)', () => {
     });
   });
 
-  describe('buildAllowListApprovedMessage (AC3)', () => {
-    it('should format allow-list approved message with override indicator', () => {
-      const message = buildAllowListApprovedMessage(25, testReference);
+  describe('buildPreapprovedMessage (AC3)', () => {
+    it('should format pre-approved message with override indicator', () => {
+      const message = buildPreapprovedMessage(25, testReference);
 
-      expect(message).toContain('ALLOW-LIST-OVERRIDE');
+      expect(message).toContain('PRE-APPROVED');
       expect(message).toContain('automatically approved');
       expect(message).toContain('Score: 25 (for reference only)');
       expect(message).toContain(`Reference: ${testReference}`);
     });
 
     it('should indicate score is for reference only', () => {
-      const message = buildAllowListApprovedMessage(0, testReference);
+      const message = buildPreapprovedMessage(0, testReference);
 
       expect(message).toContain('(for reference only)');
       expect(message).not.toContain('threshold');
@@ -320,7 +320,7 @@ describe('Lease Comments Message Builders (Story 5.1)', () => {
 
       const messages = [
         buildAutoApprovedMessage(10, testReference),
-        buildAllowListApprovedMessage(10, testReference),
+        buildPreapprovedMessage(10, testReference),
         buildEscalatedMessage(25, breakdown, testReference),
         buildDelayedMessage(testReference),
         buildQueuedMessage(1, testReference),

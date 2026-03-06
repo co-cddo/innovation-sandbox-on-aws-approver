@@ -17,6 +17,7 @@ import {
   resetSQSService,
   setBankHolidayService,
   resetBankHolidayService,
+  resetIdentityStoreService,
 } from '../src/handler.js';
 import type { DynamoDBService } from '../src/services/dynamodb.js';
 import type { DomainAllowlistService } from '../src/services/domain-allowlist.js';
@@ -143,6 +144,14 @@ vi.mock('@aws-sdk/client-sqs', () => ({
     send = vi.fn().mockResolvedValue({});
   },
   SendMessageCommand: class MockSendMessageCommand {},
+}));
+
+// Mock the STS client to prevent real AWS calls (for Identity Store cross-account)
+vi.mock('@aws-sdk/client-sts', () => ({
+  STSClient: class MockSTSClient {
+    send = vi.fn().mockResolvedValue({});
+  },
+  AssumeRoleCommand: class MockAssumeRoleCommand {},
 }));
 
 // Import the mocked logger for assertions
@@ -305,6 +314,7 @@ describe('handler', () => {
     resetOrchestrator();
     resetSQSService();
     resetBankHolidayService();
+    resetIdentityStoreService();
   });
 
   describe('LeaseRequested events', () => {
@@ -2275,7 +2285,7 @@ describe('handler', () => {
       });
     });
 
-    it('should log ALLOW-LIST-OVERRIDE when allow-listed user is approved', async () => {
+    it('should log PRE-APPROVED-OVERRIDE when pre-approved user is approved', async () => {
       const mockOrchestrator: StateMachineOrchestrator = {
         run: vi.fn().mockReturnValue({
           finalState: ApprovalState.APPROVED,
@@ -2288,8 +2298,8 @@ describe('handler', () => {
             score: 0,
             decision: 'approved',
             approvedBy: 'ndx+try-automated-approver@dsit.gov.uk',
-            reason: 'ALLOW-LIST-OVERRIDE',
-            allowListOverride: true,
+            reason: 'PRE-APPROVED-OVERRIDE',
+            preapprovedOverride: true,
           },
         }),
       };
@@ -2309,10 +2319,10 @@ describe('handler', () => {
 
       expect(result.statusCode).toBe(200);
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'ALLOW-LIST-OVERRIDE applied',
+        'PRE-APPROVED-OVERRIDE applied',
         expect.objectContaining({
           action: 'approved',
-          allowListOverride: true,
+          preapprovedOverride: true,
         })
       );
     });

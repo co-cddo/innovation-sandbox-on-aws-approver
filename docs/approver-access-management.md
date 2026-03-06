@@ -229,6 +229,16 @@ If you identify concerning access patterns:
 3. **Review logs** - Check CloudWatch for any actions by the user
 4. **Document incident** - Record in audit log with details
 
+## Pre-Approved Group Management
+
+**Important distinction:** Slack channel membership controls who can **manually approve or deny** lease requests. Identity Center group membership controls who gets **automatic pre-approval** (a -100 scoring bonus that bypasses normal escalation thresholds).
+
+The `ndx-IsbPreapprovedGroup` in AWS IAM Identity Center manages pre-approved users. Adding someone to this group means their lease requests are automatically approved without manual review.
+
+For CLI procedures to add/remove users from the pre-approved group, see the [Pre-approved Group Management Runbook](./runbooks/preapproved-group-management.md).
+
+**Note:** Pre-approved users bypass scoring, but this does not affect Slack operator access. A user can be in the pre-approved group (auto-approved) without being a Slack channel member, or vice versa.
+
 ## Troubleshooting
 
 ### User Can't See the Channel
