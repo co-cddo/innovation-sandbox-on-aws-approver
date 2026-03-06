@@ -119,7 +119,7 @@ export function getNextBusinessHoursStart(
 
   // Otherwise, find the next business day
   let daysToAdd = 1;
-  let nextDate = new Date(result);
+  let nextDate: Date;
 
   while (daysToAdd <= 10) { // Safety limit
     nextDate = new Date(result.getTime() + daysToAdd * 24 * 60 * 60 * 1000);

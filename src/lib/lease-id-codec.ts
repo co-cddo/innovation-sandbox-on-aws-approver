@@ -74,7 +74,7 @@ export const decodeLeaseCompositeKey = (encoded: string): CompositeLeaseId => {
     };
   } catch (error) {
     if (error instanceof SyntaxError) {
-      throw new Error(`Invalid JSON in base64 payload: ${error.message}`);
+      throw new Error(`Invalid JSON in base64 payload: ${error.message}`, { cause: error });
     }
     throw error;
   }
