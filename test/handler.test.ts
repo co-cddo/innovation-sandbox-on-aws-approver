@@ -793,12 +793,12 @@ describe('handler', () => {
       // Mock DynamoDB having a stale entry but SQS is empty
       const staleLeaseId = {
         userEmail: 'stale@example.gov.uk',
-        uuid: '33333333-3333-3333-3333-333333333333',
+        uuid: '33333333-3333-3333-8333-333333333333',
       };
       mockGetOldestPending.mockResolvedValueOnce({
         success: true,
         record: {
-          leaseId: 'stale@example.gov.uk#33333333-3333-3333-3333-333333333333',
+          leaseId: 'stale@example.gov.uk#33333333-3333-3333-8333-333333333333',
           position: 1,
           positionStatus: 'PENDING',
           queuedAt: '2025-12-30T10:00:00Z',
@@ -840,7 +840,7 @@ describe('handler', () => {
       setDynamoDBService(mockDynamoDBService);
 
       // Use a valid UUID for the delayed lease
-      const delayedLeaseUuid = '11111111-1111-1111-1111-111111111111';
+      const delayedLeaseUuid = '11111111-1111-1111-8111-111111111111';
 
       // Use mock orchestrator to ensure the nested LeaseRequested event is approved
       const mockOrchestrator: StateMachineOrchestrator = {
@@ -940,7 +940,7 @@ describe('handler', () => {
       };
       setDynamoDBService(mockDynamoDBService);
 
-      const delayedLeaseUuid = '22222222-2222-2222-2222-222222222222';
+      const delayedLeaseUuid = '22222222-2222-2222-8222-222222222222';
 
       const mockOrchestrator: StateMachineOrchestrator = {
         run: vi.fn().mockReturnValue({
@@ -1038,7 +1038,7 @@ describe('handler', () => {
       };
       setDynamoDBService(mockDynamoDBService);
 
-      const delayedLeaseUuid = '66666666-6666-6666-6666-666666666666';
+      const delayedLeaseUuid = '66666666-6666-6666-8666-666666666666';
       const mockOrchestrator: StateMachineOrchestrator = {
         run: vi.fn().mockReturnValue({
           finalState: ApprovalState.APPROVED,
@@ -1224,7 +1224,7 @@ describe('handler', () => {
       };
       setDynamoDBService(mockDynamoDBService);
 
-      const delayedLeaseUuid = '99999999-9999-9999-9999-999999999999';
+      const delayedLeaseUuid = '99999999-9999-4999-9999-999999999999';
       const mockOrchestrator: StateMachineOrchestrator = {
         run: vi.fn().mockReturnValue({
           finalState: ApprovalState.APPROVED,
@@ -1329,7 +1329,7 @@ describe('handler', () => {
       };
       setOrchestrator(mockOrchestrator);
 
-      const delayedLeaseUuid = '77777777-7777-7777-7777-777777777777';
+      const delayedLeaseUuid = '77777777-7777-7777-8777-777777777777';
       const recentDate = new Date();
       recentDate.setHours(recentDate.getHours() - 2);
       const recentDateISO = recentDate.toISOString();
@@ -1481,7 +1481,7 @@ describe('handler', () => {
       oldDate.setDate(oldDate.getDate() - 15); // 15 days ago
       const oldDateISO = oldDate.toISOString();
 
-      const expiredLeaseUuid = '22222222-2222-2222-2222-222222222222';
+      const expiredLeaseUuid = '22222222-2222-2222-8222-222222222222';
       const originalEvent = {
         version: '0',
         id: 'original-event-id',
@@ -1567,7 +1567,7 @@ describe('handler', () => {
       oldDate.setDate(oldDate.getDate() - 15);
       const oldDateISO = oldDate.toISOString();
 
-      const expiredLeaseUuid = '33333333-3333-3333-3333-333333333333';
+      const expiredLeaseUuid = '33333333-3333-3333-8333-333333333333';
       const originalEvent = {
         version: '0',
         id: 'original-event-id',
@@ -1648,7 +1648,7 @@ describe('handler', () => {
       oldDate.setDate(oldDate.getDate() - 15);
       const oldDateISO = oldDate.toISOString();
 
-      const expiredLeaseUuid = '55555555-5555-5555-5555-555555555555';
+      const expiredLeaseUuid = '55555555-5555-5555-8555-555555555555';
       const originalEvent = {
         version: '0',
         id: 'original-event-id',
@@ -1732,7 +1732,7 @@ describe('handler', () => {
       oldDate.setDate(oldDate.getDate() - 15);
       const oldDateISO = oldDate.toISOString();
 
-      const expiredLeaseUuid = '44444444-4444-4444-4444-444444444444';
+      const expiredLeaseUuid = '44444444-4444-4444-8444-444444444444';
       const originalEvent = {
         version: '0',
         id: 'original-event-id',

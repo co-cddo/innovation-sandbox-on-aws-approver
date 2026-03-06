@@ -1358,7 +1358,7 @@ export const handler = async (
   const parseResult = LeaseRequestedEventSchema.safeParse(event);
   if (!parseResult.success) {
     logger.error('Invalid LeaseRequested event schema', {
-      errors: parseResult.error.errors,
+      errors: parseResult.error.issues,
       eventId,
     });
     return {
