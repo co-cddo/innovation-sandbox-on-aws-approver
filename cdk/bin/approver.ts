@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-expect-error - source-map-support has no bundled type declarations
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { ApproverStack } from '../lib/approver-stack.js';
