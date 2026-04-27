@@ -14,6 +14,13 @@ import { isWithinDays } from '../services/dynamodb.js';
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
 /**
+ * Feature switch: when false, the outside_target_audience rule (Rule 12) is
+ * disabled and always returns 0 points / not triggered. Flip back to true and
+ * redeploy to re-enable the +50 penalty for non-local-authority domains.
+ */
+export const ENABLE_OUTSIDE_TARGET_AUDIENCE_CHECK = false;
+
+/**
  * Successful lease statuses that indicate responsible completion.
  * These include Active (currently running), Expired (ran full duration),
  * and ManuallyTerminated (user responsibly ended early).
@@ -293,6 +300,15 @@ export const cooldownViolationRule: ScoringRuleFn = (context, weight) => {
  * (either central government, NHS, police, or not in the list at all).
  */
 export const outsideTargetAudienceRule: ScoringRuleFn = (context, weight) => {
+  if (!ENABLE_OUTSIDE_TARGET_AUDIENCE_CHECK) {
+    return {
+      ruleId: 'outside_target_audience',
+      points: 0,
+      triggered: false,
+      reason: undefined,
+    };
+  }
+
   // If domain is verified as local authority, it's NOT outside target audience
   // If domain is NOT verified, it IS outside target audience
   const isOutside = !context.isVerifiedGovDomain;
