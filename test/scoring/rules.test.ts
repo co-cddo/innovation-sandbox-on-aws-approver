@@ -25,6 +25,7 @@ import {
   userRateLimitRule,
   orgRateLimitRule,
   ALL_RULES,
+  ENABLE_OUTSIDE_TARGET_AUDIENCE_CHECK,
 } from '../../src/scoring/rules.js';
 import { createScoringContext, type ScoringContext, type LeaseHistoryRecord } from '../../src/scoring/types.js';
 
@@ -494,12 +495,23 @@ describe('scoring rules', () => {
   });
 
   describe('Rule 12: outside_target_audience', () => {
+    // Behaviour depends on the ENABLE_OUTSIDE_TARGET_AUDIENCE_CHECK feature
+    // switch in src/scoring/rules.ts. When the switch is off, the rule is
+    // suppressed and always returns 0 points / not triggered, regardless of
+    // domain. Flip the constant in rules.ts and redeploy to re-enable.
+
     it('should return weight when domain is NOT in local authority allowlist', () => {
       const context = createBaseContext({ isVerifiedGovDomain: false });
       const result = outsideTargetAudienceRule(context, 10);
-      expect(result.points).toBe(10);
-      expect(result.triggered).toBe(true);
-      expect(result.reason).toBe('Domain not in local authority allowlist');
+      if (ENABLE_OUTSIDE_TARGET_AUDIENCE_CHECK) {
+        expect(result.points).toBe(10);
+        expect(result.triggered).toBe(true);
+        expect(result.reason).toBe('Domain not in local authority allowlist');
+      } else {
+        expect(result.points).toBe(0);
+        expect(result.triggered).toBe(false);
+        expect(result.reason).toBeUndefined();
+      }
     });
 
     it('should return 0 when domain IS in local authority allowlist', () => {
@@ -507,6 +519,24 @@ describe('scoring rules', () => {
       const result = outsideTargetAudienceRule(context, 10);
       expect(result.points).toBe(0);
       expect(result.triggered).toBe(false);
+    });
+
+    it('respects the ENABLE_OUTSIDE_TARGET_AUDIENCE_CHECK feature switch', () => {
+      // Switch lives in src/scoring/rules.ts. When off, a non-verified domain
+      // (which would otherwise trigger the +weight penalty) must produce a
+      // zero, not-triggered result with no reason — proof that the rule has
+      // been deliberately suppressed rather than silently passing.
+      const context = createBaseContext({ isVerifiedGovDomain: false });
+      const result = outsideTargetAudienceRule(context, 50);
+
+      if (ENABLE_OUTSIDE_TARGET_AUDIENCE_CHECK) {
+        expect(result.points).toBe(50);
+        expect(result.triggered).toBe(true);
+      } else {
+        expect(result.points).toBe(0);
+        expect(result.triggered).toBe(false);
+        expect(result.reason).toBeUndefined();
+      }
     });
   });
 
