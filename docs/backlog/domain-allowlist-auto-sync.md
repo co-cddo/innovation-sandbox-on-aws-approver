@@ -3,7 +3,7 @@
 ## Problem
 
 The `cdk/assets/user_domains.json` file is a static copy of the upstream
-[ukps-domains](https://github.com/govuk-digital-backbone/ukps-domains) dataset.
+[ukps-domains](https://github.com/gds-dtx/ukps-domains) dataset.
 It only updates when a developer manually copies the file and redeploys. The
 current architecture also introduces an unnecessary S3 layer — the CDK deploys
 the file to S3, the Lambda reads it back from S3 with a 1-hour in-memory cache,
@@ -35,7 +35,7 @@ from the public GitHub raw URL at runtime, with the same caching strategy.
 
 ```
 Lambda cold start / cache expiry
-  → fetch https://raw.githubusercontent.com/govuk-digital-backbone/ukps-domains/main/data/user_domains.json
+  → fetch https://raw.githubusercontent.com/gds-dtx/ukps-domains/main/data/user_domains.json
     → In-memory cache (1h TTL, stale-while-revalidate)
       → Filter to local_authority
 ```
@@ -45,7 +45,7 @@ Lambda cold start / cache expiry
 #### 1. Replace S3 fetch with HTTPS fetch in `domain-allowlist.ts`
 
 - Replace `S3Client` / `GetObjectCommand` with a simple `fetch()` call (Node 18+ native fetch)
-- URL: `https://raw.githubusercontent.com/govuk-digital-backbone/ukps-domains/main/data/user_domains.json`
+- URL: `https://raw.githubusercontent.com/gds-dtx/ukps-domains/main/data/user_domains.json`
 - Make the URL configurable via `DOMAIN_ALLOWLIST_URL` env var (for testing/overrides)
 - Keep the exact same caching and stale-while-revalidate logic
 - Keep the same filtering to `organisation_type_id === 'local_authority'`
