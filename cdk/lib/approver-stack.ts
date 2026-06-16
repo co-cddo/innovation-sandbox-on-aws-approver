@@ -72,7 +72,7 @@ export class ApproverStack extends cdk.Stack {
     });
 
     // Deploy domain list JSON from ukps-domains repo
-    // Source: https://github.com/govuk-digital-backbone/ukps-domains
+    // Source: https://github.com/gds-dtx/ukps-domains (formerly govuk-digital-backbone)
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     new s3deploy.BucketDeployment(this, 'DomainListDeployment', {
